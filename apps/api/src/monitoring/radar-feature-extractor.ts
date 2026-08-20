@@ -503,6 +503,9 @@ function detectContacts(html: string, pageUrl: URL): RadarContactLead[] {
   return [...leads.values()].slice(0, 12);
 }
 
+/** Hard cap on candidate HTML blocks scanned per page to bound regex work. */
+const MAX_DECISION_MAKER_BLOCKS = 200;
+
 function detectDecisionMakers(html: string, pageUrl: URL): RadarDecisionMakerLead[] {
   const leads: RadarDecisionMakerLead[] = [];
   for (const rawJson of matches(
@@ -540,12 +543,12 @@ function detectDecisionMakers(html: string, pageUrl: URL): RadarDecisionMakerLea
     ...matches(
       html,
       /<(?:article|section|li)\b[^>]*>([\s\S]{0,4000}?)<\/(?:article|section|li)>/gi,
-    ),
+    ).slice(0, MAX_DECISION_MAKER_BLOCKS),
     ...matches(
       html,
       /<div\b[^>]*(?:class|id)\s*=\s*["'][^"']*(?:team|staff|person|employee|author|contact|management|editor)[^"']*["'][^>]*>([\s\S]{0,4000}?)<\/div>/gi,
-    ),
-  ];
+    ).slice(0, MAX_DECISION_MAKER_BLOCKS),
+  ].slice(0, MAX_DECISION_MAKER_BLOCKS);
   for (const block of blocks) {
     const role = decisionRole(compactText(block));
     if (!role) continue;
@@ -567,10 +570,13 @@ function detectDecisionMakers(html: string, pageUrl: URL): RadarDecisionMakerLea
       confidence: email || phone ? "high" : "medium",
     });
   }
-  for (const block of matches(html, /<(?:p|li)\b[^>]*>([\s\S]{0,1800}?)<\/(?:p|li)>/gi)) {
+  for (const block of matches(html, /<(?:p|li)\b[^>]*>([\s\S]{0,1800}?)<\/(?:p|li)>/gi).slice(
+    0,
+    MAX_DECISION_MAKER_BLOCKS,
+  )) {
     for (const link of anchorLinks(block, pageUrl)) {
       if (!/^(?:mailto|tel):/i.test(link.rawHref)) continue;
-      const linkPosition = block.indexOf(link.rawHref);
+      const linkPosition = link.index;
       const context = compactText(
         block.slice(Math.max(0, linkPosition - 320), linkPosition + link.rawHref.length + 60),
       );
@@ -1121,7 +1127,7 @@ function contactRolesFor(topic: string | null | undefined) {
 }
 
 function anchorLinks(html: string, pageUrl: URL) {
-  const links: Array<{ rawHref: string; url: URL | null; label: string }> = [];
+  const links: Array<{ rawHref: string; url: URL | null; label: string; index: number }> = [];
   for (const match of html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)) {
     const rawHref = attribute(match[1] ?? "", "href");
     if (!rawHref) continue;
@@ -1133,7 +1139,7 @@ function anchorLinks(html: string, pageUrl: URL) {
         // Ignore malformed links from untrusted HTML.
       }
     }
-    links.push({ rawHref, url, label: compactText(match[2] ?? "") });
+    links.push({ rawHref, url, label: compactText(match[2] ?? ""), index: match.index ?? 0 });
   }
   return links;
 }

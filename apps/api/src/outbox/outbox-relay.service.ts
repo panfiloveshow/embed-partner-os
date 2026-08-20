@@ -1,3 +1,5 @@
+import { OutboxLeaseLostError } from "./prisma-outbox-relay.store.js";
+
 export interface OutboxEnvelope {
   id: string;
   eventType: string;
@@ -73,25 +75,49 @@ export class OutboxRelayService {
         await this.publisher.publish(event);
       } catch (error) {
         const failedAt = this.clock();
-        await this.store.markFailed({
-          eventId: event.id,
-          workerId: this.workerId,
-          nextAttemptAt: new Date(failedAt.getTime() + this.retryDelay(event.attempts)),
-          error: errorMessage(error),
-        });
+        try {
+          await this.store.markFailed({
+            eventId: event.id,
+            workerId: this.workerId,
+            nextAttemptAt: new Date(failedAt.getTime() + this.retryDelay(event.attempts)),
+            error: errorMessage(error),
+          });
+        } catch (acknowledgeError) {
+          if (!(acknowledgeError instanceof OutboxLeaseLostError)) throw acknowledgeError;
+          this.logLeaseLost(event.id, "markFailed");
+        }
         result.failed += 1;
         continue;
       }
 
-      await this.store.markPublished({
-        eventId: event.id,
-        workerId: this.workerId,
-        publishedAt: this.clock(),
-      });
+      try {
+        await this.store.markPublished({
+          eventId: event.id,
+          workerId: this.workerId,
+          publishedAt: this.clock(),
+        });
+      } catch (acknowledgeError) {
+        if (!(acknowledgeError instanceof OutboxLeaseLostError)) throw acknowledgeError;
+        // Another worker reclaimed the expired lease: the event will be
+        // retried (at-least-once delivery), so the batch must keep going.
+        this.logLeaseLost(event.id, "markPublished");
+        continue;
+      }
       result.published += 1;
     }
 
     return result;
+  }
+
+  private logLeaseLost(eventId: string, stage: "markPublished" | "markFailed") {
+    console.warn(
+      JSON.stringify({
+        event: "outbox.lease-lost",
+        workerId: this.workerId,
+        eventId,
+        stage,
+      }),
+    );
   }
 
   private retryDelay(attempts: number) {

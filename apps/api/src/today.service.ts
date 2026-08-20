@@ -9,7 +9,6 @@ import type {
   ContactRegistryPayload,
   UpdateContactCommand,
   CreateContactCommand,
-  LinkContactCommand,
   MergeContactResult,
   RadarResearch,
   TodayAction,
@@ -1000,10 +999,28 @@ function interactionTypeLabel(type: CompleteTaskCommand["interactionType"]) {
   }[type];
 }
 
+const MOSCOW_UTC_OFFSET_MS = 3 * 60 * 60 * 1_000;
+const DAY_MS = 24 * 60 * 60 * 1_000;
+/** Moscow calendar date the seed dataset below was authored for. */
+const SEED_ANCHOR_DATE = "2026-08-17";
+
+function startOfMoscowDay(now: Date): Date {
+  const moscow = new Date(now.getTime() + MOSCOW_UTC_OFFSET_MS);
+  const startLocalAsUtc = Date.UTC(
+    moscow.getUTCFullYear(),
+    moscow.getUTCMonth(),
+    moscow.getUTCDate(),
+  );
+  return new Date(startLocalAsUtc - MOSCOW_UTC_OFFSET_MS);
+}
+
+function endOfMoscowDay(now: Date): Date {
+  return new Date(startOfMoscowDay(now).getTime() + DAY_MS - 1);
+}
+
 function groupForDate(dueAt: string): ActionGroup {
   const due = new Date(dueAt);
-  const todayEnd = new Date("2026-08-17T23:59:59+03:00");
-  return due <= todayEnd ? "today" : "later";
+  return due <= endOfMoscowDay(new Date()) ? "today" : "later";
 }
 
 function sortActions(left: TodayAction, right: TodayAction) {
@@ -1018,11 +1035,29 @@ function sortActions(left: TodayAction, right: TodayAction) {
   );
 }
 
+/**
+ * Seed dates are authored relative to SEED_ANCHOR_DATE and shifted to the
+ * current Moscow day at load time, so grouping stays consistent with the
+ * dynamic "end of today" boundary regardless of when the process starts.
+ */
+function seedDayShiftMs(now: Date): number {
+  const anchorStart = new Date(`${SEED_ANCHOR_DATE}T00:00:00+03:00`).getTime();
+  return startOfMoscowDay(now).getTime() - anchorStart;
+}
+
+function shiftSeedDate(value: string, shiftMs: number): string {
+  const shifted = new Date(new Date(value).getTime() + shiftMs);
+  const moscow = new Date(shifted.getTime() + MOSCOW_UTC_OFFSET_MS);
+  return `${moscow.toISOString().slice(0, 19)}+03:00`;
+}
+
 function buildSeedActions(): TodayAction[] {
+  const shiftMs = seedDayShiftMs(new Date());
   return seedActions.map(({ factors, ...action }) => {
     const priority = calculatePriority(factors);
     return {
       ...action,
+      dueAt: action.dueAt === null ? null : shiftSeedDate(action.dueAt, shiftMs),
       priorityScore: priority.score,
       priorityReasons: priority.reasons,
     };

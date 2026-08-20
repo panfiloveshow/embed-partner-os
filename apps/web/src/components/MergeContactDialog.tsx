@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { GitMerge, ShieldAlert, X } from "lucide-react";
 import type { ContactOption, MergeContactCommand } from "@embed-os/contracts";
+import type { MergeTargetOption } from "../lib/contact-merge";
 
-export interface MergeTargetOption {
-  contact: ContactOption;
-  organizationNames: string[];
-}
+export type { MergeTargetOption } from "../lib/contact-merge";
 
 interface MergeContactDialogProps {
   source: ContactOption;

@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma, TaskStatus, type Alert, type HealthCheck } from "@prisma/client";
 import type {
-  ArchivePlacementCommand,
   HealthCheckView,
   PlacementAlertView,
   PlacementCheckResult,
@@ -347,47 +346,43 @@ export class PostgresPlacementService implements PlacementPort {
     idempotencyKey: string,
     source: "manual" | "schedule",
   ): Promise<PlacementCheckResult> {
-    const actor = await this.actors.current();
+    // L0 checks run both from HTTP requests and from the placement monitor
+    // worker, which has no session.
+    const actor = await this.actors.currentOrSystem();
     const requestHash = placementCheckRequestHash(placementId, source);
     const operation = `placement.l0-check:${placementId}`;
-    const existingRequest = await this.prisma.idempotencyRecord.findUnique({
-      where: {
-        actorId_operation_requestKey: {
-          actorId: actor.id,
-          operation,
-          requestKey: idempotencyKey,
-        },
-      },
-    });
-    if (existingRequest) {
-      if (existingRequest.requestHash !== requestHash) {
-        throw new IdempotencyConflictError(idempotencyKey);
-      }
-      if (existingRequest.responseJson === null) {
-        throw new IdempotencyInProgressError(idempotencyKey);
-      }
-      return parsePlacementCheckReplay(existingRequest.responseJson, idempotencyKey);
-    }
     const target = await this.prisma.placement.findFirst({
       where: { id: placementId, archivedAt: null, ...placementScope(actor) },
       select: { pageUrl: true },
     });
     if (!target) throw new PlacementNotFoundError(placementId);
-    const observation = await this.checker.check(target.pageUrl);
     const reservationId = randomUUID();
     const now = new Date();
 
-    return this.prisma.$transaction(
+    // A short transaction reserves the idempotency key BEFORE the external
+    // HTTP check, so a concurrent replay never repeats the network call.
+    const replay = await this.prisma.$transaction((transaction) =>
+      reserveIdempotency(transaction, {
+        reservationId,
+        actorId: actor.id,
+        operation,
+        idempotencyKey,
+        requestHash,
+        now,
+      }),
+    );
+    if (replay !== null) return parsePlacementCheckReplay(replay, idempotencyKey);
+
+    let observation: L0CheckObservation;
+    try {
+      observation = await this.checker.check(target.pageUrl);
+    } catch (error) {
+      await this.releaseReservation(reservationId);
+      throw error;
+    }
+
+    const result = this.prisma.$transaction(
       async (transaction) => {
-        const replay = await reserveIdempotency(transaction, {
-          reservationId,
-          actorId: actor.id,
-          operation,
-          idempotencyKey,
-          requestHash,
-          now,
-        });
-        if (replay !== null) return parsePlacementCheckReplay(replay, idempotencyKey);
         await transaction.$queryRaw(Prisma.sql`
         SELECT pg_advisory_xact_lock(hashtextextended(${`placement-check:${placementId}`}, 0))
       `);
@@ -582,6 +577,27 @@ export class PostgresPlacementService implements PlacementPort {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+    try {
+      return await result;
+    } catch (error) {
+      await this.releaseReservation(reservationId);
+      throw error;
+    }
+  }
+
+  /**
+   * Best-effort removal of an unfinished idempotency reservation so a failed
+   * check can be retried with the same key.
+   */
+  private async releaseReservation(reservationId: string): Promise<void> {
+    try {
+      await this.prisma.idempotencyRecord.deleteMany({
+        where: { id: reservationId, responseJson: { equals: Prisma.DbNull } },
+      });
+    } catch {
+      // The reservation expires on its own; failing to clean it up must not
+      // mask the original error.
+    }
   }
 
   async listChecks(placementId: string): Promise<HealthCheckView[]> {

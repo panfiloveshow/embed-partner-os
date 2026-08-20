@@ -40,7 +40,9 @@ export class PostgresReportService implements ReportPort {
 
     return this.prisma.$transaction(
       async (transaction) => {
-        const actor = await this.actors.current(transaction);
+        // Weekly snapshots are generated both by HTTP requests and by the
+        // weekly report worker, which runs without a session.
+        const actor = await this.actors.currentOrSystem(transaction);
         const teamId = requireActorTeam(actor);
         const teamName = actor.teamName ?? "Без команды";
 

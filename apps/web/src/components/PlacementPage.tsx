@@ -39,6 +39,14 @@ import {
   summarizePlacements,
   type PlacementFilters,
 } from "../lib/placements";
+import { messageFor } from "../lib/problem";
+import { createIdempotencyKey, mutationKey, type MutationKeyState } from "../lib/idempotency";
+import {
+  dateFormat,
+  formatDate as formatDateOnly,
+  formatDateTime,
+  formatTime,
+} from "../lib/format";
 import { AddPlacementDialog, type PlacementContextOption } from "./AddPlacementDialog";
 import { PlacementLifecycleDialog } from "./PlacementLifecycleDialog";
 
@@ -70,13 +78,9 @@ export function PlacementPage({ teamName, contexts }: PlacementPageProps) {
   const [lifecycleOpen, setLifecycleOpen] = useState(false);
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [lifecycleError, setLifecycleError] = useState<string | null>(null);
-  const registrationKey = useRef<string | null>(null);
+  const registrationMutation = useRef<MutationKeyState | null>(null);
   const checkKeys = useRef(new Map<string, string>());
-  const lifecycleMutation = useRef<{
-    kind: "update" | "archive";
-    hash: string;
-    key: string;
-  } | null>(null);
+  const lifecycleMutation = useRef<MutationKeyState | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -155,29 +159,29 @@ export function PlacementPage({ teamName, contexts }: PlacementPageProps) {
   }
 
   function openRegistration() {
-    registrationKey.current = createIdempotencyKey("placement-register");
+    registrationMutation.current = null;
     setRegistrationError(null);
     setAddOpen(true);
   }
 
   function closeRegistration() {
     if (registering) return;
-    registrationKey.current = null;
+    registrationMutation.current = null;
     setRegistrationError(null);
     setAddOpen(false);
   }
 
   async function submitRegistration(command: RegisterPlacementCommand) {
-    if (!registrationKey.current) return;
+    const key = mutationKey(registrationMutation, command, "placement-register");
     setRegistering(true);
     setRegistrationError(null);
     try {
-      const created = await registerPlacement(command, registrationKey.current);
+      const created = await registerPlacement(command, key);
       setPlacements((current) => sortPlacements([...current, created]));
       setSelectedId(created.id);
       setChecks([]);
       setNotice(`Размещение ${created.organizationName} добавлено в мониторинг.`);
-      registrationKey.current = null;
+      registrationMutation.current = null;
       setAddOpen(false);
     } catch (registerError) {
       setRegistrationError(messageFor(registerError));
@@ -201,7 +205,7 @@ export function PlacementPage({ teamName, contexts }: PlacementPageProps) {
 
   async function submitLifecycle(command: UpdatePlacementCommand) {
     if (!selected) return;
-    const key = mutationKey(lifecycleMutation, "update", command);
+    const key = mutationKey(lifecycleMutation, command, "placement-update");
     setLifecycleBusy(true);
     setLifecycleError(null);
     try {
@@ -231,7 +235,7 @@ export function PlacementPage({ teamName, contexts }: PlacementPageProps) {
 
   async function submitArchive(command: ArchivePlacementCommand) {
     if (!selected) return;
-    const key = mutationKey(lifecycleMutation, "archive", command);
+    const key = mutationKey(lifecycleMutation, command, "placement-archive");
     setLifecycleBusy(true);
     setLifecycleError(null);
     try {
@@ -266,7 +270,7 @@ export function PlacementPage({ teamName, contexts }: PlacementPageProps) {
           <label className="team-select">
             <UsersRound size={17} aria-hidden="true" />
             <span className="sr-only">Команда</span>
-            <select value={teamName} onChange={() => undefined}>
+            <select value={teamName} disabled title="Мультикомандный режим появится позже">
               <option>{teamName}</option>
             </select>
           </label>
@@ -527,7 +531,15 @@ function PlacementTable({
             <tr
               className={placement.id === selectedId ? "placement-row selected" : "placement-row"}
               key={placement.id}
+              tabIndex={0}
               onClick={() => onSelect(placement.id)}
+              onKeyDown={(event) => {
+                if (event.target !== event.currentTarget) return;
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onSelect(placement.id);
+                }
+              }}
             >
               <td data-label="Партнёр">
                 <button
@@ -555,25 +567,32 @@ function PlacementTable({
                 {formatMoment(placement.nextCheckAt)}
               </td>
               <td data-label="Действия">
-                <div className="placement-row-actions" onClick={(event) => event.stopPropagation()}>
+                <div className="placement-row-actions">
                   <a
                     href={placement.pageUrl}
                     target="_blank"
                     rel="noreferrer"
+                    onClick={(event) => event.stopPropagation()}
                     aria-label={`Открыть страницу ${placement.organizationName}`}
                   >
                     <ExternalLink size={15} aria-hidden="true" />
                   </a>
                   <button
                     type="button"
-                    onClick={() => onSelect(placement.id)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSelect(placement.id);
+                    }}
                     aria-label={`Показать историю ${placement.organizationName}`}
                   >
                     <History size={15} aria-hidden="true" />
                   </button>
                   <button
                     type="button"
-                    onClick={() => onRunCheck(placement.id)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onRunCheck(placement.id);
+                    }}
                     disabled={checkingId === placement.id || placement.businessStatus !== "active"}
                     aria-label={`Запустить L0-проверку ${placement.organizationName}`}
                   >
@@ -886,41 +905,15 @@ function displayUrl(value: string) {
 function formatMoment(value: string | null) {
   if (!value) return "—";
   const date = new Date(value);
-  const now = new Date();
-  const day = new Intl.DateTimeFormat("ru-RU", {
-    timeZone: "Europe/Moscow",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  const time = formatTime(value);
-  if (day.format(date) === day.format(now)) return `Сегодня, ${time}`;
-  return new Intl.DateTimeFormat("ru-RU", {
-    timeZone: "Europe/Moscow",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
-
-function formatTime(value: string) {
-  return new Intl.DateTimeFormat("ru-RU", {
-    timeZone: "Europe/Moscow",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
+  if (dateFormat.format(date) === dateFormat.format(new Date())) {
+    return `Сегодня, ${formatTime(value)}`;
+  }
+  return formatDateTime(value);
 }
 
 function formatDate(value: string | null) {
   if (!value) return "—";
-  return new Intl.DateTimeFormat("ru-RU", {
-    timeZone: "Europe/Moscow",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(new Date(value));
+  return formatDateOnly(value);
 }
 
 function embedTypeLabel(value: PlacementView["embedType"]) {
@@ -941,29 +934,6 @@ function capitalize(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-function createIdempotencyKey(prefix: string) {
-  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function mutationKey(
-  ref: { current: { kind: "update" | "archive"; hash: string; key: string } | null },
-  kind: "update" | "archive",
-  command: UpdatePlacementCommand | ArchivePlacementCommand,
-) {
-  const hash = JSON.stringify(command);
-  if (ref.current?.kind === kind && ref.current.hash === hash) return ref.current.key;
-  const key = createIdempotencyKey(`placement-${kind}`);
-  ref.current = { kind, hash, key };
-  return key;
-}
-
 function isPlacementVersionConflict(error: unknown) {
   return error instanceof ApiError && error.problem.code === "PLACEMENT_VERSION_CONFLICT";
-}
-
-function messageFor(error: unknown) {
-  if (error instanceof ApiError) return error.problem.detail;
-  if (error instanceof Error) return error.message;
-  return "Неизвестная ошибка";
 }

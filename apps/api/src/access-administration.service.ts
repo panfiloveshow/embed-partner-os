@@ -102,7 +102,7 @@ export class AccessUserAlreadyExistsError extends Error {
   }
 }
 
-interface MemoryAccessUser extends Omit<AccessUserView, "currentUser"> {}
+type MemoryAccessUser = Omit<AccessUserView, "currentUser">;
 
 @Injectable()
 export class AccessAdministrationService {

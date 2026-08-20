@@ -4,6 +4,14 @@ import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 import type { LookupFunction } from "node:net";
 
+/**
+ * Single product token shared by the outgoing User-Agent header and the
+ * robots.txt group lookup so partner sites can target one agent name.
+ */
+export const USER_AGENT_PRODUCT_TOKEN = "EmbedPartnerOS-Radar";
+export const USER_AGENT = `${USER_AGENT_PRODUCT_TOKEN}/0.1`;
+export const ROBOTS_PRODUCT_TOKEN = USER_AGENT_PRODUCT_TOKEN.toLocaleLowerCase("en-US");
+
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
 const DEFAULT_MAX_REDIRECTS = 5;
@@ -131,7 +139,7 @@ function isPublicIpv4(address: string): boolean {
   if (a === 100 && b >= 64 && b <= 127) return false;
   if (a === 169 && b === 254) return false;
   if (a === 172 && b >= 16 && b <= 31) return false;
-  if (a === 192 && (b === 0 || b === 168 || (b === 0 && c === 2))) return false;
+  if (a === 192 && (b === 0 || b === 168 || (b === 88 && c === 99))) return false;
   if (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) return false;
   if (a === 203 && b === 0 && c === 113) return false;
   return true;
@@ -208,7 +216,7 @@ const nodeRequest: SafeHttpRequester = ({ url, address, family, signal, maxBytes
         signal,
         headers: {
           Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1",
-          "User-Agent": "EmbedPartnerOS-L0/0.1",
+          "User-Agent": USER_AGENT,
         },
         lookup: createPinnedLookup(address, family),
       },

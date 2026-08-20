@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import type { ContactOption, TodayAction } from "@embed-os/contracts";
+import { shortDateTimeFormat } from "../lib/format";
 
 interface DetailPanelProps {
   task: TodayAction | null;
@@ -200,10 +201,5 @@ function groupLabel(group: TodayAction["group"]) {
 
 function formatLongDate(value: string | null) {
   if (!value) return "Не задан";
-  return new Date(value).toLocaleString("ru-RU", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return shortDateTimeFormat.format(new Date(value));
 }

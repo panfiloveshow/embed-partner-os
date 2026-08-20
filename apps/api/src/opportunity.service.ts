@@ -17,7 +17,7 @@ import {
   IdempotencyConflictError,
   opportunityStageRequestHash,
 } from "./application/idempotency.js";
-import { OPPORTUNITY_PORT, type OpportunityPort } from "./opportunity.port.js";
+import type { OpportunityPort } from "./opportunity.port.js";
 import { PLACEMENT_PORT, type PlacementPort } from "./placement.port.js";
 import { TodayService } from "./today.service.js";
 

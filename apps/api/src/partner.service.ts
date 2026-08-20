@@ -43,7 +43,7 @@ export class PartnerService implements PartnerPort {
     const today = this.today.getToday();
     const placements = await this.placements.list();
     const allPartners = groupActions(today.actions).map((actions) =>
-      toRegistryItem(actions, placements, now),
+      toRegistryItem(actions, placements),
     );
     const partners = allPartners
       .filter((partner) => matchesPartner(partner, query))
@@ -72,7 +72,7 @@ export class PartnerService implements PartnerPort {
     const placements = allPlacements.filter(
       (placement) => placement.organizationId === organizationId,
     );
-    const organization = toRegistryItem(actions, placements, now);
+    const organization = toRegistryItem(actions, placements);
     const contacts = this.today.listContacts({ status: "active", organizationId }).contacts;
     const opportunityActions = uniqueBy(actions, ({ opportunityId }) => opportunityId);
     const interactions = actions
@@ -115,7 +115,7 @@ export class PartnerService implements PartnerPort {
       generatedAt: now.toISOString(),
       summary: partnerSummary(organization),
       organization,
-      organizationGroup: demoOrganizationGroup(organization, today.actions, allPlacements, now),
+      organizationGroup: demoOrganizationGroup(organization, today.actions, allPlacements),
       contacts,
       opportunities,
       interactions,
@@ -173,11 +173,7 @@ function groupActions(actions: TodayAction[]) {
   return [...grouped.values()];
 }
 
-function toRegistryItem(
-  actions: TodayAction[],
-  placements: PlacementView[],
-  now: Date,
-): PartnerRegistryItem {
+function toRegistryItem(actions: TodayAction[], placements: PlacementView[]): PartnerRegistryItem {
   const primary = [...actions].sort(
     (left, right) => (right.partnerScore ?? -1) - (left.partnerScore ?? -1),
   )[0];
@@ -323,7 +319,6 @@ function demoOrganizationGroup(
   organization: PartnerRegistryItem,
   actions: TodayAction[],
   placements: PlacementView[],
-  now: Date,
 ): OrganizationGroupView | null {
   if (!organization.organizationGroup) return null;
   const members = groupActions(actions)
@@ -331,7 +326,7 @@ function demoOrganizationGroup(
       const id = memberActions[0]?.organizationId;
       return id ? DEMO_MEDIA_GROUP.memberIds.has(id) : false;
     })
-    .map((memberActions) => toRegistryItem(memberActions, placements, now))
+    .map((memberActions) => toRegistryItem(memberActions, placements))
     .sort((left, right) => left.name.localeCompare(right.name, "ru"))
     .map((member) => ({
       id: member.id,

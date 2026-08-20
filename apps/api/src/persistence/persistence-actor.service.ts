@@ -1,4 +1,9 @@
-import { Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
+import {
+  Inject,
+  Injectable,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import type { ActorRole, SessionPayload } from "@embed-os/contracts";
 import { ActorExecutionContext } from "../auth/actor-execution-context.js";
@@ -25,10 +30,65 @@ export class PersistenceActorService {
     @Inject(ActorExecutionContext) private readonly context: ActorExecutionContext,
   ) {}
 
+  /**
+   * Actor of the current HTTP request. Fails closed: a request that reached
+   * persistence without a verified session is a configuration error, never
+   * an implicit administrator.
+   */
   async current(client: UserClient = this.prisma): Promise<PersistenceActor> {
     const session = this.context.current();
-    const id = session?.userId ?? SYSTEM_ACTOR_ID;
-    const user = await client.user.findUnique({
+    if (!session) {
+      throw new UnauthorizedException(
+        "Запрос выполняется без проверенной сессии. Доступ к данным запрещён",
+      );
+    }
+    const user = await this.loadUser(client, session.userId);
+    if (!user || user.status !== "ACTIVE") {
+      throw new ServiceUnavailableException("Пользователь авторизации отсутствует или отключён");
+    }
+    return {
+      id: user.id,
+      subject: session.subject,
+      displayName: user.displayName,
+      role: session.role,
+      scopeMode: session.scope.mode,
+      teamId: user.teamId,
+      teamName: user.team?.name ?? null,
+    };
+  }
+
+  /**
+   * Explicit system actor for background workers that legitimately run
+   * without an HTTP session (outbox relays, monitors, schedulers).
+   */
+  async systemActor(client: UserClient = this.prisma): Promise<PersistenceActor> {
+    const user = await this.loadUser(client, SYSTEM_ACTOR_ID);
+    if (!user || user.status !== "ACTIVE") {
+      throw new ServiceUnavailableException(
+        "Системный пользователь отсутствует. Выполните npm run db:seed",
+      );
+    }
+    return {
+      id: user.id,
+      subject: user.externalSubject,
+      displayName: user.displayName,
+      role: "admin",
+      scopeMode: "all",
+      teamId: user.teamId,
+      teamName: user.team?.name ?? null,
+    };
+  }
+
+  /**
+   * For code paths shared by HTTP handlers and background workers: uses the
+   * request session when present, otherwise the explicit system actor.
+   */
+  async currentOrSystem(client: UserClient = this.prisma): Promise<PersistenceActor> {
+    return this.context.current() ? this.current(client) : this.systemActor(client);
+  }
+
+  private async loadUser(client: UserClient, id: string) {
+    return client.user.findUnique({
       where: { id },
       select: {
         id: true,
@@ -39,22 +99,6 @@ export class PersistenceActorService {
         team: { select: { name: true } },
       },
     });
-    if (!user || user.status !== "ACTIVE") {
-      throw new ServiceUnavailableException(
-        session
-          ? "Пользователь авторизации отсутствует или отключён"
-          : "Системный пользователь отсутствует. Выполните npm run db:seed",
-      );
-    }
-    return {
-      id: user.id,
-      subject: session?.subject ?? user.externalSubject,
-      displayName: user.displayName,
-      role: session?.role ?? "admin",
-      scopeMode: session?.scope.mode ?? "all",
-      teamId: user.teamId,
-      teamName: user.team?.name ?? null,
-    };
   }
 }
 

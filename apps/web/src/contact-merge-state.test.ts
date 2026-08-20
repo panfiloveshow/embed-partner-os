@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ContactOption, TodayAction, TodayPayload } from "@embed-os/contracts";
-import { applyContactMerge, collectMergeTargets } from "./App.js";
+import { applyContactMerge, collectMergeTargets } from "./lib/contact-merge.js";
 
 const source: ContactOption = {
   id: "contact-source",

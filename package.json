@@ -22,6 +22,9 @@
     "db:migrate": "npm run db:migrate:deploy -w @embed-os/api",
     "db:seed": "npm run db:seed -w @embed-os/api",
     "test": "npm run build:packages && npm run test --workspaces --if-present",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "typecheck": "npm run build:packages && npm run typecheck --workspaces --if-present"
   },
   "engines": {

@@ -13,11 +13,18 @@ import type { RadarTrafficProvider } from "./radar-traffic-provider.js";
 import {
   BlockedNetworkTargetError,
   ResponseTooLargeError,
+  ROBOTS_PRODUCT_TOKEN,
   SafeHttpClient,
   type SafeHttpResponse,
 } from "./safe-http-client.js";
 
 export const RADAR_INSPECTOR = Symbol("RADAR_INSPECTOR");
+
+/**
+ * Radar inspections run heavy feature-extraction regexes over the body, so
+ * they read at most 1 MB per page instead of the transport default of 5 MB.
+ */
+const RADAR_MAX_RESPONSE_BYTES = 1024 * 1024;
 
 export interface RadarInspectionObservation {
   pageUrl: string;
@@ -38,7 +45,7 @@ export interface RadarInspector {
 }
 
 export interface RadarHttpReader {
-  get(url: string): Promise<SafeHttpResponse>;
+  get(url: string, options?: { maxBytes?: number }): Promise<SafeHttpResponse>;
 }
 
 export class RadarPageInspector implements RadarInspector {
@@ -53,7 +60,7 @@ export class RadarPageInspector implements RadarInspector {
     try {
       const parsed = new URL(pageUrl);
       const robotsUrl = new URL("/robots.txt", parsed.origin).toString();
-      const robots = await this.http.get(robotsUrl);
+      const robots = await this.http.get(robotsUrl, { maxBytes: RADAR_MAX_RESPONSE_BYTES });
       if (robots.status === 401 || robots.status === 403) {
         return this.observation(
           pageUrl,
@@ -82,7 +89,7 @@ export class RadarPageInspector implements RadarInspector {
         }
       }
 
-      const page = await this.http.get(pageUrl);
+      const page = await this.http.get(pageUrl, { maxBytes: RADAR_MAX_RESPONSE_BYTES });
       if (page.status === 403 || page.status === 429) {
         return this.observation(
           page.url.toString(),
@@ -149,7 +156,9 @@ export class RadarPageInspector implements RadarInspector {
             const linked = new URL(linkedUrl);
             if (!robotsAllows(robotsSource, `${linked.pathname}${linked.search}`)) return null;
             try {
-              const linkedPage = await this.http.get(linkedUrl);
+              const linkedPage = await this.http.get(linkedUrl, {
+                maxBytes: RADAR_MAX_RESPONSE_BYTES,
+              });
               const linkedType = linkedPage.headers["content-type"] ?? "";
               if (
                 linkedPage.url.origin === page.url.origin &&
@@ -345,7 +354,9 @@ export class RadarPageInspector implements RadarInspector {
 
   private async readXml(url: URL, pageUrl: URL): Promise<{ url: URL; body: string } | null> {
     try {
-      const response = await this.http.get(url.toString());
+      const response = await this.http.get(url.toString(), {
+        maxBytes: RADAR_MAX_RESPONSE_BYTES,
+      });
       const contentType = response.headers["content-type"] ?? "";
       if (
         response.url.origin !== pageUrl.origin ||
@@ -548,7 +559,7 @@ export function robotsAllows(source: string, path: string) {
       if (value) current.rules.push({ allow: field === "allow", path: value });
     }
   }
-  const exact = groups.filter(({ agents }) => agents.includes("embedpartneros-radar"));
+  const exact = groups.filter(({ agents }) => agents.includes(ROBOTS_PRODUCT_TOKEN));
   const applicable = exact.length > 0 ? exact : groups.filter(({ agents }) => agents.includes("*"));
   const matches = applicable
     .flatMap(({ rules }) => rules)

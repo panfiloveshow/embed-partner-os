@@ -8,6 +8,7 @@ import {
   UserPlus,
 } from "lucide-react";
 import type { ActionGroup, TodayAction } from "@embed-os/contracts";
+import { dayMonthFormat, dayMonthTimeFormat } from "../lib/format";
 
 const groupLabels: Record<ActionGroup, string> = {
   critical: "Критично",
@@ -254,12 +255,7 @@ function formatDeadline(value: string | null, group: ActionGroup) {
   if (!value) return "—";
   const date = new Date(value);
   if (group === "waiting") {
-    return `Вернуть ${date.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" })}`;
+    return `Вернуть ${dayMonthFormat.format(date)}`;
   }
-  return date.toLocaleString("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return dayMonthTimeFormat.format(date);
 }

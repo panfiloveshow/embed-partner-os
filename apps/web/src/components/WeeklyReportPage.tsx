@@ -7,6 +7,9 @@ import type {
 } from "@embed-os/contracts";
 import { ApiError, fetchLatestWeeklyReport, generateWeeklyReport } from "../lib/api";
 import { defaultWeeklyReportCommand } from "../lib/reporting";
+import { messageFor } from "../lib/problem";
+import { createIdempotencyKey } from "../lib/idempotency";
+import { formatDate, timeFormat } from "../lib/format";
 
 interface WeeklyReportPageProps {
   teamName: string;
@@ -64,7 +67,7 @@ export function WeeklyReportPage({ teamName }: WeeklyReportPageProps) {
           <label className="team-select">
             <UsersRound size={17} aria-hidden="true" />
             <span className="sr-only">Команда</span>
-            <select value={teamName} onChange={() => undefined}>
+            <select value={teamName} disabled title="Мультикомандный режим появится позже">
               <option>{teamName}</option>
             </select>
           </label>
@@ -205,7 +208,7 @@ function WeeklyReportDashboard({ snapshot }: { snapshot: WeeklyReportSnapshot })
                   <p>{decision.question}</p>
                   <strong>{decision.affectedCount}</strong>
                   <span>{decision.owner}</span>
-                  <time dateTime={decision.dueAt}>{formatShortDate(decision.dueAt)}</time>
+                  <time dateTime={decision.dueAt}>{formatDate(decision.dueAt)}</time>
                 </article>
               ))
             ) : (
@@ -364,21 +367,7 @@ function formatDataAsOf(value: string) {
     day: "numeric",
     month: "long",
   }).format(date);
-  const time = new Intl.DateTimeFormat("ru-RU", {
-    timeZone: "Europe/Moscow",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-  return `${day}, ${time}`;
-}
-
-function formatShortDate(value: string) {
-  return new Intl.DateTimeFormat("ru-RU", {
-    timeZone: "Europe/Moscow",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(new Date(value));
+  return `${day}, ${timeFormat.format(date)}`;
 }
 
 function formatChange(value: number | null) {
@@ -386,15 +375,4 @@ function formatChange(value: number | null) {
   if (value > 0) return `+${value} к прошлой неделе`;
   if (value < 0) return `${value} к прошлой неделе`;
   return "±0 к прошлой неделе";
-}
-
-function messageFor(error: unknown) {
-  if (error instanceof ApiError) return error.problem.detail;
-  if (error instanceof Error) return error.message;
-  return "Неизвестная ошибка";
-}
-
-function createIdempotencyKey() {
-  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID();
-  return `report-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }

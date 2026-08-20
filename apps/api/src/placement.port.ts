@@ -3,7 +3,6 @@ import type {
   HealthCheckView,
   PlacementCheckResult,
   PlacementView,
-  UpdatePlacementCommand,
 } from "@embed-os/contracts";
 
 export const PLACEMENT_PORT = Symbol("PLACEMENT_PORT");

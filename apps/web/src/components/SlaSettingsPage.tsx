@@ -14,6 +14,9 @@ import type {
   UpdateSlaSettingsCommand,
 } from "@embed-os/contracts";
 import { ApiError, fetchSlaSettings, updateSlaSettings } from "../lib/api";
+import { messageFor } from "../lib/problem";
+import { mutationKey, type MutationKeyState } from "../lib/idempotency";
+import { formatDateTime } from "../lib/format";
 
 interface SlaSettingsPageProps {
   teamName: string;
@@ -32,7 +35,7 @@ export function SlaSettingsPage({ teamName }: SlaSettingsPageProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const mutation = useRef<{ hash: string; key: string } | null>(null);
+  const mutation = useRef<MutationKeyState | null>(null);
 
   const applySettings = useCallback((next: SlaSettingsPayload) => {
     setSettings(next);
@@ -75,15 +78,12 @@ export function SlaSettingsPage({ teamName }: SlaSettingsPageProps) {
       thresholds: draft.thresholds,
       reason: draft.reason,
     };
-    const hash = JSON.stringify(command);
-    if (mutation.current?.hash !== hash) {
-      mutation.current = { hash, key: createIdempotencyKey() };
-    }
+    const key = mutationKey(mutation, command, "sla-settings");
     setSaving(true);
     setError(null);
     setNotice(null);
     try {
-      const next = await updateSlaSettings(command, mutation.current.key);
+      const next = await updateSlaSettings(command, key);
       applySettings(next);
       mutation.current = null;
       setNotice(
@@ -124,7 +124,7 @@ export function SlaSettingsPage({ teamName }: SlaSettingsPageProps) {
           <label className="team-select">
             <UsersRound size={17} aria-hidden="true" />
             <span className="sr-only">Команда</span>
-            <select value={teamName} onChange={() => undefined}>
+            <select value={teamName} disabled title="Мультикомандный режим появится позже">
               <option>{teamName}</option>
             </select>
           </label>
@@ -284,7 +284,7 @@ export function SlaSettingsPage({ teamName }: SlaSettingsPageProps) {
                 </div>
                 <div>
                   <dt>Опубликована</dt>
-                  <dd>{formatDate(settings.publishedAt)}</dd>
+                  <dd>{formatDateTime(settings.publishedAt)}</dd>
                 </div>
               </dl>
               <label className="sla-reason-field">
@@ -321,24 +321,4 @@ export function SlaSettingsPage({ teamName }: SlaSettingsPageProps) {
       ) : null}
     </main>
   );
-}
-
-function createIdempotencyKey() {
-  return globalThis.crypto?.randomUUID?.() ?? `sla-settings-${Date.now()}-${Math.random()}`;
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("ru-RU", {
-    timeZone: "Europe/Moscow",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function messageFor(error: unknown) {
-  if (error instanceof ApiError) return error.problem.detail;
-  return error instanceof Error ? error.message : "Неизвестная ошибка";
 }

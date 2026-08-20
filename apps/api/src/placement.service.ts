@@ -1,9 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import type {
-  ArchivePlacementCommand,
   HealthCheckView,
-  PlacementAlertView,
   PlacementCheckResult,
   PlacementView,
   UpdatePlacementCommand,

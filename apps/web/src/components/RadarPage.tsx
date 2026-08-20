@@ -37,6 +37,9 @@ import {
   importRadarCandidates,
 } from "../lib/api";
 import { inspectionPresentation, type RadarMessageTone } from "../lib/radar-presentation";
+import { messageFor } from "../lib/problem";
+import { createIdempotencyKey, mutationKey, type MutationKeyState } from "../lib/idempotency";
+import { formatDate as formatDateOnly, formatDateTime } from "../lib/format";
 
 interface RadarPageProps {
   teamName: string;
@@ -56,6 +59,7 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ text: string; tone: RadarMessageTone } | null>(null);
   const mutationKeys = useRef(new Map<string, string>());
+  const createMutation = useRef<MutationKeyState | null>(null);
   const importInput = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
@@ -106,13 +110,14 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
   }
 
   async function create(command: CreateRadarCandidateCommand) {
-    const key = createKey("radar-create");
+    const key = mutationKey(createMutation, command, "radar-create");
     setBusyAction("create");
     setError(null);
     setNotice(null);
     try {
       const created = await createRadarCandidate(command, key);
       updateCandidate(created);
+      createMutation.current = null;
       setFormOpen(false);
       setNotice({ text: `Кандидат «${created.name}» добавлен в очередь.`, tone: "success" });
     } catch (createError) {
@@ -128,7 +133,7 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
     setError(null);
     setNotice(null);
     try {
-      const result = await importRadarCandidates(file, createKey("radar-import"));
+      const result = await importRadarCandidates(file, createIdempotencyKey("radar-import"));
       await load();
       setNotice({
         text: `Импорт ${result.fileName}: добавлено ${result.created}, пропущено ${result.skipped}, ошибок ${result.failed}.`,
@@ -144,7 +149,7 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
 
   async function inspect(candidate: RadarCandidate) {
     const scope = `check:${candidate.id}`;
-    const key = mutationKeys.current.get(scope) ?? createKey("radar-check");
+    const key = mutationKeys.current.get(scope) ?? createIdempotencyKey("radar-check");
     mutationKeys.current.set(scope, key);
     setBusyAction(scope);
     setError(null);
@@ -172,7 +177,7 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
   async function decide(candidate: RadarCandidate, command: RadarCandidateDecisionCommand) {
     const hash = JSON.stringify(command);
     const scope = `decision:${candidate.id}:${hash}`;
-    const key = mutationKeys.current.get(scope) ?? createKey("radar-decision");
+    const key = mutationKeys.current.get(scope) ?? createIdempotencyKey("radar-decision");
     mutationKeys.current.set(scope, key);
     setBusyAction(`decision:${candidate.id}`);
     setError(null);
@@ -200,7 +205,7 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
   async function adjustScore(candidate: RadarCandidate, adjustment: number, comment: string) {
     const hash = JSON.stringify({ version: candidate.version, adjustment, comment });
     const scope = `score:${candidate.id}:${hash}`;
-    const key = mutationKeys.current.get(scope) ?? createKey("radar-score");
+    const key = mutationKeys.current.get(scope) ?? createIdempotencyKey("radar-score");
     mutationKeys.current.set(scope, key);
     setBusyAction(`score:${candidate.id}`);
     setError(null);
@@ -234,7 +239,7 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
           <label className="team-select">
             <UsersRound size={17} aria-hidden="true" />
             <span className="sr-only">Команда</span>
-            <select value={teamName} onChange={() => undefined}>
+            <select value={teamName} disabled title="Мультикомандный режим появится позже">
               <option>{teamName}</option>
             </select>
           </label>
@@ -330,7 +335,7 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
               </p>
             </div>
           ) : (
-            <div className="radar-candidate-list" role="listbox" aria-label="Кандидаты">
+            <ul className="radar-candidate-list" aria-label="Кандидаты">
               {visible.map((candidate) => {
                 const latestEvidence = candidate.evidence.at(-1);
                 const visualStatus =
@@ -338,34 +343,35 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
                     ? `inspection-${inspectionPresentation(latestEvidence).tone}`
                     : candidate.status;
                 return (
-                  <button
-                    key={candidate.id}
-                    type="button"
-                    className={
-                      candidate.id === selectedId
-                        ? "radar-candidate-row radar-candidate-row-selected"
-                        : "radar-candidate-row"
-                    }
-                    onClick={() => setSelectedId(candidate.id)}
-                    role="option"
-                    aria-selected={candidate.id === selectedId}
-                  >
-                    <span
-                      className={`radar-status-dot radar-status-dot-${visualStatus}`}
-                      aria-hidden="true"
-                    />
-                    <span className="radar-candidate-identity">
-                      <strong>{candidate.name}</strong>
-                      <small>{candidate.hostNormalized}</small>
-                    </span>
-                    <span className={`radar-score radar-score-${candidate.score.priority}`}>
-                      {candidate.score.total}
-                    </span>
-                    <span className="radar-candidate-source">{candidate.source}</span>
-                  </button>
+                  <li key={candidate.id}>
+                    <button
+                      type="button"
+                      className={
+                        candidate.id === selectedId
+                          ? "radar-candidate-row radar-candidate-row-selected"
+                          : "radar-candidate-row"
+                      }
+                      onClick={() => setSelectedId(candidate.id)}
+                      aria-current={candidate.id === selectedId ? "true" : undefined}
+                      aria-label={`Кандидат ${candidate.name}`}
+                    >
+                      <span
+                        className={`radar-status-dot radar-status-dot-${visualStatus}`}
+                        aria-hidden="true"
+                      />
+                      <span className="radar-candidate-identity">
+                        <strong>{candidate.name}</strong>
+                        <small>{candidate.hostNormalized}</small>
+                      </span>
+                      <span className={`radar-score radar-score-${candidate.score.priority}`}>
+                        {candidate.score.total}
+                      </span>
+                      <span className="radar-candidate-source">{candidate.source}</span>
+                    </button>
+                  </li>
                 );
               })}
-            </div>
+            </ul>
           )}
         </div>
 
@@ -745,7 +751,7 @@ function CandidateDetail({
               : "Запустите L0-проверку публичной страницы"}
           </span>
         </div>
-        {latestEvidence ? <time>{formatDate(latestEvidence.detectedAt)}</time> : null}
+        {latestEvidence ? <time>{formatDateTime(latestEvidence.detectedAt)}</time> : null}
         {!terminal ? (
           <button
             className="button button-secondary"
@@ -778,7 +784,7 @@ function CandidateDetail({
               {candidate.research.method === "site-intelligence-v2"
                 ? "Карта сайта + RSS + HTML"
                 : "HTML-сигналы"}{" "}
-              · {formatDate(candidate.research.collectedAt)}
+              · {formatDateTime(candidate.research.collectedAt)}
             </span>
           </div>
           <div
@@ -1490,7 +1496,7 @@ function trafficHint(candidate: RadarCandidate) {
   if (!traffic) return "Similarweb не подключён — цифры не подменяются предположением";
   const period =
     traffic.periodStart && traffic.periodEnd
-      ? ` · период ${new Date(traffic.periodStart).toLocaleDateString("ru-RU")}–${new Date(traffic.periodEnd).toLocaleDateString("ru-RU")}`
+      ? ` · период ${formatDateOnly(traffic.periodStart)}–${formatDateOnly(traffic.periodEnd)}`
       : "";
   return `${traffic.provider} · ${traffic.minMonthlyVisits.toLocaleString("ru-RU")}–${traffic.maxMonthlyVisits.toLocaleString("ru-RU")} / мес. · confidence ${traffic.confidence}${period}`;
 }
@@ -1499,27 +1505,12 @@ function decisionNotice(candidate: RadarCandidate) {
   if (candidate.status === "accepted")
     return "Кандидат принят: созданы организация, возможность и первая задача.";
   if (candidate.status === "deferred")
-    return `Кандидат отложен до ${candidate.deferUntil ? formatDate(candidate.deferUntil) : "новой даты"}.`;
+    return `Кандидат отложен до ${candidate.deferUntil ? formatDateTime(candidate.deferUntil) : "новой даты"}.`;
   if (candidate.status === "rejected") return "Кандидат отклонён с сохранением причины.";
   if (candidate.status === "merged") return "Кандидат объединён с канонической записью.";
   return "Решение сохранено.";
 }
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "short" }).format(
-    new Date(value),
-  );
-}
-
 function signed(value: number) {
   return value > 0 ? `+${value}` : String(value);
-}
-
-function createKey(prefix: string) {
-  return `${prefix}:${crypto.randomUUID()}`;
-}
-
-function messageFor(error: unknown) {
-  if (error instanceof ApiError) return error.problem.detail;
-  return error instanceof Error ? error.message : "Неизвестная ошибка";
 }

@@ -187,14 +187,11 @@ export async function exportPartnerRegistry(
 ): Promise<PartnerExportDownload> {
   const response = await authenticatedFetch(`${apiBase}/partners/exports`, {
     method: "POST",
-    headers: withAuthorization({
-      "content-type": "application/json",
-    }),
+    headers: { "content-type": "application/json" },
     body: JSON.stringify(filters),
   });
   if (!response.ok) {
-    const problem = (await response.json()) as ProblemDetails;
-    throw new ApiError(problem);
+    throw new ApiError(await readProblem(response));
   }
   return {
     blob: await response.blob(),

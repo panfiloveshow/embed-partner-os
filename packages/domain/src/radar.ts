@@ -2,7 +2,6 @@ import type {
   CreateRadarCandidateCommand,
   RadarCandidateDecisionCommand,
   RadarCandidateFeatures,
-  RadarConfidence,
   RadarEvidence,
   RadarScore,
   RadarScoreAdjustmentCommand,

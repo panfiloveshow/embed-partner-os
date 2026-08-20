@@ -13,7 +13,7 @@ describe("OpportunityService", () => {
     const funnel = await service.list();
 
     expect(funnel).toMatchObject({
-      generatedAt: "2026-08-18T10:00:00.000Z",
+      generatedAt: fixedClock().toISOString(),
       teamName: "Команда внедрения",
       total: 16,
       truncated: false,
@@ -158,8 +158,18 @@ class SequenceChecker {
   }
 }
 
+const MOSCOW_UTC_OFFSET_MS = 3 * 60 * 60 * 1_000;
+
+/**
+ * Seed actions are shifted to the current Moscow day at load time, so the
+ * deterministic clock is pinned to "the day after the seed anchor, 13:00 MSK".
+ */
 function fixedClock() {
-  return new Date("2026-08-18T10:00:00.000Z");
+  const moscowNow = new Date(Date.now() + MOSCOW_UTC_OFFSET_MS);
+  return new Date(
+    Date.UTC(moscowNow.getUTCFullYear(), moscowNow.getUTCMonth(), moscowNow.getUTCDate() + 1, 13) -
+      MOSCOW_UTC_OFFSET_MS,
+  );
 }
 
 function healthyObservation(): L0CheckObservation {

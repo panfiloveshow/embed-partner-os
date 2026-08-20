@@ -2752,6 +2752,13 @@ td {
 
 .radar-candidate-list {
   display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.radar-candidate-list > li {
+  display: contents;
 }
 
 .radar-candidate-row {
@@ -6621,10 +6628,9 @@ td {
 
 .partner-registry-toolbar {
   display: grid;
-  grid-template-columns: minmax(220px, 1.55fr) minmax(118px, 0.68fr) repeat(
-      5,
-      minmax(82px, 0.5fr)
-    ) minmax(112px, 0.7fr) auto auto;
+  grid-template-columns:
+    minmax(220px, 1.55fr) minmax(118px, 0.68fr) repeat(5, minmax(82px, 0.5fr))
+    minmax(112px, 0.7fr) auto auto;
   align-items: end;
   gap: 8px;
   padding: 13px;

@@ -30,7 +30,11 @@ import {
   IdempotencyConflictError,
   IdempotencyInProgressError,
 } from "../application/idempotency.js";
-import { RADAR_INSPECTOR, type RadarInspector } from "../monitoring/radar-page-inspector.js";
+import {
+  RADAR_INSPECTOR,
+  type RadarInspectionObservation,
+  type RadarInspector,
+} from "../monitoring/radar-page-inspector.js";
 import {
   enrichRadarResearchWithChanges,
   mergeRadarFeatures,
@@ -216,27 +220,42 @@ export class PostgresRadarService implements RadarPort {
   }
 
   async inspect(candidateId: string, idempotencyKey: string): Promise<RadarCandidate> {
-    const actor = await this.actors.current();
+    // Inspections run both from HTTP requests and from the radar recheck
+    // worker, which has no session.
+    const actor = await this.actors.currentOrSystem();
     const visible = await this.prisma.radarCandidate.findFirst({
       where: { id: candidateId, ...radarCandidateScope(actor) },
       select: { pageUrl: true },
     });
     if (!visible) throw new RadarCandidateNotFoundError(candidateId);
-    const observation = await this.inspector.inspect(visible.pageUrl);
     const requestHash = hash({ candidateId });
     const reservationId = randomUUID();
     const now = new Date();
-    return this.prisma.$transaction(
+
+    // A short transaction reserves the idempotency key BEFORE the external
+    // HTTP inspection, so a concurrent replay never repeats the network call.
+    const replay = await this.prisma.$transaction((transaction) =>
+      reserveIdempotency(transaction, {
+        reservationId,
+        actorId: actor.id,
+        operation: `radar.inspect:${candidateId}`,
+        idempotencyKey,
+        requestHash,
+        now,
+      }),
+    );
+    if (replay) return parseReplay(replay, idempotencyKey);
+
+    let observation: RadarInspectionObservation;
+    try {
+      observation = await this.inspector.inspect(visible.pageUrl);
+    } catch (error) {
+      await this.releaseReservation(reservationId);
+      throw error;
+    }
+
+    const result = this.prisma.$transaction(
       async (transaction) => {
-        const replay = await reserveIdempotency(transaction, {
-          reservationId,
-          actorId: actor.id,
-          operation: `radar.inspect:${candidateId}`,
-          idempotencyKey,
-          requestHash,
-          now,
-        });
-        if (replay) return parseReplay(replay, idempotencyKey);
         await lockCandidate(transaction, candidateId);
         const current = await findCandidate(transaction, candidateId, actor);
         assertMutable(current);
@@ -304,6 +323,27 @@ export class PostgresRadarService implements RadarPort {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+    try {
+      return await result;
+    } catch (error) {
+      await this.releaseReservation(reservationId);
+      throw error;
+    }
+  }
+
+  /**
+   * Best-effort removal of an unfinished idempotency reservation so a failed
+   * inspection can be retried with the same key.
+   */
+  private async releaseReservation(reservationId: string): Promise<void> {
+    try {
+      await this.prisma.idempotencyRecord.deleteMany({
+        where: { id: reservationId, responseJson: { equals: Prisma.DbNull } },
+      });
+    } catch {
+      // The reservation expires on its own; failing to clean it up must not
+      // mask the original error.
+    }
   }
 
   async decide(

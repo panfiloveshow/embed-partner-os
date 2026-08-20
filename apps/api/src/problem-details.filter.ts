@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   ArgumentsHost,
   Catch,
@@ -6,6 +7,7 @@ import {
   HttpStatus,
   Logger,
 } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import type { Request, Response } from "express";
 import type { ContactCandidate, ProblemDetails } from "@embed-os/contracts";
 import { DomainRuleError } from "@embed-os/domain";
@@ -68,6 +70,8 @@ import {
   AccessUserVersionConflictError,
 } from "./access-administration.service.js";
 
+const REQUEST_ID_PATTERN = /^[A-Za-z0-9._-]{1,64}$/;
+
 @Catch()
 export class ProblemDetailsFilter implements ExceptionFilter {
   private readonly logger = new Logger(ProblemDetailsFilter.name);
@@ -77,7 +81,9 @@ export class ProblemDetailsFilter implements ExceptionFilter {
     const response = context.getResponse<Response>();
     const request = context.getRequest<Request>();
     const requestHeader = request.headers["x-request-id"];
-    const requestId = Array.isArray(requestHeader) ? requestHeader[0] : requestHeader;
+    const rawRequestId = Array.isArray(requestHeader) ? requestHeader[0] : requestHeader;
+    const requestId =
+      rawRequestId && REQUEST_ID_PATTERN.test(rawRequestId) ? rawRequestId : randomUUID();
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let title = "Внутренняя ошибка";
@@ -271,6 +277,22 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       title = "Экспорт не настроен";
       detail = exception.message;
       code = exception.code;
+    } else if (
+      exception instanceof Prisma.PrismaClientKnownRequestError &&
+      exception.code === "P2034"
+    ) {
+      status = HttpStatus.CONFLICT;
+      title = "Конфликт параллельного изменения";
+      detail = "Транзакция не смогла завершиться из-за параллельного изменения. Повторите запрос";
+      code = "SERIALIZATION_CONFLICT";
+    } else if (
+      exception instanceof Prisma.PrismaClientKnownRequestError &&
+      exception.code === "P2002"
+    ) {
+      status = HttpStatus.CONFLICT;
+      title = "Нарушена уникальность данных";
+      detail = "Запись с такими уникальными значениями уже существует";
+      code = "UNIQUE_CONSTRAINT_VIOLATION";
     } else if (exception instanceof HttpException) {
       status = exception.getStatus();
       title = status === 404 ? "Объект не найден" : "Запрос отклонён";
@@ -288,7 +310,7 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       status,
       detail,
       code,
-      ...(requestId ? { requestId } : {}),
+      requestId,
       ...(fieldErrors ? { fieldErrors } : {}),
       ...(duplicateCandidates ? { duplicateCandidates } : {}),
       ...(currentVersion !== undefined ? { currentVersion } : {}),

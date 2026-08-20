@@ -7,6 +7,23 @@ import { ProblemDetailsFilter } from "./problem-details.filter.js";
 import { RADAR_INSPECTOR } from "./monitoring/radar-page-inspector.js";
 import { OIDC_TOKEN_VERIFIER, OidcTokenVerificationError } from "./auth/oidc-token-verifier.js";
 
+const MOSCOW_UTC_OFFSET_MS = 3 * 60 * 60 * 1_000;
+
+/** A Moscow wall-clock instant `days` days ahead of the current Moscow day. */
+function moscowDateInDays(days: number, hour: number): { command: string; utc: string } {
+  const moscowNow = new Date(Date.now() + MOSCOW_UTC_OFFSET_MS);
+  const instant = new Date(
+    Date.UTC(
+      moscowNow.getUTCFullYear(),
+      moscowNow.getUTCMonth(),
+      moscowNow.getUTCDate() + days,
+      hour,
+    ) - MOSCOW_UTC_OFFSET_MS,
+  );
+  const local = new Date(instant.getTime() + MOSCOW_UTC_OFFSET_MS);
+  return { command: `${local.toISOString().slice(0, 19)}+03:00`, utc: instant.toISOString() };
+}
+
 describe("Today HTTP contract", () => {
   let app: INestApplication;
 
@@ -330,14 +347,15 @@ describe("Today HTTP contract", () => {
   });
 
   it("reschedules a task idempotently and requires an explicit reason", async () => {
+    const rescheduleTo = moscowDateInDays(8, 12);
     await request(app.getHttpServer())
       .post("/api/v1/tasks/task-11/reschedule")
       .set("Idempotency-Key", "test-key-http-reschedule-invalid-0001")
-      .send({ dueAt: "2026-08-25T12:00:00+03:00" })
+      .send({ dueAt: rescheduleTo.command })
       .expect(422);
 
     const command = {
-      dueAt: "2026-08-25T12:00:00+03:00",
+      dueAt: rescheduleTo.command,
       reason: "Партнёр перенёс встречу",
     };
     const first = await request(app.getHttpServer())
@@ -348,7 +366,7 @@ describe("Today HTTP contract", () => {
     expect(first.body.actions).toContainEqual(
       expect.objectContaining({
         id: "task-11",
-        dueAt: "2026-08-25T09:00:00.000Z",
+        dueAt: rescheduleTo.utc,
         group: "later",
       }),
     );
@@ -363,7 +381,7 @@ describe("Today HTTP contract", () => {
     await request(app.getHttpServer())
       .post("/api/v1/tasks/task-11/reschedule")
       .set("Idempotency-Key", "test-key-http-reschedule-0001")
-      .send({ ...command, dueAt: "2026-08-26T12:00:00+03:00" })
+      .send({ ...command, dueAt: moscowDateInDays(9, 12).command })
       .expect(409);
   });
 

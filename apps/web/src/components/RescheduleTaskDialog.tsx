@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { CalendarClock, X } from "lucide-react";
 import type { RescheduleTaskCommand, TodayAction } from "@embed-os/contracts";
+import { mediumDateTimeFormat } from "../lib/format";
 
 interface RescheduleTaskDialogProps {
   task: TodayAction;
@@ -156,9 +157,5 @@ function localDateTime(value: Date) {
 }
 
 function formatDeadline(value: string | null) {
-  return value
-    ? new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium", timeStyle: "short" }).format(
-        new Date(value),
-      )
-    : "Не задан";
+  return value ? mediumDateTimeFormat.format(new Date(value)) : "Не задан";
 }

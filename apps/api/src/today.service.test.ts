@@ -2,6 +2,23 @@ import { describe, expect, it } from "vitest";
 import { DomainRuleError } from "@embed-os/domain";
 import { TodayService } from "./today.service.js";
 
+const MOSCOW_UTC_OFFSET_MS = 3 * 60 * 60 * 1_000;
+
+/** A Moscow wall-clock instant `days` days ahead of the current Moscow day. */
+function moscowDateInDays(days: number, hour: number): { command: string; utc: string } {
+  const moscowNow = new Date(Date.now() + MOSCOW_UTC_OFFSET_MS);
+  const instant = new Date(
+    Date.UTC(
+      moscowNow.getUTCFullYear(),
+      moscowNow.getUTCMonth(),
+      moscowNow.getUTCDate() + days,
+      hour,
+    ) - MOSCOW_UTC_OFFSET_MS,
+  );
+  const local = new Date(instant.getTime() + MOSCOW_UTC_OFFSET_MS);
+  return { command: `${local.toISOString().slice(0, 19)}+03:00`, utc: instant.toISOString() };
+}
+
 describe("TodayService", () => {
   it("returns actions in operational group order", () => {
     const payload = new TodayService().getToday();
@@ -57,19 +74,18 @@ describe("TodayService", () => {
   it("reschedules a task only with a later deadline and mandatory reason", () => {
     const service = new TodayService();
     const before = service.getToday();
+    const rescheduleTo = moscowDateInDays(8, 12);
     const after = service.rescheduleTask(
       "task-11",
-      { dueAt: "2026-08-25T12:00:00+03:00", reason: "Партнёр перенёс встречу" },
+      { dueAt: rescheduleTo.command, reason: "Партнёр перенёс встречу" },
       "test-key-task-reschedule-0001",
     );
 
-    expect(after.actions.find(({ id }) => id === "task-11")?.dueAt).toBe(
-      "2026-08-25T09:00:00.000Z",
-    );
+    expect(after.actions.find(({ id }) => id === "task-11")?.dueAt).toBe(rescheduleTo.utc);
     expect(after.summary.rescheduled).toBe(before.summary.rescheduled + 1);
     const replay = service.rescheduleTask(
       "task-11",
-      { dueAt: "2026-08-25T12:00:00+03:00", reason: "Партнёр перенёс встречу" },
+      { dueAt: rescheduleTo.command, reason: "Партнёр перенёс встречу" },
       "test-key-task-reschedule-0001",
     );
     expect(replay.summary.rescheduled).toBe(after.summary.rescheduled);

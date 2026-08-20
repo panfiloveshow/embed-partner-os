@@ -15,8 +15,10 @@ import {
   type FunnelPayload,
   type OpportunityRiskFlag,
 } from "@embed-os/contracts";
-import { ApiError, fetchFunnel } from "../lib/api";
+import { fetchFunnel } from "../lib/api";
 import { filterFunnel, summarizeFunnel, type FunnelFilters } from "../lib/funnel";
+import { messageFor } from "../lib/problem";
+import { shortDateTimeFormat } from "../lib/format";
 
 interface FunnelPageProps {
   teamName: string;
@@ -63,7 +65,7 @@ export function FunnelPage({ teamName, onOpenOpportunity }: FunnelPageProps) {
     return () => controller.abort();
   }, [load]);
 
-  const opportunities = payload?.opportunities ?? [];
+  const opportunities = useMemo(() => payload?.opportunities ?? [], [payload]);
   const filtered = useMemo(() => filterFunnel(opportunities, filters), [opportunities, filters]);
   const summary = useMemo(() => summarizeFunnel(opportunities), [opportunities]);
   const owners = useMemo(
@@ -97,7 +99,11 @@ export function FunnelPage({ teamName, onOpenOpportunity }: FunnelPageProps) {
           <label className="team-select">
             <UsersRound size={17} aria-hidden="true" />
             <span className="sr-only">Команда</span>
-            <select value={payload?.teamName ?? teamName} onChange={() => undefined}>
+            <select
+              value={payload?.teamName ?? teamName}
+              disabled
+              title="Мультикомандный режим появится позже"
+            >
               <option>{payload?.teamName ?? teamName}</option>
             </select>
           </label>
@@ -449,16 +455,5 @@ function initials(name: string) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("ru-RU", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function messageFor(error: unknown) {
-  if (error instanceof ApiError) return error.problem.detail;
-  if (error instanceof Error) return error.message;
-  return "Неизвестная ошибка";
+  return shortDateTimeFormat.format(new Date(value));
 }

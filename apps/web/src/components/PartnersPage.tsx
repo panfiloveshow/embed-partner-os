@@ -33,7 +33,6 @@ import type {
   UpdateContactCommand,
 } from "@embed-os/contracts";
 import {
-  ApiError,
   archiveContactRecord,
   cancelOrganizationImport,
   commitOrganizationImport,
@@ -44,6 +43,9 @@ import {
   restoreContactRecord,
   updateContactRecord,
 } from "../lib/api";
+import { messageFor } from "../lib/problem";
+import { createIdempotencyKey, mutationKey, type MutationKeyState } from "../lib/idempotency";
+import { formatDate } from "../lib/format";
 import {
   buildImportCommand,
   importDecisionLabel,
@@ -66,7 +68,7 @@ export function PartnersPage({ teamName, onNavigate }: PartnersPageProps) {
   const [registryMode, setRegistryMode] = useState<"organizations" | "contacts">("organizations");
   const inputRef = useRef<HTMLInputElement>(null);
   const cancelKey = useRef<string | null>(null);
-  const commitMutation = useRef<{ hash: string; key: string } | null>(null);
+  const commitMutation = useRef<MutationKeyState | null>(null);
   const [job, setJob] = useState<OrganizationImportJob | null>(null);
   const [resolutions, setResolutions] = useState<ImportResolutions>({});
   const [loading, setLoading] = useState(false);
@@ -126,14 +128,11 @@ export function PartnersPage({ teamName, onNavigate }: PartnersPageProps) {
   async function commit() {
     if (!job || job.status !== "preview" || unresolved.length > 0) return;
     const command = buildImportCommand(job, resolutions);
-    const hash = JSON.stringify(command);
-    if (commitMutation.current?.hash !== hash) {
-      commitMutation.current = { hash, key: createIdempotencyKey("organization-import-commit") };
-    }
+    const key = mutationKey(commitMutation, command, "organization-import-commit");
     setActionBusy(true);
     setError(null);
     try {
-      setJob(await commitOrganizationImport(job.id, command, commitMutation.current.key));
+      setJob(await commitOrganizationImport(job.id, command, key));
     } catch (commitError) {
       setError(messageFor(commitError));
     } finally {
@@ -174,7 +173,7 @@ export function PartnersPage({ teamName, onNavigate }: PartnersPageProps) {
         <label className="team-select">
           <UsersRound size={17} aria-hidden="true" />
           <span className="sr-only">Команда</span>
-          <select value={teamName} onChange={() => undefined}>
+          <select value={teamName} disabled title="Мультикомандный режим появится позже">
             <option>{teamName}</option>
           </select>
         </label>
@@ -384,14 +383,16 @@ function ContactRegistry() {
       (contact) => contact.id !== selectedId && contact.status === "active",
     ) ?? [];
 
+  const defaultMergeTargetId = selected?.duplicateMatches[0]?.contactId ?? "";
+
   useEffect(() => {
     setEditor(null);
     setStatusAction(null);
     setStatusReason("");
-    setMergeTargetId(selected?.duplicateMatches[0]?.contactId ?? "");
+    setMergeTargetId(defaultMergeTargetId);
     setMergeReason("");
     setError(null);
-  }, [selectedId]);
+  }, [selectedId, defaultMergeTargetId]);
 
   function replaceContact(contact: ContactRegistryItem) {
     setPayload((current) =>
@@ -633,12 +634,12 @@ function ContactRegistry() {
                     <div>
                       <dt>Проверен</dt>
                       <dd>
-                        {selected.verifiedAt ? registryDate(selected.verifiedAt) : "Не подтверждён"}
+                        {selected.verifiedAt ? formatDate(selected.verifiedAt) : "Не подтверждён"}
                       </dd>
                     </div>
                     <div>
                       <dt>Обновлён</dt>
-                      <dd>{registryDate(selected.updatedAt)}</dd>
+                      <dd>{formatDate(selected.updatedAt)}</dd>
                     </div>
                   </dl>
                   <section className="contact-detail-section">
@@ -835,7 +836,7 @@ function ContactRow({
         <ContactChannels contact={contact} compact />
       </td>
       <td data-label="Актуальность">
-        {contact.verifiedAt ? registryDate(contact.verifiedAt) : "Не подтверждён"}
+        {contact.verifiedAt ? formatDate(contact.verifiedAt) : "Не подтверждён"}
       </td>
       <td data-label="Статус">
         <ContactStatus status={contact.status} />
@@ -1108,14 +1109,6 @@ function ContactEditForm({
   );
 }
 
-function registryDate(value: string) {
-  return new Intl.DateTimeFormat("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(new Date(value));
-}
-
 function toLocalDateTime(value: string | null) {
   if (!value) return "";
   const date = new Date(value);
@@ -1124,13 +1117,7 @@ function toLocalDateTime(value: string | null) {
 }
 
 function registryMessage(error: unknown) {
-  if (error instanceof ApiError) {
-    if (error.problem.duplicateCandidates?.length) {
-      return `${error.problem.detail} Выберите существующий контакт или выполните подтверждённое объединение.`;
-    }
-    return error.problem.detail;
-  }
-  return error instanceof Error ? error.message : "Не удалось выполнить действие с контактом";
+  return messageFor(error, "Не удалось выполнить действие с контактом");
 }
 
 function ImportPreview({
@@ -1325,22 +1312,4 @@ function protocolMessage(row: OrganizationImportRow) {
   if (row.resolvedDecision === "update") return "Организация обновлена";
   if (row.resolvedDecision === "create") return "Организация создана";
   return "Без изменений";
-}
-
-function messageFor(error: unknown) {
-  if (error instanceof ApiError) {
-    const fieldErrors = error.problem.fieldErrors;
-    return fieldErrors && Object.keys(fieldErrors).length > 0
-      ? `${error.problem.detail}: ${Object.values(fieldErrors).join("; ")}.`
-      : error.problem.detail;
-  }
-  return error instanceof Error ? error.message : "Неизвестная ошибка импорта";
-}
-
-function createIdempotencyKey(prefix: string) {
-  const suffix =
-    typeof globalThis.crypto?.randomUUID === "function"
-      ? globalThis.crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  return `${prefix}-${suffix}`;
 }

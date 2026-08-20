@@ -38,6 +38,14 @@ export function PlacementLifecycleDialog({
     firstField.current?.focus();
   }, []);
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !busy) onCancel();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [busy, onCancel]);
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await onSubmit({

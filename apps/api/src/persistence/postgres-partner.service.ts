@@ -115,7 +115,7 @@ export class PostgresPartnerService implements PartnerPort {
       include: partnerOrganizationRelations,
       orderBy: [{ name: "asc" }, { id: "asc" }],
     });
-    const allPartners = records.map((record) => mapPartner(record, now));
+    const allPartners = records.map((record) => mapPartner(record));
     const partners = allPartners
       .filter(
         (partner) =>
@@ -147,7 +147,7 @@ export class PostgresPartnerService implements PartnerPort {
       include: partnerOrganizationRelations,
     });
     if (!record) throw new PartnerNotFoundError(organizationId);
-    const organization = mapPartner(record, now);
+    const organization = mapPartner(record);
     const opportunityIds = record.opportunities.map(({ id }) => id);
     const taskIds = record.opportunities.flatMap(({ tasks }) => tasks.map(({ id }) => id));
     const placementIds = record.placements.map(({ id }) => id);
@@ -368,7 +368,7 @@ type PartnerOrganizationRecord = Prisma.OrganizationGetPayload<{
   include: typeof partnerOrganizationRelations;
 }>;
 
-function mapPartner(record: PartnerOrganizationRecord, now: Date): PartnerRegistryItem {
+function mapPartner(record: PartnerOrganizationRecord): PartnerRegistryItem {
   const primaryOpportunity = record.opportunities[0] ?? null;
   const lastActivityAt = latestDate([
     ...record.opportunities.map(({ updatedAt }) => updatedAt),

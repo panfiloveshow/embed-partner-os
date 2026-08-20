@@ -24,6 +24,10 @@ import {
   transitionOpportunityStage,
   rescheduleTask,
 } from "./lib/api";
+import { messageFor } from "./lib/problem";
+import { createIdempotencyKey, mutationKey, type MutationKeyState } from "./lib/idempotency";
+import { longDateFormat } from "./lib/format";
+import { applyContactMerge, collectMergeTargets } from "./lib/contact-merge";
 import { Sidebar } from "./components/Sidebar";
 import type { AppPage } from "./components/Sidebar";
 import { SummaryStrip } from "./components/SummaryStrip";
@@ -31,6 +35,7 @@ import { TaskGroups } from "./components/TaskGroups";
 import { DetailPanel } from "./components/DetailPanel";
 import { CompletionDialog } from "./components/CompletionDialog";
 import { AddContactDialog } from "./components/AddContactDialog";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { WeeklyReportPage } from "./components/WeeklyReportPage";
 import { PlacementPage } from "./components/PlacementPage";
 import { FunnelPage } from "./components/FunnelPage";
@@ -39,28 +44,46 @@ import { RadarPage } from "./components/RadarPage";
 import { SettingsPage } from "./components/SettingsPage";
 import { StageTransitionDialog } from "./components/StageTransitionDialog";
 import { RescheduleTaskDialog } from "./components/RescheduleTaskDialog";
-import { MergeContactDialog, type MergeTargetOption } from "./components/MergeContactDialog";
+import { MergeContactDialog } from "./components/MergeContactDialog";
 
 interface AppProps {
   onLogout?: () => Promise<void>;
 }
 
+const routablePages: readonly AppPage[] = [
+  "today",
+  "partners",
+  "funnel",
+  "radar",
+  "placements",
+  "reports",
+  "settings",
+];
+
+function pageFromLocation(): AppPage {
+  const candidate = window.location.hash.replace(/^#\/?/, "");
+  return (routablePages as readonly string[]).includes(candidate)
+    ? (candidate as AppPage)
+    : "today";
+}
+
 export function App({ onLogout }: AppProps) {
-  const [activePage, setActivePage] = useState<AppPage>("today");
+  const [activePage, setActivePage] = useState<AppPage>(pageFromLocation);
   const [payload, setPayload] = useState<TodayPayload | null>(null);
   const [session, setSession] = useState<SessionPayload | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [completingTask, setCompletingTask] = useState<TodayAction | null>(null);
-  const [completionKey, setCompletionKey] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [contactTask, setContactTask] = useState<TodayAction | null>(null);
-  const [contactKey, setContactKey] = useState<string | null>(null);
   const [contactBusy, setContactBusy] = useState(false);
   const [contactError, setContactError] = useState<string | null>(null);
   const [contactCandidates, setContactCandidates] = useState<ContactCandidate[]>([]);
-  const contactLinkKeys = useRef(new Map<string, string>());
+  const completionMutation = useRef<MutationKeyState | null>(null);
+  const contactMutation = useRef<MutationKeyState | null>(null);
+  const contactLinkMutation = useRef<MutationKeyState | null>(null);
   const [mergeSource, setMergeSource] = useState<{
     task: TodayAction;
     contact: ContactOption;
@@ -74,13 +97,26 @@ export function App({ onLogout }: AppProps) {
   const [stageTask, setStageTask] = useState<TodayAction | null>(null);
   const [stageBusy, setStageBusy] = useState(false);
   const [stageError, setStageError] = useState<string | null>(null);
-  const stageMutation = useRef<{ hash: string; key: string } | null>(null);
+  const stageMutation = useRef<MutationKeyState | null>(null);
   const [rescheduleTarget, setRescheduleTarget] = useState<TodayAction | null>(null);
   const [rescheduleBusy, setRescheduleBusy] = useState(false);
   const [rescheduleError, setRescheduleError] = useState<string | null>(null);
-  const rescheduleMutation = useRef<{ hash: string; key: string } | null>(null);
+  const rescheduleMutation = useRef<MutationKeyState | null>(null);
+
+  const navigate = useCallback((page: AppPage) => {
+    setActivePage(page);
+    const hash = `#/${page}`;
+    if (window.location.hash !== hash) window.location.hash = hash;
+  }, []);
+
+  useEffect(() => {
+    const onHashChange = () => setActivePage(pageFromLocation());
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
 
   const load = useCallback(async (signal?: AbortSignal) => {
+    setLoading(true);
     setError(null);
     try {
       const [nextSession, nextPayload] = await Promise.all([
@@ -93,6 +129,8 @@ export function App({ onLogout }: AppProps) {
     } catch (loadError) {
       if (loadError instanceof DOMException && loadError.name === "AbortError") return;
       setError(messageFor(loadError));
+    } finally {
+      if (!signal?.aborted) setLoading(false);
     }
   }, []);
 
@@ -106,9 +144,10 @@ export function App({ onLogout }: AppProps) {
           nextPayload.actions[0]?.id ??
           null,
       );
-      setActivePage("today");
+      navigate("today");
     } catch (loadError) {
       setError(messageFor(loadError));
+      navigate("today");
     }
   }
 
@@ -151,14 +190,15 @@ export function App({ onLogout }: AppProps) {
   }, [payload]);
 
   async function submitCompletion(command: CompleteTaskCommand) {
-    if (!completingTask || !completionKey) return;
+    if (!completingTask) return;
+    const key = mutationKey(completionMutation, command, `task-complete:${completingTask.id}`);
     setBusy(true);
     setFormError(null);
     try {
-      const nextPayload = await completeTask(completingTask.id, command, completionKey);
+      const nextPayload = await completeTask(completingTask.id, command, key);
       setPayload(nextPayload);
       setCompletingTask(null);
-      setCompletionKey(null);
+      completionMutation.current = null;
       setSelectedId(nextPayload.actions[0]?.id ?? null);
     } catch (submitError) {
       setFormError(messageFor(submitError));
@@ -169,23 +209,28 @@ export function App({ onLogout }: AppProps) {
 
   function openCompletion(task: TodayAction) {
     setCompletingTask(task);
-    setCompletionKey(createIdempotencyKey());
+    completionMutation.current = null;
     setFormError(null);
   }
 
   function cancelCompletion() {
     setCompletingTask(null);
-    setCompletionKey(null);
+    completionMutation.current = null;
     setFormError(null);
   }
 
   async function submitContact(command: CreateContactCommand) {
-    if (!contactTask || !contactKey) return;
+    if (!contactTask) return;
+    const key = mutationKey(
+      contactMutation,
+      command,
+      `contact-create:${contactTask.organizationId}`,
+    );
     setContactBusy(true);
     setContactError(null);
     setContactCandidates([]);
     try {
-      const contact = await createContact(contactTask.organizationId, command, contactKey);
+      const contact = await createContact(contactTask.organizationId, command, key);
       setPayload((current) =>
         current
           ? {
@@ -199,7 +244,7 @@ export function App({ onLogout }: AppProps) {
           : current,
       );
       setContactTask(null);
-      setContactKey(null);
+      contactMutation.current = null;
       setContactCandidates([]);
     } catch (submitError) {
       if (submitError instanceof ApiError && submitError.problem.duplicateCandidates) {
@@ -213,36 +258,31 @@ export function App({ onLogout }: AppProps) {
 
   function openContact(task: TodayAction) {
     setContactTask(task);
-    setContactKey(createIdempotencyKey());
+    contactMutation.current = null;
     setContactError(null);
     setContactCandidates([]);
-    contactLinkKeys.current.clear();
+    contactLinkMutation.current = null;
   }
 
   function cancelContact() {
     setContactTask(null);
-    setContactKey(null);
+    contactMutation.current = null;
     setContactError(null);
     setContactCandidates([]);
-    contactLinkKeys.current.clear();
+    contactLinkMutation.current = null;
   }
 
   async function linkExistingContact(contactId: string, command: LinkContactCommand) {
     if (!contactTask) return;
-    let idempotencyKey = contactLinkKeys.current.get(contactId);
-    if (!idempotencyKey) {
-      idempotencyKey = createIdempotencyKey();
-      contactLinkKeys.current.set(contactId, idempotencyKey);
-    }
+    const key = mutationKey(
+      contactLinkMutation,
+      command,
+      `contact-link:${contactTask.organizationId}:${contactId}`,
+    );
     setContactBusy(true);
     setContactError(null);
     try {
-      const linked = await linkContact(
-        contactTask.organizationId,
-        contactId,
-        command,
-        idempotencyKey,
-      );
+      const linked = await linkContact(contactTask.organizationId, contactId, command, key);
       setPayload((current) =>
         current
           ? {
@@ -256,9 +296,9 @@ export function App({ onLogout }: AppProps) {
           : current,
       );
       setContactTask(null);
-      setContactKey(null);
+      contactMutation.current = null;
       setContactCandidates([]);
-      contactLinkKeys.current.clear();
+      contactLinkMutation.current = null;
     } catch (linkError) {
       setContactError(messageFor(linkError));
     } finally {
@@ -324,18 +364,11 @@ export function App({ onLogout }: AppProps) {
   async function submitStageTransition(command: TransitionOpportunityStageCommand) {
     if (!stageTask || !payload) return;
     const currentPayload = payload;
-    const hash = JSON.stringify(command);
-    if (stageMutation.current?.hash !== hash) {
-      stageMutation.current = { hash, key: createIdempotencyKey() };
-    }
+    const key = mutationKey(stageMutation, command, `stage-transition:${stageTask.opportunityId}`);
     setStageBusy(true);
     setStageError(null);
     try {
-      const result = await transitionOpportunityStage(
-        stageTask.opportunityId,
-        command,
-        stageMutation.current.key,
-      );
+      const result = await transitionOpportunityStage(stageTask.opportunityId, command, key);
       const nextSelectedId =
         result.toStageCode === "SL"
           ? (currentPayload.actions.find(
@@ -412,18 +445,11 @@ export function App({ onLogout }: AppProps) {
 
   async function submitReschedule(command: RescheduleTaskCommand) {
     if (!rescheduleTarget) return;
-    const hash = JSON.stringify(command);
-    if (rescheduleMutation.current?.hash !== hash) {
-      rescheduleMutation.current = { hash, key: createIdempotencyKey() };
-    }
+    const key = mutationKey(rescheduleMutation, command, `task-reschedule:${rescheduleTarget.id}`);
     setRescheduleBusy(true);
     setRescheduleError(null);
     try {
-      const nextPayload = await rescheduleTask(
-        rescheduleTarget.id,
-        command,
-        rescheduleMutation.current.key,
-      );
+      const nextPayload = await rescheduleTask(rescheduleTarget.id, command, key);
       setPayload(nextPayload);
       setSelectedId(rescheduleTarget.id);
       setMergeNotice(`Задача «${rescheduleTarget.title}» перенесена.`);
@@ -442,20 +468,19 @@ export function App({ onLogout }: AppProps) {
     window.requestAnimationFrame(() => element?.focus());
   }
 
-  if (error) {
-    return (
-      <main className="center-state">
-        <RefreshCw size={30} aria-hidden="true" />
-        <h1>Не удалось загрузить очередь</h1>
-        <p>{error}</p>
-        <button className="button button-primary" type="button" onClick={() => void load()}>
-          Повторить
-        </button>
-      </main>
-    );
-  }
-
-  if (!payload || !session) {
+  if (!session) {
+    if (error) {
+      return (
+        <main className="center-state" role="alert">
+          <RefreshCw size={30} aria-hidden="true" />
+          <h1>Не удалось загрузить рабочее пространство</h1>
+          <p>{error}</p>
+          <button className="button button-primary" type="button" onClick={() => void load()}>
+            Повторить
+          </button>
+        </main>
+      );
+    }
     return (
       <main className="center-state" aria-live="polite">
         <span className="loader" aria-hidden="true" />
@@ -464,7 +489,8 @@ export function App({ onLogout }: AppProps) {
     );
   }
 
-  const hasActions = payload.actions.length > 0;
+  const teamName = payload?.teamName ?? session.scope.teamName ?? "Команда";
+  const hasActions = (payload?.actions.length ?? 0) > 0;
   const can = (permission: SessionPayload["permissions"][number]) =>
     session.role === "admin" || session.permissions.includes(permission);
   const canWriteTasks = can("tasks.write");
@@ -476,129 +502,159 @@ export function App({ onLogout }: AppProps) {
       <Sidebar
         session={session}
         activePage={activePage}
-        onNavigate={setActivePage}
+        onNavigate={navigate}
         onLogout={onLogout}
       />
-      {activePage === "reports" ? (
-        <WeeklyReportPage teamName={payload.teamName} />
-      ) : activePage === "settings" ? (
-        <SettingsPage teamName={payload.teamName} />
-      ) : activePage === "partners" ? (
-        <PartnersPage teamName={payload.teamName} onNavigate={setActivePage} />
-      ) : activePage === "radar" ? (
-        <RadarPage
-          teamName={payload.teamName}
-          onOpenToday={(opportunityId) => void openRadarWork(opportunityId)}
-        />
-      ) : activePage === "placements" ? (
-        <PlacementPage teamName={payload.teamName} contexts={placementContexts} />
-      ) : activePage === "funnel" ? (
-        <FunnelPage
-          teamName={payload.teamName}
-          onOpenOpportunity={(opportunityId) => {
-            const action = payload.actions.find(
-              (candidate) => candidate.opportunityId === opportunityId,
-            );
-            setSelectedId(action?.id ?? null);
-            setActivePage("today");
-          }}
-        />
-      ) : (
-        <main className="main-area">
-          <header className="page-header">
-            <div>
-              <h1>Сегодня</h1>
-              <p>{formatCurrentDate(payload.generatedAt)}</p>
-            </div>
-            <div className="header-actions">
-              <label className="team-select">
-                <UsersRound size={17} aria-hidden="true" />
-                <span className="sr-only">Команда</span>
-                <select defaultValue={payload.teamName}>
-                  <option>{payload.teamName}</option>
-                </select>
-              </label>
-              <button
-                className="button button-primary"
-                type="button"
-                onClick={() => selectedTask && openCompletion(selectedTask)}
-                disabled={!selectedTask || !canWriteTasks}
-                title={!canWriteTasks ? "Нет разрешения tasks.write" : undefined}
-              >
-                <Send size={17} aria-hidden="true" />
-                Зафиксировать контакт
-              </button>
-            </div>
-          </header>
+      <ErrorBoundary key={activePage}>
+        {activePage === "reports" ? (
+          <WeeklyReportPage teamName={teamName} />
+        ) : activePage === "settings" ? (
+          <SettingsPage teamName={teamName} />
+        ) : activePage === "partners" ? (
+          <PartnersPage teamName={teamName} onNavigate={navigate} />
+        ) : activePage === "radar" ? (
+          <RadarPage
+            teamName={teamName}
+            onOpenToday={(opportunityId) => void openRadarWork(opportunityId)}
+          />
+        ) : activePage === "placements" ? (
+          <PlacementPage teamName={teamName} contexts={placementContexts} />
+        ) : activePage === "funnel" ? (
+          <FunnelPage
+            teamName={teamName}
+            onOpenOpportunity={(opportunityId) => {
+              const action = payload?.actions.find(
+                (candidate) => candidate.opportunityId === opportunityId,
+              );
+              setSelectedId(action?.id ?? null);
+              navigate("today");
+            }}
+          />
+        ) : (
+          <main className="main-area">
+            <header className="page-header">
+              <div>
+                <h1>Сегодня</h1>
+                <p>
+                  {payload
+                    ? formatCurrentDate(payload.generatedAt)
+                    : "Очередь приоритетных действий"}
+                </p>
+              </div>
+              <div className="header-actions">
+                <label className="team-select">
+                  <UsersRound size={17} aria-hidden="true" />
+                  <span className="sr-only">Команда</span>
+                  <select value={teamName} disabled title="Мультикомандный режим появится позже">
+                    <option>{teamName}</option>
+                  </select>
+                </label>
+                <button
+                  className="button button-primary"
+                  type="button"
+                  onClick={() => selectedTask && openCompletion(selectedTask)}
+                  disabled={!selectedTask || !canWriteTasks}
+                  title={!canWriteTasks ? "Нет разрешения tasks.write" : undefined}
+                >
+                  <Send size={17} aria-hidden="true" />
+                  Зафиксировать контакт
+                </button>
+              </div>
+            </header>
 
-          {mergeNotice ? (
-            <div ref={mergeNoticeRef} className="operation-notice" role="status" tabIndex={-1}>
-              <CheckCircle2 size={17} aria-hidden="true" />
-              <span>{mergeNotice}</span>
-              <button
-                className="icon-button"
-                type="button"
-                onClick={() => setMergeNotice(null)}
-                aria-label="Скрыть уведомление"
-              >
-                ×
-              </button>
-            </div>
-          ) : null}
+            {mergeNotice ? (
+              <div ref={mergeNoticeRef} className="operation-notice" role="status" tabIndex={-1}>
+                <CheckCircle2 size={17} aria-hidden="true" />
+                <span>{mergeNotice}</span>
+                <button
+                  className="icon-button"
+                  type="button"
+                  onClick={() => setMergeNotice(null)}
+                  aria-label="Скрыть уведомление"
+                >
+                  ×
+                </button>
+              </div>
+            ) : null}
 
-          <section className="workspace-frame">
-            <SummaryStrip summary={payload.summary} />
-
-            {hasActions ? (
-              <div className="work-columns">
-                <div className="queue-pane">
-                  <TaskGroups
-                    actions={payload.actions}
-                    selectedId={selectedId}
-                    onSelect={(task) => setSelectedId(task.id)}
-                    onComplete={canWriteTasks ? openCompletion : undefined}
-                    onReschedule={canWriteTasks ? openReschedule : undefined}
-                    onAddContact={canWriteContacts ? openContact : undefined}
-                    onChangeStage={canWriteStages ? openStageTransition : undefined}
-                  />
+            {error ? (
+              <section className="workspace-frame">
+                <div className="empty-state" role="alert">
+                  <RefreshCw size={30} aria-hidden="true" />
+                  <h2>Не удалось загрузить очередь</h2>
+                  <p>{error}</p>
+                  <button
+                    className="button button-primary"
+                    type="button"
+                    onClick={() => void load()}
+                  >
+                    Повторить
+                  </button>
                 </div>
-                <DetailPanel
-                  task={selectedTask}
-                  onClose={() => setSelectedId(null)}
-                  onComplete={canWriteTasks ? openCompletion : undefined}
-                  onAddContact={canWriteContacts ? openContact : undefined}
-                  onMergeContact={canWriteContacts ? openMergeContact : undefined}
-                  onChangeStage={canWriteStages ? openStageTransition : undefined}
-                  onReschedule={canWriteTasks ? openReschedule : undefined}
-                />
-              </div>
-            ) : (
-              <div className="empty-state">
-                <CheckCircle2 size={36} aria-hidden="true" />
-                <h2>Очередь разобрана</h2>
-                <p>Новых действий и просрочек сейчас нет.</p>
-              </div>
-            )}
+              </section>
+            ) : loading && !payload ? (
+              <section className="workspace-frame" aria-live="polite">
+                <div className="empty-state">
+                  <span className="loader" aria-hidden="true" />
+                  <p>Рассчитываем приоритет действий…</p>
+                </div>
+              </section>
+            ) : payload ? (
+              <section className="workspace-frame">
+                <SummaryStrip summary={payload.summary} />
 
-            <footer className="day-summary">
-              <CheckCircle2 size={18} aria-hidden="true" />
-              <strong>Итог дня:</strong>
-              <span>
-                выполнено <b>{payload.summary.completed}</b>
-              </span>
-              <span>
-                перенесено <b>{payload.summary.rescheduled}</b>
-              </span>
-              <span>
-                изменено стадий <b>{payload.summary.stageChanges}</b>
-              </span>
-              <span>
-                запусков <b>{payload.summary.launches}</b>
-              </span>
-            </footer>
-          </section>
-        </main>
-      )}
+                {hasActions ? (
+                  <div className="work-columns">
+                    <div className="queue-pane">
+                      <TaskGroups
+                        actions={payload.actions}
+                        selectedId={selectedId}
+                        onSelect={(task) => setSelectedId(task.id)}
+                        onComplete={canWriteTasks ? openCompletion : undefined}
+                        onReschedule={canWriteTasks ? openReschedule : undefined}
+                        onAddContact={canWriteContacts ? openContact : undefined}
+                        onChangeStage={canWriteStages ? openStageTransition : undefined}
+                      />
+                    </div>
+                    <DetailPanel
+                      task={selectedTask}
+                      onClose={() => setSelectedId(null)}
+                      onComplete={canWriteTasks ? openCompletion : undefined}
+                      onAddContact={canWriteContacts ? openContact : undefined}
+                      onMergeContact={canWriteContacts ? openMergeContact : undefined}
+                      onChangeStage={canWriteStages ? openStageTransition : undefined}
+                      onReschedule={canWriteTasks ? openReschedule : undefined}
+                    />
+                  </div>
+                ) : (
+                  <div className="empty-state">
+                    <CheckCircle2 size={36} aria-hidden="true" />
+                    <h2>Очередь разобрана</h2>
+                    <p>Новых действий и просрочек сейчас нет.</p>
+                  </div>
+                )}
+
+                <footer className="day-summary">
+                  <CheckCircle2 size={18} aria-hidden="true" />
+                  <strong>Итог дня:</strong>
+                  <span>
+                    выполнено <b>{payload.summary.completed}</b>
+                  </span>
+                  <span>
+                    перенесено <b>{payload.summary.rescheduled}</b>
+                  </span>
+                  <span>
+                    изменено стадий <b>{payload.summary.stageChanges}</b>
+                  </span>
+                  <span>
+                    запусков <b>{payload.summary.launches}</b>
+                  </span>
+                </footer>
+              </section>
+            ) : null}
+          </main>
+        )}
+      </ErrorBoundary>
 
       {completingTask ? (
         <CompletionDialog
@@ -653,100 +709,7 @@ export function App({ onLogout }: AppProps) {
   );
 }
 
-export function collectMergeTargets(
-  payload: TodayPayload,
-  sourceContactId: string,
-): MergeTargetOption[] {
-  const contacts = new Map<string, MergeTargetOption>();
-  for (const action of payload.actions) {
-    for (const contact of action.contacts) {
-      if (contact.id === sourceContactId) continue;
-      const current = contacts.get(contact.id);
-      if (current) {
-        if (!current.organizationNames.includes(action.organizationName)) {
-          current.organizationNames.push(action.organizationName);
-        }
-      } else {
-        contacts.set(contact.id, {
-          contact,
-          organizationNames: [action.organizationName],
-        });
-      }
-    }
-  }
-  return [...contacts.values()].sort(
-    (left, right) =>
-      left.contact.fullName.localeCompare(right.contact.fullName, "ru") ||
-      left.contact.id.localeCompare(right.contact.id),
-  );
-}
-
-export function applyContactMerge(
-  payload: TodayPayload,
-  sourceContactId: string,
-  targetContactId: string,
-): TodayPayload {
-  const target = payload.actions
-    .flatMap((action) => action.contacts)
-    .find(({ id }) => id === targetContactId);
-  if (!target) return payload;
-
-  return {
-    ...payload,
-    actions: payload.actions.map((action) => {
-      const source = action.contacts.find(({ id }) => id === sourceContactId);
-      if (!source) return action;
-      if (action.contacts.some(({ id }) => id === targetContactId)) {
-        return {
-          ...action,
-          contacts: action.contacts.filter(({ id }) => id !== sourceContactId),
-        };
-      }
-      return {
-        ...action,
-        contacts: action.contacts.map((contact) =>
-          contact.id === sourceContactId
-            ? {
-                ...target,
-                role: source.role,
-                department: source.department,
-                isPrimary: source.isPrimary,
-              }
-            : contact,
-        ),
-      };
-    }),
-  };
-}
-
-function messageFor(error: unknown) {
-  if (error instanceof ApiError) {
-    const candidates = error.problem.duplicateCandidates;
-    if (candidates?.length) {
-      return `${error.problem.detail} Кандидаты: ${candidates.map(({ fullName }) => fullName).join(", ")}.`;
-    }
-    const fieldErrors = error.problem.fieldErrors;
-    return fieldErrors && Object.keys(fieldErrors).length > 0
-      ? `${error.problem.detail}: ${Object.values(fieldErrors).join("; ")}.`
-      : error.problem.detail;
-  }
-  if (error instanceof Error) return error.message;
-  return "Неизвестная ошибка";
-}
-
 function formatCurrentDate(value: string) {
-  const date = new Date(value);
-  const formatted = new Intl.DateTimeFormat("ru-RU", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  }).format(date);
+  const formatted = longDateFormat.format(new Date(value));
   return formatted.charAt(0).toUpperCase() + formatted.slice(1);
-}
-
-function createIdempotencyKey() {
-  if (typeof globalThis.crypto?.randomUUID === "function") {
-    return globalThis.crypto.randomUUID();
-  }
-  return `web-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }

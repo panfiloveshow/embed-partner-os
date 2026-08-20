@@ -25,6 +25,8 @@ import {
   fetchAccessAdministration,
   updateAccessUser,
 } from "../lib/api";
+import { messageFor as problemMessage } from "../lib/problem";
+import { mutationKey, type MutationKeyState } from "../lib/idempotency";
 
 interface AccessManagementPageProps {
   teamName: string;
@@ -120,8 +122,8 @@ export function AccessManagementPage({ teamName }: AccessManagementPageProps) {
   const [createDraft, setCreateDraft] = useState<CreateAccessDraft | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const mutation = useRef<{ hash: string; key: string } | null>(null);
-  const createMutation = useRef<{ hash: string; key: string } | null>(null);
+  const mutation = useRef<MutationKeyState | null>(null);
+  const createMutation = useRef<MutationKeyState | null>(null);
   const selectedIdRef = useRef<string | null>(null);
 
   const selectUser = useCallback((user: AccessUserView) => {
@@ -189,15 +191,12 @@ export function AccessManagementPage({ teamName }: AccessManagementPageProps) {
       permissions: draft.permissions,
       reason: draft.reason.trim(),
     };
-    const hash = JSON.stringify(command);
-    if (mutation.current?.hash !== hash) {
-      mutation.current = { hash, key: createIdempotencyKey() };
-    }
+    const key = mutationKey(mutation, command, "access-user-update");
     setSaving(true);
     setError(null);
     setNotice(null);
     try {
-      const updated = await updateAccessUser(selected.id, command, mutation.current.key);
+      const updated = await updateAccessUser(selected.id, command, key);
       const users = payload.users.map((user) => (user.id === updated.id ? updated : user));
       setPayload({ ...payload, users });
       selectUser(updated);
@@ -246,15 +245,12 @@ export function AccessManagementPage({ teamName }: AccessManagementPageProps) {
       email: createDraft.email.trim(),
       reason: createDraft.reason.trim(),
     };
-    const hash = JSON.stringify(command);
-    if (createMutation.current?.hash !== hash) {
-      createMutation.current = { hash, key: createIdempotencyKey() };
-    }
+    const key = mutationKey(createMutation, command, "access-user-create");
     setSaving(true);
     setError(null);
     setNotice(null);
     try {
-      const created = await createAccessUser(command, createMutation.current.key);
+      const created = await createAccessUser(command, key);
       const users = [...payload.users, created].sort((left, right) =>
         left.displayName.localeCompare(right.displayName, "ru"),
       );
@@ -324,7 +320,7 @@ export function AccessManagementPage({ teamName }: AccessManagementPageProps) {
           <label className="team-select">
             <UsersRound size={17} aria-hidden="true" />
             <span className="sr-only">Команда</span>
-            <select value={teamName} onChange={() => undefined}>
+            <select value={teamName} disabled title="Мультикомандный режим появится позже">
               <option>{teamName}</option>
             </select>
           </label>
@@ -537,7 +533,7 @@ export function AccessManagementPage({ teamName }: AccessManagementPageProps) {
                     : "access-user-row"
                 }
                 onClick={() => selectUser(user)}
-                aria-pressed={user.id === selected.id}
+                aria-current={user.id === selected.id ? "true" : undefined}
               >
                 <span className="access-user-avatar">{initials(user.displayName)}</span>
                 <span>
@@ -636,7 +632,7 @@ export function AccessManagementPage({ teamName }: AccessManagementPageProps) {
                 <fieldset key={group.label}>
                   <legend>{group.label}</legend>
                   {group.permissions.map((permission) => (
-                    <label key={permission}>
+                    <label key={permission} aria-label={permissionLabels[permission]}>
                       <input
                         type="checkbox"
                         checked={draft.permissions.includes(permission)}
@@ -692,13 +688,6 @@ function initials(name: string) {
     .toLocaleUpperCase("ru-RU");
 }
 
-function createIdempotencyKey() {
-  return typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `access-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
 function messageFor(error: unknown) {
-  if (error instanceof ApiError) return error.problem.detail;
-  return error instanceof Error ? error.message : "Не удалось обновить доступ";
+  return problemMessage(error, "Не удалось обновить доступ");
 }

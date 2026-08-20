@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Building2,
-  CalendarClock,
   CheckCircle2,
   ClipboardPlus,
   Download,
@@ -27,6 +26,8 @@ import type {
 } from "@embed-os/contracts";
 import { exportPartnerRegistry, fetchPartnerCard, fetchPartnerRegistry } from "../lib/api";
 import type { PartnerRegistryFilters } from "../lib/api";
+import { messageFor } from "../lib/problem";
+import { formatDate } from "../lib/format";
 import type { AppPage } from "./Sidebar";
 
 interface PartnerRegistryProps {
@@ -102,7 +103,7 @@ export function PartnerRegistry({ onOpenContacts, onNavigate }: PartnerRegistryP
         );
       } catch (loadError) {
         if (loadError instanceof DOMException && loadError.name === "AbortError") return;
-        setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить партнёров");
+        setError(messageFor(loadError, "Не удалось загрузить партнёров"));
       } finally {
         setLoading(false);
       }
@@ -132,7 +133,7 @@ export function PartnerRegistry({ onOpenContacts, onNavigate }: PartnerRegistryP
       .then(setCard)
       .catch((cardError) => {
         if (cardError instanceof DOMException && cardError.name === "AbortError") return;
-        setError(cardError instanceof Error ? cardError.message : "Не удалось открыть карточку");
+        setError(messageFor(cardError, "Не удалось открыть карточку"));
       })
       .finally(() => setCardLoading(false));
     return () => controller.abort();
@@ -181,9 +182,7 @@ export function PartnerRegistry({ onOpenContacts, onNavigate }: PartnerRegistryP
       const auditReference = download.auditId ? download.auditId.slice(0, 8) : "записан";
       setExportStatus(`CSV готов · аудит ${auditReference}`);
     } catch (exportError) {
-      setError(
-        exportError instanceof Error ? exportError.message : "Не удалось экспортировать реестр",
-      );
+      setError(messageFor(exportError, "Не удалось экспортировать реестр"));
     } finally {
       setExporting(false);
     }
@@ -456,7 +455,7 @@ function PartnerRow({
         <IntegrationStatus status={partner.integrationStatus} />
       </td>
       <td data-label="Активность">
-        {partner.lastActivityAt ? shortDate(partner.lastActivityAt) : "Нет данных"}
+        {partner.lastActivityAt ? formatDate(partner.lastActivityAt) : "Нет данных"}
       </td>
     </tr>
   );
@@ -503,7 +502,7 @@ function PartnerCardHeader({
         <div>
           <span>Следующее действие</span>
           <strong>{partner.nextAction?.title ?? "Не задано"}</strong>
-          <small>{partner.nextAction ? shortDate(partner.nextAction.dueAt) : "—"}</small>
+          <small>{partner.nextAction ? formatDate(partner.nextAction.dueAt) : "—"}</small>
         </div>
         <div>
           <span>Критический статус</span>
@@ -582,7 +581,7 @@ function PartnerCardTab({ card, tab }: { card: PartnerCardPayload; tab: CardTab 
               <>
                 <strong>{card.interactions[0].type}</strong>
                 <p>{card.interactions[0].summary}</p>
-                <small>{shortDate(card.interactions[0].occurredAt)}</small>
+                <small>{formatDate(card.interactions[0].occurredAt)}</small>
               </>
             ) : (
               <p>Взаимодействий нет</p>
@@ -593,7 +592,7 @@ function PartnerCardTab({ card, tab }: { card: PartnerCardPayload; tab: CardTab 
             {card.tasks[0] ? (
               <>
                 <strong>{card.tasks[0].title}</strong>
-                <p>{shortDate(card.tasks[0].dueAt)}</p>
+                <p>{formatDate(card.tasks[0].dueAt)}</p>
               </>
             ) : (
               <p>Задач нет</p>
@@ -682,7 +681,7 @@ function PartnerCardTab({ card, tab }: { card: PartnerCardPayload; tab: CardTab 
             </strong>
             <p>{item.summary}</p>
             <small>
-              {shortDate(item.occurredAt)} · {item.authorName}
+              {formatDate(item.occurredAt)} · {item.authorName}
             </small>
           </article>
         ))}
@@ -695,7 +694,7 @@ function PartnerCardTab({ card, tab }: { card: PartnerCardPayload; tab: CardTab 
           <article key={item.id}>
             <strong>{item.title}</strong>
             <p>
-              {shortDate(item.dueAt)} · {item.status}
+              {formatDate(item.dueAt)} · {item.status}
             </p>
             <small>{item.ownerName}</small>
           </article>
@@ -713,7 +712,7 @@ function PartnerCardTab({ card, tab }: { card: PartnerCardPayload; tab: CardTab 
             </p>
             <small>
               {item.lastCheckAt
-                ? `Проверено ${shortDate(item.lastCheckAt)}`
+                ? `Проверено ${formatDate(item.lastCheckAt)}`
                 : "Проверок ещё не было"}
             </small>
           </article>
@@ -733,7 +732,7 @@ function PartnerCardTab({ card, tab }: { card: PartnerCardPayload; tab: CardTab 
                 : metric.completeness === "partial"
                   ? "Частичные данные"
                   : "Источник недоступен"}{" "}
-              · {shortDate(metric.dataAsOf)}
+              · {formatDate(metric.dataAsOf)}
             </small>
           </article>
         ))}
@@ -750,7 +749,7 @@ function PartnerCardTab({ card, tab }: { card: PartnerCardPayload; tab: CardTab 
             </strong>
             <p>{item.kind}</p>
             <small>
-              {shortDate(item.uploadedAt)} · {item.uploadedBy}
+              {formatDate(item.uploadedAt)} · {item.uploadedBy}
             </small>
           </article>
         ))}
@@ -765,7 +764,7 @@ function PartnerCardTab({ card, tab }: { card: PartnerCardPayload; tab: CardTab 
             {item.entityType} · {item.action}
           </p>
           <small>
-            {shortDate(item.occurredAt)} · {item.actorName}
+            {formatDate(item.occurredAt)} · {item.actorName}
           </small>
         </article>
       ))}
@@ -884,12 +883,4 @@ function initials(name: string) {
     .slice(0, 2)
     .map((part) => part[0]?.toLocaleUpperCase("ru") ?? "")
     .join("");
-}
-
-function shortDate(value: string) {
-  return new Intl.DateTimeFormat("ru-RU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(new Date(value));
 }
