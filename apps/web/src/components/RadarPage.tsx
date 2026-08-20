@@ -48,6 +48,11 @@ interface RadarPageProps {
 
 const terminalStatuses = new Set<RadarCandidateStatus>(["accepted", "rejected", "merged"]);
 
+/** Проверка выполняется асинхронно: очередь поллится каждые 3 секунды. */
+const INSPECTION_POLL_INTERVAL_MS = 3_000;
+/** Поллинг прекращается через ~2 минуты, даже если проверка не завершилась. */
+const INSPECTION_POLL_TIMEOUT_MS = 120_000;
+
 export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
   const [candidates, setCandidates] = useState<RadarCandidate[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -86,6 +91,63 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
     void load(controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  const candidatesRef = useRef(candidates);
+  useEffect(() => {
+    candidatesRef.current = candidates;
+  }, [candidates]);
+
+  const pendingIds = useMemo(
+    () =>
+      candidates
+        .filter(({ inspectionPending }) => inspectionPending)
+        .map(({ id }) => id)
+        .sort()
+        .join(","),
+    [candidates],
+  );
+
+  useEffect(() => {
+    if (!pendingIds) return;
+    const controller = new AbortController();
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      if (Date.now() - startedAt > INSPECTION_POLL_TIMEOUT_MS) {
+        window.clearInterval(timer);
+        return;
+      }
+      void (async () => {
+        try {
+          const payload = await fetchRadar(controller.signal);
+          for (const candidate of payload.candidates) {
+            const wasPending = candidatesRef.current.find(
+              ({ id }) => id === candidate.id,
+            )?.inspectionPending;
+            if (!wasPending || candidate.inspectionPending) continue;
+            const evidence = candidate.evidence.at(-1);
+            setNotice(
+              evidence
+                ? {
+                    text: inspectionPresentation(evidence).notice,
+                    tone: inspectionPresentation(evidence).noticeTone,
+                  }
+                : {
+                    text: `Проверка «${candidate.name}» завершилась без результата. Повторите позже.`,
+                    tone: "warning",
+                  },
+            );
+          }
+          setCandidates(payload.candidates);
+        } catch {
+          // Одна неудачная итерация поллинга не прерывает ожидание результата.
+        }
+      })();
+    }, INSPECTION_POLL_INTERVAL_MS);
+    return () => {
+      window.clearInterval(timer);
+      controller.abort();
+    };
+  }, [pendingIds]);
 
   const visible = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("ru-RU");
@@ -158,15 +220,10 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
       const updated = await inspectRadarCandidate(candidate.id, key);
       updateCandidate(updated);
       mutationKeys.current.delete(scope);
-      const evidence = updated.evidence.at(-1);
-      setNotice(
-        evidence
-          ? {
-              text: inspectionPresentation(evidence).notice,
-              tone: inspectionPresentation(evidence).noticeTone,
-            }
-          : { text: "Проверка завершилась без результата. Повторите позже.", tone: "warning" },
-      );
+      setNotice({
+        text: "Проверка запущена и выполняется в фоне. Карточка обновится автоматически.",
+        tone: "success",
+      });
     } catch (inspectError) {
       setError(messageFor(inspectError));
     } finally {
@@ -746,9 +803,11 @@ function CandidateDetail({
         <div>
           <strong>{evidenceLabel(latestEvidence)}</strong>
           <span>
-            {latestEvidence
-              ? `Метод ${latestEvidence.method} · confidence ${latestEvidence.confidence} · ${latestPresentation?.detail}`
-              : "Запустите L0-проверку публичной страницы"}
+            {candidate.inspectionPending
+              ? "Проверка выполняется в фоне — карточка обновится автоматически"
+              : latestEvidence
+                ? `Метод ${latestEvidence.method} · confidence ${latestEvidence.confidence} · ${latestPresentation?.detail}`
+                : "Запустите L0-проверку публичной страницы"}
           </span>
         </div>
         {latestEvidence ? <time>{formatDateTime(latestEvidence.detectedAt)}</time> : null}
@@ -757,10 +816,19 @@ function CandidateDetail({
             className="button button-secondary"
             type="button"
             onClick={onInspect}
-            disabled={busyAction === `check:${candidate.id}`}
+            disabled={busyAction === `check:${candidate.id}` || candidate.inspectionPending}
           >
-            <RefreshCw className={busyAction === `check:${candidate.id}` ? "spin" : ""} size={14} />
-            {latestEvidence ? "Повторить" : "Проверить"}
+            <RefreshCw
+              className={
+                busyAction === `check:${candidate.id}` || candidate.inspectionPending ? "spin" : ""
+              }
+              size={14}
+            />
+            {candidate.inspectionPending
+              ? "Проверяется…"
+              : latestEvidence
+                ? "Повторить"
+                : "Проверить"}
           </button>
         ) : null}
       </div>

@@ -748,6 +748,11 @@ export interface RadarCandidate {
   status: RadarCandidateStatus;
   duplicateOrganization: { id: string; name: string } | null;
   duplicateCandidate: { id: string; name: string } | null;
+  /**
+   * True while an inspection has been requested but has not finished yet.
+   * `POST …/checks` returns 202 and the result arrives asynchronously.
+   */
+  inspectionPending: boolean;
   features: RadarCandidateFeatures;
   research: RadarResearch | null;
   evidence: RadarEvidence[];

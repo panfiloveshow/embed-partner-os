@@ -524,6 +524,7 @@ model RadarCandidate {
   scoreModelVersion       String    @map("score_model_version") @db.VarChar(64)
   duplicateOrganizationId String?   @map("duplicate_organization_id") @db.Uuid
   duplicateCandidateId    String?   @map("duplicate_candidate_id") @db.Uuid
+  inspectionRequestedAt   DateTime? @map("inspection_requested_at") @db.Timestamptz(6)
   deferUntil              DateTime? @map("defer_until") @db.Timestamptz(6)
   rejectionReason         String?   @map("rejection_reason") @db.VarChar(1000)
   rejectionComment        String?   @map("rejection_comment") @db.VarChar(1000)

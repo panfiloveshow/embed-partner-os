@@ -56,6 +56,8 @@ type StoredResponse = { requestHash: string; response: RadarCandidate };
 @Injectable()
 export class RadarService implements RadarPort {
   private readonly candidates = new Map<string, RadarCandidate>();
+  /** Unfinished background inspections; each resolves to `true` on success. */
+  private readonly pendingInspections = new Set<Promise<boolean>>();
   private readonly idempotency = new Map<string, StoredResponse>();
   private readonly importIdempotency = new Map<
     string,
@@ -101,6 +103,7 @@ export class RadarService implements RadarPort {
         duplicateCandidate: duplicateCandidate
           ? { id: duplicateCandidate.id, name: duplicateCandidate.name }
           : null,
+        inspectionPending: false,
         features,
         research: null,
         evidence: [],
@@ -191,6 +194,27 @@ export class RadarService implements RadarPort {
     return structuredClone(response);
   }
 
+  async requestInspection(candidateId: string, idempotencyKey: string): Promise<RadarCandidate> {
+    const requestHash = hash({ candidateId });
+    return this.idempotent(
+      `inspect-request:${candidateId}:${idempotencyKey}`,
+      idempotencyKey,
+      requestHash,
+      () => {
+        const candidate = this.requireMutable(candidateId);
+        const updated: RadarCandidate = {
+          ...candidate,
+          inspectionPending: true,
+          version: candidate.version + 1,
+          updatedAt: this.clock().toISOString(),
+        };
+        this.candidates.set(candidateId, structuredClone(updated));
+        this.scheduleInspection(candidateId);
+        return updated;
+      },
+    );
+  }
+
   async inspect(candidateId: string, idempotencyKey: string): Promise<RadarCandidate> {
     const scope = `inspect:${candidateId}:${idempotencyKey}`;
     const requestHash = hash({ candidateId });
@@ -201,6 +225,66 @@ export class RadarService implements RadarPort {
     }
     const candidate = this.requireMutable(candidateId);
     const observation = await this.inspector.inspect(candidate.pageUrl);
+    const updated = this.applyInspection(candidate, observation);
+    this.candidates.set(candidateId, structuredClone(updated));
+    this.idempotency.set(scope, { requestHash, response: structuredClone(updated) });
+    return structuredClone(updated);
+  }
+
+  async processRequestedInspections(): Promise<{ processed: number; failed: number }> {
+    let processed = 0;
+    let failed = 0;
+    while (this.pendingInspections.size > 0) {
+      const tasks = [...this.pendingInspections];
+      for (const task of tasks) this.pendingInspections.delete(task);
+      for (const succeeded of await Promise.all(tasks)) {
+        if (succeeded) processed += 1;
+        else failed += 1;
+      }
+    }
+    return { processed, failed };
+  }
+
+  /** Schedules a background inspection in the same process (dev mode). */
+  private scheduleInspection(candidateId: string) {
+    const task = (async () => {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      return this.runRequestedInspection(candidateId);
+    })();
+    this.pendingInspections.add(task);
+    void task.finally(() => this.pendingInspections.delete(task));
+  }
+
+  /** Executes one background inspection; a failure only clears the flag. */
+  private async runRequestedInspection(candidateId: string): Promise<boolean> {
+    try {
+      const candidate = this.candidates.get(candidateId);
+      if (!candidate) return false;
+      const observation = await this.inspector.inspect(candidate.pageUrl);
+      const current = this.candidates.get(candidateId);
+      if (!current || this.isTerminal(current.status)) {
+        this.clearInspectionPending(candidateId);
+        return false;
+      }
+      this.candidates.set(candidateId, structuredClone(this.applyInspection(current, observation)));
+      return true;
+    } catch (error) {
+      this.clearInspectionPending(candidateId);
+      console.error(
+        JSON.stringify({
+          event: "radar.inspection-failed",
+          candidateId,
+          message: error instanceof Error ? error.message : String(error),
+        }),
+      );
+      return false;
+    }
+  }
+
+  private applyInspection(
+    candidate: RadarCandidate,
+    observation: Awaited<ReturnType<RadarInspector["inspect"]>>,
+  ): RadarCandidate {
     const { featureExtraction, ...evidenceObservation } = observation;
     const evidence = {
       id: `evidence-${randomUUID()}`,
@@ -210,10 +294,11 @@ export class RadarService implements RadarPort {
     const features = featureExtraction
       ? mergeRadarFeatures(candidate.features, featureExtraction.features)
       : candidate.features;
-    const updated: RadarCandidate = {
+    return {
       ...candidate,
       pageUrl: observation.pageUrl,
       status: "ready",
+      inspectionPending: false,
       features,
       research: featureExtraction
         ? enrichRadarResearchWithChanges(candidate.research, featureExtraction.research)
@@ -231,9 +316,20 @@ export class RadarService implements RadarPort {
         calculatedAt: this.clock(),
       }),
     };
-    this.candidates.set(candidateId, structuredClone(updated));
-    this.idempotency.set(scope, { requestHash, response: structuredClone(updated) });
-    return structuredClone(updated);
+  }
+
+  private clearInspectionPending(candidateId: string) {
+    const candidate = this.candidates.get(candidateId);
+    if (!candidate?.inspectionPending) return;
+    this.candidates.set(candidateId, {
+      ...candidate,
+      inspectionPending: false,
+      updatedAt: this.clock().toISOString(),
+    });
+  }
+
+  private isTerminal(status: RadarCandidate["status"]) {
+    return status === "accepted" || status === "rejected" || status === "merged";
   }
 
   decide(candidateId: string, input: unknown, idempotencyKey: string): RadarCandidate {
@@ -313,6 +409,7 @@ export class RadarService implements RadarPort {
     if (command.decision === "reject") {
       return {
         ...common,
+        inspectionPending: false,
         status: "rejected",
         rejectionReason: command.reason,
         rejectionComment: command.comment ?? null,
@@ -330,7 +427,12 @@ export class RadarService implements RadarPort {
           mergeTargetId: "Обновите список и выберите другого кандидата",
         });
       }
-      return { ...common, status: "merged", mergedIntoCandidateId: target.id };
+      return {
+        ...common,
+        inspectionPending: false,
+        status: "merged",
+        mergedIntoCandidateId: target.id,
+      };
     }
     if (candidate.evidence.length === 0) {
       throw new DomainRuleError("RAD-003", "Перед принятием нужно проверить публичную страницу", {
@@ -363,6 +465,7 @@ export class RadarService implements RadarPort {
     });
     return {
       ...common,
+      inspectionPending: false,
       status: "accepted",
       acceptedOrganizationId: organizationId,
       acceptedOpportunityId: opportunityId,

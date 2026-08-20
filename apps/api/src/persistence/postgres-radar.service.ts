@@ -222,6 +222,75 @@ export class PostgresRadarService implements RadarPort {
     };
   }
 
+  async requestInspection(candidateId: string, idempotencyKey: string): Promise<RadarCandidate> {
+    const requestHash = hash({ candidateId });
+    const reservationId = randomUUID();
+    const now = new Date();
+    return this.prisma.$transaction(
+      async (transaction) => {
+        const actor = await this.actors.current(transaction);
+        const replay = await reserveOrReplay(transaction, {
+          recordId: reservationId,
+          actorId: actor.id,
+          operation: `radar.request-inspection:${candidateId}`,
+          requestKey: idempotencyKey,
+          requestHash,
+          now,
+        });
+        if (replay) return parseReplay(replay, idempotencyKey);
+        await lockCandidate(transaction, candidateId);
+        const current = await findCandidate(transaction, candidateId, actor);
+        assertMutable(current);
+        const updated = await transaction.radarCandidate.update({
+          where: { id: candidateId },
+          data: { inspectionRequestedAt: now, version: { increment: 1 } },
+          include: radarInclude,
+        });
+        const response = mapCandidate(updated);
+        await recordMutation(transaction, actor.id, response, "radar.inspection-requested", now);
+        await completeIdempotency(transaction, {
+          recordId: reservationId,
+          responseStatus: 202,
+          responseJson: toJson(response),
+          completedAt: now,
+        });
+        return response;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
+
+  /**
+   * Executes requested inspections, oldest request first. The radar recheck
+   * worker calls this ahead of scheduled rechecks, so a user-triggered check
+   * always has priority over the periodic batch.
+   */
+  async processRequestedInspections(limit = 25): Promise<{ processed: number; failed: number }> {
+    const requested = await this.prisma.radarCandidate.findMany({
+      where: {
+        inspectionRequestedAt: { not: null },
+        status: { notIn: ["ACCEPTED", "REJECTED", "MERGED"] },
+      },
+      orderBy: [{ inspectionRequestedAt: "asc" }, { id: "asc" }],
+      take: limit,
+      select: { id: true, inspectionRequestedAt: true },
+    });
+    let processed = 0;
+    let failed = 0;
+    for (const candidate of requested) {
+      // The key is derived from the request timestamp, so a worker restart
+      // replays the same inspection instead of duplicating evidence.
+      const key = `radar-requested:${candidate.id}:${candidate.inspectionRequestedAt!.getTime()}`;
+      try {
+        await this.inspect(candidate.id, key);
+        processed += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    return { processed, failed };
+  }
+
   async inspect(candidateId: string, idempotencyKey: string): Promise<RadarCandidate> {
     // Inspections run both from HTTP requests and from the radar recheck
     // worker, which has no session.
@@ -297,6 +366,7 @@ export class PostgresRadarService implements RadarPort {
           data: {
             pageUrl: observation.pageUrl,
             status: "READY",
+            inspectionRequestedAt: null,
             featuresJson: serializeFeatures(features, research),
             version: { increment: 1 },
             ...scoreColumns(score),
@@ -391,6 +461,7 @@ export class PostgresRadarService implements RadarPort {
           where: { id: candidateId },
           data: {
             status,
+            inspectionRequestedAt: status === "DEFERRED" ? current.inspectionRequestedAt : null,
             deferUntil:
               command.decision === "defer" && command.deferUntil
                 ? new Date(command.deferUntil)
@@ -714,6 +785,7 @@ function mapCandidate(candidate: DbRadarCandidate): RadarCandidate {
     status: candidateStatus(candidate.status),
     duplicateOrganization: candidate.duplicateOrganization,
     duplicateCandidate: candidate.duplicateCandidate,
+    inspectionPending: candidate.inspectionRequestedAt !== null,
     features: parseFeatures(candidate.featuresJson),
     research: parseResearch(candidate.featuresJson),
     evidence: candidate.evidence.map(mapEvidence),

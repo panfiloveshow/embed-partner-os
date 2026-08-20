@@ -62,14 +62,18 @@ export class RadarController {
 
   @Post(":candidateId/checks")
   @RequirePermission("radar.write")
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(HttpStatus.ACCEPTED)
   @ApiHeader({ name: "Idempotency-Key", required: true })
-  @ApiOperation({ summary: "Проверить публичную страницу и сохранить evidence" })
+  @ApiOperation({ summary: "Запросить проверку публичной страницы (выполняется асинхронно)" })
+  @ApiResponse({
+    status: 202,
+    description: "Проверка поставлена в очередь; кандидат возвращён с inspectionPending: true",
+  })
   inspect(
     @Param("candidateId") candidateId: string,
     @Headers("idempotency-key") rawKey: string | undefined,
   ): Promise<RadarCandidate> {
-    return this.radar.inspect(candidateId, parseIdempotencyKey(rawKey));
+    return this.radar.requestInspection(candidateId, parseIdempotencyKey(rawKey));
   }
 
   @Post(":candidateId/decisions")

@@ -14,25 +14,34 @@ async function bootstrap() {
   const abort = shutdownController();
   const intervalHours = integerSetting("RADAR_RECHECK_INTERVAL_HOURS", 168, 1, 24 * 90);
   const pollMs = integerSetting("RADAR_RECHECK_POLL_MS", 60 * 60_000, 10_000, 24 * 60 * 60_000);
+  // User-requested checks are picked up much more often than scheduled ones.
+  const inspectionPollMs = integerSetting("RADAR_INSPECTION_POLL_MS", 15_000, 1_000, 60 * 60_000);
   const batchSize = integerSetting("RADAR_RECHECK_BATCH_SIZE", 25, 1, 100);
   const prisma = app.get(PrismaService);
-  const scheduler = new RadarRecheckScheduler(
-    new PrismaRadarRecheckStore(prisma),
-    app.get<RadarPort>(RADAR_PORT),
-  );
+  const radar = app.get<RadarPort>(RADAR_PORT);
+  const scheduler = new RadarRecheckScheduler(new PrismaRadarRecheckStore(prisma), radar);
 
   try {
+    let nextScheduledRunAt = 0;
     do {
-      const result = await scheduler.runBatch(intervalHours * 60 * 60_000, batchSize);
-      if (result.selected > 0) {
-        console.log(JSON.stringify({ event: "radar-recheck.batch", ...result }));
+      // Requested inspections first: they back the async POST …/checks API.
+      const requested = await radar.processRequestedInspections(batchSize);
+      if (requested.processed > 0 || requested.failed > 0) {
+        console.log(JSON.stringify({ event: "radar-inspection.requested-batch", ...requested }));
       }
-      const purged = await purgeExpiredIdempotencyRecords(prisma);
-      if (purged > 0) {
-        console.log(JSON.stringify({ event: "idempotency.expired-purged", deleted: purged }));
+      if (Date.now() >= nextScheduledRunAt) {
+        nextScheduledRunAt = Date.now() + pollMs;
+        const result = await scheduler.runBatch(intervalHours * 60 * 60_000, batchSize);
+        if (result.selected > 0) {
+          console.log(JSON.stringify({ event: "radar-recheck.batch", ...result }));
+        }
+        const purged = await purgeExpiredIdempotencyRecords(prisma);
+        if (purged > 0) {
+          console.log(JSON.stringify({ event: "idempotency.expired-purged", deleted: purged }));
+        }
       }
       if (process.env.RADAR_RECHECK_RUN_ONCE === "1") break;
-      await wait(pollMs, undefined, { signal: abort.signal });
+      await wait(inspectionPollMs, undefined, { signal: abort.signal });
     } while (!abort.signal.aborted);
   } catch (error) {
     if (!isAbortError(error)) throw error;

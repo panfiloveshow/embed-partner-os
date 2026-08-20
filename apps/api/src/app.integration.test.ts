@@ -5,6 +5,7 @@ import request from "supertest";
 import { AppModule } from "./app.module.js";
 import { ProblemDetailsFilter } from "./problem-details.filter.js";
 import { RADAR_INSPECTOR } from "./monitoring/radar-page-inspector.js";
+import { RADAR_PORT, type RadarPort } from "./radar.port.js";
 import { OIDC_TOKEN_VERIFIER, OidcTokenVerificationError } from "./auth/oidc-token-verifier.js";
 
 const MOSCOW_UTC_OFFSET_MS = 3 * 60 * 60 * 1_000;
@@ -1356,13 +1357,36 @@ describe("Today HTTP contract", () => {
       .expect(201);
     expect(replay.body).toEqual(created.body);
 
-    const checked = await request(app.getHttpServer())
+    const requested = await request(app.getHttpServer())
       .post(`/api/v1/radar/candidates/${created.body.id}/checks`)
       .set("Idempotency-Key", "test-key-radar-check-0001")
-      .expect(200);
+      .expect(202);
+    expect(requested.body).toMatchObject({
+      status: "new",
+      inspectionPending: true,
+      version: 2,
+      evidence: [],
+    });
+    const requestReplay = await request(app.getHttpServer())
+      .post(`/api/v1/radar/candidates/${created.body.id}/checks`)
+      .set("Idempotency-Key", "test-key-radar-check-0001")
+      .expect(202);
+    expect(requestReplay.body).toEqual(requested.body);
+
+    // The endpoint only queues the check; the inspection itself runs in the
+    // background (in-process in dev mode, radar recheck worker in postgres).
+    await app.get<RadarPort>(RADAR_PORT).processRequestedInspections();
+
+    const queue = await request(app.getHttpServer()).get("/api/v1/radar/candidates").expect(200);
+    const checked = {
+      body: queue.body.candidates.find(
+        (candidate: { id: string }) => candidate.id === created.body.id,
+      ),
+    };
     expect(checked.body).toMatchObject({
       status: "ready",
-      version: 2,
+      inspectionPending: false,
+      version: 3,
       evidence: [{ status: "found", playerType: "RUTUBE", method: "l0-html" }],
     });
 
