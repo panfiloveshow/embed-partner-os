@@ -31,7 +31,9 @@ describe("TodayService", () => {
     );
 
     expect(after.actions.some((action) => action.id === "task-1")).toBe(false);
-    expect(after.actions.some((action) => action.title === "Передать примеры интеграции")).toBe(true);
+    expect(after.actions.some((action) => action.title === "Передать примеры интеграции")).toBe(
+      true,
+    );
     expect(
       after.actions.find((action) => action.title === "Передать примеры интеграции")
         ?.lastInteraction,
@@ -45,11 +47,7 @@ describe("TodayService", () => {
     const before = service.getToday();
 
     expect(() =>
-      service.completeTask(
-        "task-1",
-        { outcome: "Готово" },
-        "test-key-today-invalid-0001",
-      ),
+      service.completeTask("task-1", { outcome: "Готово" }, "test-key-today-invalid-0001"),
     ).toThrow(DomainRuleError);
     const after = service.getToday();
     expect(after.actions).toEqual(before.actions);
@@ -65,8 +63,9 @@ describe("TodayService", () => {
       "test-key-task-reschedule-0001",
     );
 
-    expect(after.actions.find(({ id }) => id === "task-11")?.dueAt)
-      .toBe("2026-08-25T09:00:00.000Z");
+    expect(after.actions.find(({ id }) => id === "task-11")?.dueAt).toBe(
+      "2026-08-25T09:00:00.000Z",
+    );
     expect(after.summary.rescheduled).toBe(before.summary.rescheduled + 1);
     const replay = service.rescheduleTask(
       "task-11",

@@ -171,8 +171,16 @@ export function AddContactDialog({
               />
             </label>
           </div>
-          {channelError ? <div className="form-error" role="alert">{channelError}</div> : null}
-          {error ? <div className="form-error" role="alert">{error}</div> : null}
+          {channelError ? (
+            <div className="form-error" role="alert">
+              {channelError}
+            </div>
+          ) : null}
+          {error ? (
+            <div className="form-error" role="alert">
+              {error}
+            </div>
+          ) : null}
           {candidates.length > 0 ? (
             <section
               ref={candidatesRef}
@@ -206,7 +214,12 @@ export function AddContactDialog({
             </section>
           ) : null}
           <div className="dialog-actions">
-            <button className="button button-secondary" type="button" onClick={onCancel} disabled={busy}>
+            <button
+              className="button button-secondary"
+              type="button"
+              onClick={onCancel}
+              disabled={busy}
+            >
               Отмена
             </button>
             <button className="button button-primary" type="submit" disabled={busy}>

@@ -19,10 +19,7 @@ import {
 import { IdempotencyConflictError } from "./application/idempotency.js";
 import { parseRadarImportFile } from "./application/radar-import.js";
 import type { OrganizationImportFile } from "./application/organization-import.js";
-import {
-  RADAR_INSPECTOR,
-  type RadarInspector,
-} from "./monitoring/radar-page-inspector.js";
+import { RADAR_INSPECTOR, type RadarInspector } from "./monitoring/radar-page-inspector.js";
 import {
   enrichRadarResearchWithChanges,
   mergeRadarFeatures,
@@ -60,7 +57,10 @@ type StoredResponse = { requestHash: string; response: RadarCandidate };
 export class RadarService implements RadarPort {
   private readonly candidates = new Map<string, RadarCandidate>();
   private readonly idempotency = new Map<string, StoredResponse>();
-  private readonly importIdempotency = new Map<string, { requestHash: string; response: RadarImportResult }>();
+  private readonly importIdempotency = new Map<
+    string,
+    { requestHash: string; response: RadarImportResult }
+  >();
 
   constructor(
     @Inject(TodayService) private readonly today: TodayService,
@@ -81,9 +81,11 @@ export class RadarService implements RadarPort {
     return this.idempotent(`create:${idempotencyKey}`, idempotencyKey, requestHash, () => {
       const normalized = normalizeRadarTarget(command.url);
       const duplicateOrganization = this.findOrganization(normalized.hostNormalized);
-      const duplicateCandidate = [...this.candidates.values()].find((candidate) =>
-        candidate.hostNormalized === normalized.hostNormalized &&
-        candidate.status !== "rejected" && candidate.status !== "merged"
+      const duplicateCandidate = [...this.candidates.values()].find(
+        (candidate) =>
+          candidate.hostNormalized === normalized.hostNormalized &&
+          candidate.status !== "rejected" &&
+          candidate.status !== "merged",
       );
       const now = this.clock().toISOString();
       const features = emptyRadarFeatures(command);
@@ -152,7 +154,8 @@ export class RadarService implements RadarPort {
         const created = this.create(row.command, `${idempotencyKey}:${row.rowNo}`);
         rows.push({
           rowNo: row.rowNo,
-          status: created.duplicateOrganization || created.duplicateCandidate ? "skipped" : "created",
+          status:
+            created.duplicateOrganization || created.duplicateCandidate ? "skipped" : "created",
           candidateId: created.id,
           hostNormalized: created.hostNormalized,
           message: created.duplicateOrganization
@@ -181,7 +184,10 @@ export class RadarService implements RadarPort {
       warnings: parsed.warnings,
       rows,
     };
-    this.importIdempotency.set(idempotencyKey, { requestHash, response: structuredClone(response) });
+    this.importIdempotency.set(idempotencyKey, {
+      requestHash,
+      response: structuredClone(response),
+    });
     return structuredClone(response);
   }
 
@@ -364,23 +370,32 @@ export class RadarService implements RadarPort {
   }
 
   private findOrganization(host: string) {
-    const action = this.today.getToday().actions.find(({ domain }) =>
-      domain.toLocaleLowerCase("en-US").replace(/^www\./, "") === host
-    );
+    const action = this.today
+      .getToday()
+      .actions.find(
+        ({ domain }) => domain.toLocaleLowerCase("en-US").replace(/^www\./, "") === host,
+      );
     return action ? { id: action.organizationId, name: action.organizationName } : null;
   }
 
   private requireMutable(candidateId: string) {
     const candidate = this.candidates.get(candidateId);
     if (!candidate) throw new RadarCandidateNotFoundError(candidateId);
-    if (candidate.status === "accepted" || candidate.status === "rejected" || candidate.status === "merged") {
-      throw new RadarCandidateStateError(`Кандидат уже находится в конечном статусе ${candidate.status}`);
+    if (
+      candidate.status === "accepted" ||
+      candidate.status === "rejected" ||
+      candidate.status === "merged"
+    ) {
+      throw new RadarCandidateStateError(
+        `Кандидат уже находится в конечном статусе ${candidate.status}`,
+      );
     }
     return candidate;
   }
 
   private assertVersion(candidate: RadarCandidate, version: number) {
-    if (candidate.version !== version) throw new RadarCandidateVersionConflictError(candidate.version);
+    if (candidate.version !== version)
+      throw new RadarCandidateVersionConflictError(candidate.version);
   }
 
   private idempotent(

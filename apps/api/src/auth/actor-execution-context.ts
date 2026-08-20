@@ -1,11 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks";
-import {
-  CallHandler,
-  ExecutionContext,
-  Inject,
-  Injectable,
-  NestInterceptor,
-} from "@nestjs/common";
+import { CallHandler, ExecutionContext, Inject, Injectable, NestInterceptor } from "@nestjs/common";
 import type { SessionPayload } from "@embed-os/contracts";
 import { Observable } from "rxjs";
 import type { ActorRequest } from "./access-control.js";
@@ -37,9 +31,8 @@ export class ActorContextInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const request = context.switchToHttp().getRequest<ActorRequest>();
     if (!request.actor) return next.handle();
-    return new Observable((subscriber) => this.actors.run(
-      request.actor!,
-      () => next.handle().subscribe(subscriber),
-    ));
+    return new Observable((subscriber) =>
+      this.actors.run(request.actor!, () => next.handle().subscribe(subscriber)),
+    );
   }
 }

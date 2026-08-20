@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DomainRuleError } from "./task-completion.js";
-import {
-  parseGenerateWeeklyReportCommand,
-  weeklyReportPeriod,
-} from "./weekly-report.js";
+import { parseGenerateWeeklyReportCommand, weeklyReportPeriod } from "./weekly-report.js";
 
 describe("weekly report command", () => {
   it("normalizes data_as_of and builds Moscow Monday-to-Sunday bounds", () => {
@@ -45,9 +42,7 @@ describe("weekly report command", () => {
       throw new Error("Expected report validation to fail");
     } catch (error) {
       expect(error).toBeInstanceOf(DomainRuleError);
-      expect((error as DomainRuleError).fieldErrors.dataAsOf).toMatch(
-        /окончания отчётной недели/i,
-      );
+      expect((error as DomainRuleError).fieldErrors.dataAsOf).toMatch(/окончания отчётной недели/i);
     }
   });
 });

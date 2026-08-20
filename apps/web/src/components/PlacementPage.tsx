@@ -39,10 +39,7 @@ import {
   summarizePlacements,
   type PlacementFilters,
 } from "../lib/placements";
-import {
-  AddPlacementDialog,
-  type PlacementContextOption,
-} from "./AddPlacementDialog";
+import { AddPlacementDialog, type PlacementContextOption } from "./AddPlacementDialog";
 import { PlacementLifecycleDialog } from "./PlacementLifecycleDialog";
 
 interface PlacementPageProps {
@@ -75,7 +72,11 @@ export function PlacementPage({ teamName, contexts }: PlacementPageProps) {
   const [lifecycleError, setLifecycleError] = useState<string | null>(null);
   const registrationKey = useRef<string | null>(null);
   const checkKeys = useRef(new Map<string, string>());
-  const lifecycleMutation = useRef<{ kind: "update" | "archive"; hash: string; key: string } | null>(null);
+  const lifecycleMutation = useRef<{
+    kind: "update" | "archive";
+    hash: string;
+    key: string;
+  } | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -83,9 +84,9 @@ export function PlacementPage({ teamName, contexts }: PlacementPageProps) {
     try {
       const next = sortPlacements(await fetchPlacements(signal));
       setPlacements(next);
-      setSelectedId((current) => current && next.some(({ id }) => id === current)
-        ? current
-        : next[0]?.id ?? null);
+      setSelectedId((current) =>
+        current && next.some(({ id }) => id === current) ? current : (next[0]?.id ?? null),
+      );
     } catch (loadError) {
       if (loadError instanceof DOMException && loadError.name === "AbortError") return;
       setError(messageFor(loadError));
@@ -122,10 +123,7 @@ export function PlacementPage({ teamName, contexts }: PlacementPageProps) {
 
   const selected = placements.find(({ id }) => id === selectedId) ?? null;
   const summary = useMemo(() => summarizePlacements(placements), [placements]);
-  const filtered = useMemo(
-    () => filterPlacements(placements, filters),
-    [placements, filters],
-  );
+  const filtered = useMemo(() => filterPlacements(placements, filters), [placements, filters]);
 
   async function runCheck(placementId: string) {
     let idempotencyKey = checkKeys.current.get(placementId);
@@ -139,12 +137,14 @@ export function PlacementPage({ teamName, contexts }: PlacementPageProps) {
     setNotice(null);
     try {
       const result = await runPlacementL0Check(placementId, idempotencyKey);
-      setPlacements((current) => current.map((placement) =>
-        placement.id === result.placement.id ? result.placement : placement));
-      setChecks((current) => sortPlacementChecks([
-        result.check,
-        ...current.filter(({ id }) => id !== result.check.id),
-      ]));
+      setPlacements((current) =>
+        current.map((placement) =>
+          placement.id === result.placement.id ? result.placement : placement,
+        ),
+      );
+      setChecks((current) =>
+        sortPlacementChecks([result.check, ...current.filter(({ id }) => id !== result.check.id)]),
+      );
       setNotice(checkNotice(result.placement, result.alertChange));
       checkKeys.current.delete(placementId);
     } catch (checkError) {
@@ -206,9 +206,14 @@ export function PlacementPage({ teamName, contexts }: PlacementPageProps) {
     setLifecycleError(null);
     try {
       const updated = await updatePlacement(selected.id, command, key);
-      setPlacements((current) => sortPlacements(current.map((placement) =>
-        placement.id === updated.id ? updated : placement)));
-      setNotice(`Размещение ${updated.organizationName} обновлено: ${businessStatusLabel(updated.businessStatus)}.`);
+      setPlacements((current) =>
+        sortPlacements(
+          current.map((placement) => (placement.id === updated.id ? updated : placement)),
+        ),
+      );
+      setNotice(
+        `Размещение ${updated.organizationName} обновлено: ${businessStatusLabel(updated.businessStatus)}.`,
+      );
       lifecycleMutation.current = null;
       setLifecycleOpen(false);
     } catch (updateError) {
@@ -276,7 +281,12 @@ export function PlacementPage({ teamName, contexts }: PlacementPageProps) {
         <div className="operation-notice placement-notice" role="status">
           <CheckCircle2 size={17} aria-hidden="true" />
           <span>{notice}</span>
-          <button className="icon-button" type="button" onClick={() => setNotice(null)} aria-label="Скрыть уведомление">
+          <button
+            className="icon-button"
+            type="button"
+            onClick={() => setNotice(null)}
+            aria-label="Скрыть уведомление"
+          >
             <X size={15} aria-hidden="true" />
           </button>
         </div>
@@ -292,7 +302,11 @@ export function PlacementPage({ teamName, contexts }: PlacementPageProps) {
               <div className="placement-inline-error" role="alert">
                 <AlertCircle size={16} aria-hidden="true" />
                 <span>{actionError}</span>
-                <button type="button" onClick={() => setActionError(null)} aria-label="Скрыть ошибку">
+                <button
+                  type="button"
+                  onClick={() => setActionError(null)}
+                  aria-label="Скрыть ошибку"
+                >
                   <X size={15} aria-hidden="true" />
                 </button>
               </div>
@@ -308,7 +322,11 @@ export function PlacementPage({ teamName, contexts }: PlacementPageProps) {
                 <AlertCircle size={30} aria-hidden="true" />
                 <h2>Не удалось загрузить размещения</h2>
                 <p>{error}</p>
-                <button className="button button-secondary" type="button" onClick={() => void load()}>
+                <button
+                  className="button button-secondary"
+                  type="button"
+                  onClick={() => void load()}
+                >
                   <RefreshCw size={15} aria-hidden="true" />
                   Повторить
                 </button>
@@ -325,11 +343,17 @@ export function PlacementPage({ teamName, contexts }: PlacementPageProps) {
               <div className="placement-state">
                 <CircleHelp size={30} aria-hidden="true" />
                 <h2>{placements.length > 0 ? "Ничего не найдено" : "Размещений пока нет"}</h2>
-                <p>{placements.length > 0
-                  ? "Измените строку поиска или фильтры."
-                  : "Добавьте страницу партнёра, чтобы включить L0-мониторинг."}</p>
+                <p>
+                  {placements.length > 0
+                    ? "Измените строку поиска или фильтры."
+                    : "Добавьте страницу партнёра, чтобы включить L0-мониторинг."}
+                </p>
                 {placements.length === 0 ? (
-                  <button className="button button-primary" type="button" onClick={openRegistration}>
+                  <button
+                    className="button button-primary"
+                    type="button"
+                    onClick={openRegistration}
+                  >
                     <Plus size={16} aria-hidden="true" />
                     Добавить размещение
                   </button>
@@ -394,7 +418,10 @@ function PlacementSummary({ summary }: { summary: ReturnType<typeof summarizePla
       {items.map(({ label, value, tone, icon: Icon }) => (
         <div className={`placement-summary-item placement-summary-${tone}`} key={label}>
           <Icon size={27} strokeWidth={1.8} aria-hidden="true" />
-          <span>{label}<strong>{value}</strong></span>
+          <span>
+            {label}
+            <strong>{value}</strong>
+          </span>
         </div>
       ))}
     </section>
@@ -424,10 +451,15 @@ function PlacementFiltersBar({
       </label>
       <label>
         <span className="sr-only">Статус здоровья</span>
-        <select value={filters.status} onChange={(event) => onChange({
-          ...filters,
-          status: event.target.value as PlacementFilters["status"],
-        })}>
+        <select
+          value={filters.status}
+          onChange={(event) =>
+            onChange({
+              ...filters,
+              status: event.target.value as PlacementFilters["status"],
+            })
+          }
+        >
           <option value="all">Все статусы</option>
           <option value="healthy">Работает</option>
           <option value="degraded">Деградация</option>
@@ -440,10 +472,15 @@ function PlacementFiltersBar({
       </label>
       <label className="placement-environment-filter">
         <span className="sr-only">Среда</span>
-        <select value={filters.environment} onChange={(event) => onChange({
-          ...filters,
-          environment: event.target.value as PlacementFilters["environment"],
-        })}>
+        <select
+          value={filters.environment}
+          onChange={(event) =>
+            onChange({
+              ...filters,
+              environment: event.target.value as PlacementFilters["environment"],
+            })
+          }
+        >
           <option value="all">Все среды</option>
           <option value="production">Production</option>
           <option value="staging">Staging</option>
@@ -493,23 +530,45 @@ function PlacementTable({
               onClick={() => onSelect(placement.id)}
             >
               <td data-label="Партнёр">
-                <button className="placement-partner-button" type="button" onClick={() => onSelect(placement.id)}>
+                <button
+                  className="placement-partner-button"
+                  type="button"
+                  onClick={() => onSelect(placement.id)}
+                >
                   {placement.organizationName}
                 </button>
               </td>
-              <td data-label="Страница"><span className="placement-url">{displayUrl(placement.pageUrl)}</span></td>
-              <td data-label="Среда"><span className="placement-environment">{placement.environment}</span></td>
-              <td data-label="Статус"><HealthStatus status={placement.healthStatus} /></td>
+              <td data-label="Страница">
+                <span className="placement-url">{displayUrl(placement.pageUrl)}</span>
+              </td>
+              <td data-label="Среда">
+                <span className="placement-environment">{placement.environment}</span>
+              </td>
+              <td data-label="Статус">
+                <HealthStatus status={placement.healthStatus} />
+              </td>
               <td data-label="Последняя проверка">{formatMoment(placement.lastCheckAt)}</td>
-              <td data-label="Следующая" className={placement.healthStatus === "failed" ? "placement-next-critical" : ""}>
+              <td
+                data-label="Следующая"
+                className={placement.healthStatus === "failed" ? "placement-next-critical" : ""}
+              >
                 {formatMoment(placement.nextCheckAt)}
               </td>
               <td data-label="Действия">
                 <div className="placement-row-actions" onClick={(event) => event.stopPropagation()}>
-                  <a href={placement.pageUrl} target="_blank" rel="noreferrer" aria-label={`Открыть страницу ${placement.organizationName}`}>
+                  <a
+                    href={placement.pageUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`Открыть страницу ${placement.organizationName}`}
+                  >
                     <ExternalLink size={15} aria-hidden="true" />
                   </a>
-                  <button type="button" onClick={() => onSelect(placement.id)} aria-label={`Показать историю ${placement.organizationName}`}>
+                  <button
+                    type="button"
+                    onClick={() => onSelect(placement.id)}
+                    aria-label={`Показать историю ${placement.organizationName}`}
+                  >
                     <History size={15} aria-hidden="true" />
                   </button>
                   <button
@@ -518,9 +577,11 @@ function PlacementTable({
                     disabled={checkingId === placement.id || placement.businessStatus !== "active"}
                     aria-label={`Запустить L0-проверку ${placement.organizationName}`}
                   >
-                    {checkingId === placement.id
-                      ? <RefreshCw className="spin-icon" size={15} aria-hidden="true" />
-                      : <Play size={15} aria-hidden="true" />}
+                    {checkingId === placement.id ? (
+                      <RefreshCw className="spin-icon" size={15} aria-hidden="true" />
+                    ) : (
+                      <Play size={15} aria-hidden="true" />
+                    )}
                   </button>
                 </div>
               </td>
@@ -565,29 +626,71 @@ function PlacementDetail({
           <h2>{placement.organizationName}</h2>
           <HealthStatus status={placement.healthStatus} compact />
         </div>
-        <button className="placement-detail-close" type="button" onClick={onClose} aria-label="Закрыть карточку">
+        <button
+          className="placement-detail-close"
+          type="button"
+          onClick={onClose}
+          aria-label="Закрыть карточку"
+        >
           <X size={19} aria-hidden="true" />
         </button>
       </header>
-      <a className="placement-mobile-detail-url" href={placement.pageUrl} target="_blank" rel="noreferrer">
+      <a
+        className="placement-mobile-detail-url"
+        href={placement.pageUrl}
+        target="_blank"
+        rel="noreferrer"
+      >
         {displayUrl(placement.pageUrl)} <ExternalLink size={13} aria-hidden="true" />
       </a>
 
       <DetailSection title="Информация о размещении">
         <dl className="placement-facts">
-          <div><dt>URL страницы</dt><dd><a href={placement.pageUrl} target="_blank" rel="noreferrer">{displayUrl(placement.pageUrl)} <ExternalLink size={13} aria-hidden="true" /></a></dd></div>
-          <div><dt>Тип контента</dt><dd>{embedTypeLabel(placement.embedType)}</dd></div>
-          <div><dt>Среда</dt><dd>{capitalize(placement.environment)}</dd></div>
-          <div><dt>Бизнес-статус</dt><dd>{businessStatusLabel(placement.businessStatus)}</dd></div>
-          <div><dt>Дата запуска</dt><dd>{formatDate(placement.launchedAt)}</dd></div>
+          <div>
+            <dt>URL страницы</dt>
+            <dd>
+              <a href={placement.pageUrl} target="_blank" rel="noreferrer">
+                {displayUrl(placement.pageUrl)} <ExternalLink size={13} aria-hidden="true" />
+              </a>
+            </dd>
+          </div>
+          <div>
+            <dt>Тип контента</dt>
+            <dd>{embedTypeLabel(placement.embedType)}</dd>
+          </div>
+          <div>
+            <dt>Среда</dt>
+            <dd>{capitalize(placement.environment)}</dd>
+          </div>
+          <div>
+            <dt>Бизнес-статус</dt>
+            <dd>{businessStatusLabel(placement.businessStatus)}</dd>
+          </div>
+          <div>
+            <dt>Дата запуска</dt>
+            <dd>{formatDate(placement.launchedAt)}</dd>
+          </div>
         </dl>
       </DetailSection>
 
       <DetailSection title="Состояние здоровья">
         <dl className="placement-facts">
-          <div><dt>Последовательные сбои</dt><dd>{placement.consecutiveFailures > 0 ? `${placement.consecutiveFailures} подряд` : "Нет"}</dd></div>
-          <div><dt>Последняя проверка</dt><dd>{formatMoment(placement.lastCheckAt)}</dd></div>
-          <div><dt>Результат</dt><dd>{placement.lastCheck?.errorCode ?? healthLabel(placement.healthStatus)}</dd></div>
+          <div>
+            <dt>Последовательные сбои</dt>
+            <dd>
+              {placement.consecutiveFailures > 0
+                ? `${placement.consecutiveFailures} подряд`
+                : "Нет"}
+            </dd>
+          </div>
+          <div>
+            <dt>Последняя проверка</dt>
+            <dd>{formatMoment(placement.lastCheckAt)}</dd>
+          </div>
+          <div>
+            <dt>Результат</dt>
+            <dd>{placement.lastCheck?.errorCode ?? healthLabel(placement.healthStatus)}</dd>
+          </div>
         </dl>
 
         {placement.activeAlert ? (
@@ -606,7 +709,8 @@ function PlacementDetail({
 
       <div className="placement-detail-actions">
         <button className="button button-secondary" type="button" onClick={onManage}>
-          <Settings2 size={16} aria-hidden="true" />Управление
+          <Settings2 size={16} aria-hidden="true" />
+          Управление
         </button>
         <button
           className="button button-primary placement-run-button"
@@ -614,9 +718,17 @@ function PlacementDetail({
           onClick={() => onRunCheck(placement.id)}
           disabled={checking || placement.businessStatus !== "active"}
         >
-          {checking
-            ? <><RefreshCw className="spin-icon" size={17} aria-hidden="true" />Проверяем…</>
-            : <><Play size={17} aria-hidden="true" />Запустить L0-проверку</>}
+          {checking ? (
+            <>
+              <RefreshCw className="spin-icon" size={17} aria-hidden="true" />
+              Проверяем…
+            </>
+          ) : (
+            <>
+              <Play size={17} aria-hidden="true" />
+              Запустить L0-проверку
+            </>
+          )}
         </button>
       </div>
 
@@ -626,8 +738,13 @@ function PlacementDetail({
         ) : checks.length > 0 ? (
           <ol className="placement-history">
             {checks.slice(0, 8).map((check) => (
-              <li className={`placement-history-${healthToneForResult(check.result)}`} key={check.id}>
-                <span className="placement-history-icon"><HealthIcon status={healthToneForResult(check.result)} /></span>
+              <li
+                className={`placement-history-${healthToneForResult(check.result)}`}
+                key={check.id}
+              >
+                <span className="placement-history-icon">
+                  <HealthIcon status={healthToneForResult(check.result)} />
+                </span>
                 <time dateTime={check.checkedAt}>{formatTime(check.checkedAt)}</time>
                 <div>
                   <strong>{checkResultLabel(check.result)}</strong>
@@ -645,7 +762,11 @@ function PlacementDetail({
   );
 }
 
-function DetailSection({ title, className = "", children }: {
+function DetailSection({
+  title,
+  className = "",
+  children,
+}: {
   title: string;
   className?: string;
   children: ReactNode;
@@ -658,10 +779,18 @@ function DetailSection({ title, className = "", children }: {
   );
 }
 
-function HealthStatus({ status, compact = false }: { status: PlacementHealthStatus; compact?: boolean }) {
+function HealthStatus({
+  status,
+  compact = false,
+}: {
+  status: PlacementHealthStatus;
+  compact?: boolean;
+}) {
   const tone = healthTone(status);
   return (
-    <span className={`placement-health placement-health-${tone}${compact ? " placement-health-compact" : ""}`}>
+    <span
+      className={`placement-health placement-health-${tone}${compact ? " placement-health-compact" : ""}`}
+    >
       <HealthIcon status={tone} />
       {healthLabel(status)}
     </span>
@@ -669,24 +798,29 @@ function HealthStatus({ status, compact = false }: { status: PlacementHealthStat
 }
 
 function HealthIcon({ status }: { status: "healthy" | "failed" | "degraded" | "unchecked" }) {
-  const Icon = status === "healthy"
-    ? CheckCircle2
-    : status === "degraded"
-      ? TriangleAlert
-      : status === "failed"
-        ? AlertCircle
-        : CircleHelp;
+  const Icon =
+    status === "healthy"
+      ? CheckCircle2
+      : status === "degraded"
+        ? TriangleAlert
+        : status === "failed"
+          ? AlertCircle
+          : CircleHelp;
   return <Icon size={16} strokeWidth={1.9} aria-hidden="true" />;
 }
 
-function healthTone(status: PlacementHealthStatus): "healthy" | "failed" | "degraded" | "unchecked" {
+function healthTone(
+  status: PlacementHealthStatus,
+): "healthy" | "failed" | "degraded" | "unchecked" {
   if (status === "healthy") return "healthy";
   if (status === "degraded" || status === "awaiting_fix") return "degraded";
   if (status === "failed" || status === "exception") return "failed";
   return "unchecked";
 }
 
-function healthToneForResult(result: HealthCheckView["result"]): "healthy" | "failed" | "degraded" | "unchecked" {
+function healthToneForResult(
+  result: HealthCheckView["result"],
+): "healthy" | "failed" | "degraded" | "unchecked" {
   if (result === "healthy") return "healthy";
   if (result === "failed") return "failed";
   if (result === "degraded") return "degraded";
@@ -718,20 +852,26 @@ function checkResultLabel(result: HealthCheckView["result"]) {
 }
 
 function checkSuccessDetail(check: HealthCheckView) {
-  if (check.result === "healthy") return check.embedHttpStatus ? `HTTP ${check.embedHttpStatus}` : "OK";
+  if (check.result === "healthy")
+    return check.embedHttpStatus ? `HTTP ${check.embedHttpStatus}` : "OK";
   if (check.pageHttpStatus) return `HTTP ${check.pageHttpStatus}`;
   return "Нет дополнительных данных";
 }
 
 function checkNotice(placement: PlacementView, alertChange: "none" | "opened" | "closed") {
-  if (alertChange === "opened") return `Проверка завершена: открыт технический Alert для ${placement.organizationName}.`;
-  if (alertChange === "closed") return `Работоспособность ${placement.organizationName} восстановлена, Alert закрыт.`;
+  if (alertChange === "opened")
+    return `Проверка завершена: открыт технический Alert для ${placement.organizationName}.`;
+  if (alertChange === "closed")
+    return `Работоспособность ${placement.organizationName} восстановлена, Alert закрыт.`;
   return `L0-проверка ${placement.organizationName} завершена: ${healthLabel(placement.healthStatus)}.`;
 }
 
 function sortPlacements(placements: PlacementView[]) {
-  return [...placements].sort((left, right) =>
-    left.organizationName.localeCompare(right.organizationName, "ru") || left.id.localeCompare(right.id));
+  return [...placements].sort(
+    (left, right) =>
+      left.organizationName.localeCompare(right.organizationName, "ru") ||
+      left.id.localeCompare(right.id),
+  );
 }
 
 function displayUrl(value: string) {

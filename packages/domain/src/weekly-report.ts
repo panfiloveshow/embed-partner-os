@@ -2,7 +2,8 @@ import type { GenerateWeeklyReportCommand } from "@embed-os/contracts";
 import { DomainRuleError } from "./task-completion.js";
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
-const ISO_WITH_TIMEZONE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/;
+const ISO_WITH_TIMEZONE =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/;
 const FORMULA_VERSION = /^[a-z0-9][a-z0-9._-]{0,63}$/i;
 
 export interface WeeklyReportPeriod {
@@ -88,11 +89,7 @@ function requiredText(value: unknown, field: string) {
 }
 
 function reportValidationError(fieldErrors: Record<string, string>) {
-  return new DomainRuleError(
-    "ANL-009",
-    "Некорректные параметры недельного отчёта",
-    fieldErrors,
-  );
+  return new DomainRuleError("ANL-009", "Некорректные параметры недельного отчёта", fieldErrors);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -44,9 +44,7 @@ describe("contact merge state", () => {
   });
 
   it("removes the source when the canonical contact is already linked", () => {
-    const payload = today([
-      action("task-conflict", "org-conflict", "Медиа", [source, target]),
-    ]);
+    const payload = today([action("task-conflict", "org-conflict", "Медиа", [source, target])]);
 
     const result = applyContactMerge(payload, source.id, target.id);
 

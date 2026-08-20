@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  SignJWT,
-  createLocalJWKSet,
-  exportJWK,
-  generateKeyPair,
-} from "jose";
+import { SignJWT, createLocalJWKSet, exportJWK, generateKeyPair } from "jose";
 import {
   OidcConfigurationError,
   OidcJwtVerifier,
@@ -66,16 +61,20 @@ describe("OIDC JWT verifier", () => {
   });
 
   it("rejects insecure JWKS configuration and symmetric algorithms", () => {
-    expect(() => oidcConfigFromEnvironment({
-      OIDC_ISSUER: "https://identity.example.test/",
-      OIDC_AUDIENCE: "embed-partner-os",
-      OIDC_JWKS_URL: "http://identity.example.test/jwks",
-    })).toThrow(OidcConfigurationError);
-    expect(() => oidcConfigFromEnvironment({
-      OIDC_ISSUER: "https://identity.example.test/",
-      OIDC_AUDIENCE: "embed-partner-os",
-      OIDC_JWKS_URL: "https://identity.example.test/jwks",
-      OIDC_ALLOWED_ALGORITHMS: "HS256",
-    })).toThrow("поддерживает только");
+    expect(() =>
+      oidcConfigFromEnvironment({
+        OIDC_ISSUER: "https://identity.example.test/",
+        OIDC_AUDIENCE: "embed-partner-os",
+        OIDC_JWKS_URL: "http://identity.example.test/jwks",
+      }),
+    ).toThrow(OidcConfigurationError);
+    expect(() =>
+      oidcConfigFromEnvironment({
+        OIDC_ISSUER: "https://identity.example.test/",
+        OIDC_AUDIENCE: "embed-partner-os",
+        OIDC_JWKS_URL: "https://identity.example.test/jwks",
+        OIDC_ALLOWED_ALGORITHMS: "HS256",
+      }),
+    ).toThrow("поддерживает только");
   });
 });

@@ -64,12 +64,14 @@ export class PostgresContactService implements ContactPort {
     @Inject(PersistenceActorService) private readonly actors: PersistenceActorService,
   ) {}
 
-  async listContacts(query: {
-    search?: string;
-    status?: string;
-    organizationId?: string;
-    duplicatesOnly?: boolean;
-  } = {}): Promise<ContactRegistryPayload> {
+  async listContacts(
+    query: {
+      search?: string;
+      status?: string;
+      organizationId?: string;
+      duplicatesOnly?: boolean;
+    } = {},
+  ): Promise<ContactRegistryPayload> {
     const actor = await this.actors.current();
     const where = contactRegistryWhere(query, actor);
     const [records, total, organizations, duplicatePool] = await Promise.all([
@@ -93,8 +95,9 @@ export class PostgresContactService implements ContactPort {
       }),
     ]);
     const visibleOrganizationIds = new Set(organizations.map(({ id }) => id));
-    let contacts = records.slice(0, 200).map((record) =>
-      toContactRegistryItem(record, duplicatePool, visibleOrganizationIds));
+    let contacts = records
+      .slice(0, 200)
+      .map((record) => toContactRegistryItem(record, duplicatePool, visibleOrganizationIds));
     if (query.duplicatesOnly) {
       contacts = contacts.filter(({ duplicateMatches }) => duplicateMatches.length > 0);
     }
@@ -166,7 +169,9 @@ export class PostgresContactService implements ContactPort {
           command.email ? `email:${command.email}` : null,
           command.phone ? `phone:${command.phone}` : null,
           command.messenger ? `messenger:${command.messenger}` : null,
-        ].filter((value): value is string => value !== null).sort();
+        ]
+          .filter((value): value is string => value !== null)
+          .sort();
         for (const channelLock of channelLocks) {
           await transaction.$queryRaw(Prisma.sql`
             SELECT pg_advisory_xact_lock(hashtextextended(${channelLock}, 0))
@@ -407,7 +412,12 @@ export class PostgresContactService implements ContactPort {
             action: "contact.link",
             entityType: "Contact",
             entityId: contactId,
-            afterJson: toJson({ contactId, organizationId, role: command.role, department: command.department }),
+            afterJson: toJson({
+              contactId,
+              organizationId,
+              role: command.role,
+              department: command.department,
+            }),
             occurredAt: now,
           },
         });
@@ -528,7 +538,7 @@ export class PostgresContactService implements ContactPort {
           select: { id: true },
         });
         for (const { id } of previouslyMergedContacts.sort((left, right) =>
-          left.id.localeCompare(right.id)
+          left.id.localeCompare(right.id),
         )) {
           await transaction.$queryRaw(Prisma.sql`
             SELECT pg_advisory_xact_lock(hashtextextended(${`contact-merge:${id}`}, 0))
@@ -539,24 +549,26 @@ export class PostgresContactService implements ContactPort {
           where: { contactId: sourceContactId, validTo: null },
           select: { id: true, organizationId: true },
         });
-        const organizationIds = [...new Set(sourceLinks.map(({ organizationId }) => organizationId))]
-          .sort();
+        const organizationIds = [
+          ...new Set(sourceLinks.map(({ organizationId }) => organizationId)),
+        ].sort();
         for (const organizationId of organizationIds) {
           await transaction.$queryRaw(Prisma.sql`
             SELECT pg_advisory_xact_lock(hashtextextended(${`contact-links:${organizationId}`}, 0))
           `);
         }
 
-        const targetLinks = organizationIds.length === 0
-          ? []
-          : await transaction.contactOrganization.findMany({
-              where: {
-                contactId: target.id,
-                organizationId: { in: organizationIds },
-                validTo: null,
-              },
-              select: { organizationId: true },
-            });
+        const targetLinks =
+          organizationIds.length === 0
+            ? []
+            : await transaction.contactOrganization.findMany({
+                where: {
+                  contactId: target.id,
+                  organizationId: { in: organizationIds },
+                  validTo: null,
+                },
+                select: { organizationId: true },
+              });
         const conflictingOrganizations = new Set(
           targetLinks.map(({ organizationId }) => organizationId),
         );
@@ -693,10 +705,12 @@ export class PostgresContactService implements ContactPort {
           take: 20,
         });
         if (duplicates.length > 0) {
-          throw new ContactDuplicateCandidatesError(duplicates.map((candidate) => ({
-            ...candidate,
-            isLinkedToOrganization: false,
-          })));
+          throw new ContactDuplicateCandidatesError(
+            duplicates.map((candidate) => ({
+              ...candidate,
+              isLinkedToOrganization: false,
+            })),
+          );
         }
 
         if (command.organizationLink) {
@@ -730,7 +744,10 @@ export class PostgresContactService implements ContactPort {
           },
         });
         if (updated.count !== 1) {
-          const latest = await transaction.contact.findUnique({ where: { id: contactId }, select: { version: true } });
+          const latest = await transaction.contact.findUnique({
+            where: { id: contactId },
+            select: { version: true },
+          });
           throw new ContactVersionConflictError(contactId, latest?.version ?? command.version);
         }
         const resultRecord = await transaction.contact.findUnique({
@@ -803,13 +820,17 @@ export class PostgresContactService implements ContactPort {
         });
         if (!current) throw new ContactNotFoundError(contactId);
         if (current.mergedIntoId) {
-          throw new ContactStateError("Объединённый контакт нельзя архивировать или восстанавливать.");
+          throw new ContactStateError(
+            "Объединённый контакт нельзя архивировать или восстанавливать.",
+          );
         }
         if (current.version !== command.version) {
           throw new ContactVersionConflictError(contactId, current.version);
         }
         if (Boolean(current.archivedAt) === archived) {
-          throw new ContactStateError(archived ? "Контакт уже архивирован." : "Контакт уже активен.");
+          throw new ContactStateError(
+            archived ? "Контакт уже архивирован." : "Контакт уже активен.",
+          );
         }
         const changed = await transaction.contact.updateMany({
           where: {
@@ -824,7 +845,10 @@ export class PostgresContactService implements ContactPort {
           },
         });
         if (changed.count !== 1) {
-          const latest = await transaction.contact.findUnique({ where: { id: contactId }, select: { version: true } });
+          const latest = await transaction.contact.findUnique({
+            where: { id: contactId },
+            select: { version: true },
+          });
           throw new ContactVersionConflictError(contactId, latest?.version ?? command.version);
         }
         const resultRecord = await transaction.contact.findUnique({
@@ -840,8 +864,16 @@ export class PostgresContactService implements ContactPort {
             action: archived ? "contact.archive" : "contact.restore",
             entityType: "Contact",
             entityId: contactId,
-            beforeJson: toJson({ version: current.version, archivedAt: current.archivedAt, reason: command.reason }),
-            afterJson: toJson({ version: result.version, archivedAt: result.archivedAt, reason: command.reason }),
+            beforeJson: toJson({
+              version: current.version,
+              archivedAt: current.archivedAt,
+              reason: command.reason,
+            }),
+            afterJson: toJson({
+              version: result.version,
+              archivedAt: result.archivedAt,
+              reason: command.reason,
+            }),
             occurredAt: now,
           },
         });
@@ -853,7 +885,12 @@ export class PostgresContactService implements ContactPort {
             aggregateId: contactId,
             aggregateVersion: result.version,
             schemaVersion: 1,
-            payload: toJson({ contactId, version: result.version, reason: command.reason, actorId: actor.id }),
+            payload: toJson({
+              contactId,
+              version: result.version,
+              reason: command.reason,
+              actorId: actor.id,
+            }),
             occurredAt: now,
           },
         });
@@ -874,9 +911,10 @@ export class PostgresContactService implements ContactPort {
   ): Promise<ContactRegistryItem> {
     const now = new Date();
     const reservationId = randomUUID();
-    return this.prisma.$transaction(async (transaction) => {
-      const actor = await this.actors.current(transaction);
-      const inserted = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    return this.prisma.$transaction(
+      async (transaction) => {
+        const actor = await this.actors.current(transaction);
+        const inserted = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
         INSERT INTO "idempotency_record" (
           "id", "actor_id", "operation", "request_key", "request_hash", "created_at", "expires_at"
         ) VALUES (
@@ -891,73 +929,89 @@ export class PostgresContactService implements ContactPort {
         ON CONFLICT ("actor_id", "operation", "request_key") DO NOTHING
         RETURNING "id"
       `);
-      if (inserted.length === 0) {
-        const existing = await transaction.idempotencyRecord.findUnique({
-          where: {
-            actorId_operation_requestKey: {
-              actorId: actor.id,
-              operation,
-              requestKey: idempotencyKey,
+        if (inserted.length === 0) {
+          const existing = await transaction.idempotencyRecord.findUnique({
+            where: {
+              actorId_operation_requestKey: {
+                actorId: actor.id,
+                operation,
+                requestKey: idempotencyKey,
+              },
             },
+          });
+          if (!existing) throw new IdempotencyInProgressError(idempotencyKey);
+          if (existing.requestHash !== requestHash)
+            throw new IdempotencyConflictError(idempotencyKey);
+          const replay = parseContactRegistryItem(existing.responseJson);
+          if (!replay) throw new IdempotencyInProgressError(idempotencyKey);
+          return replay;
+        }
+        const result = await mutate(transaction, now, actor);
+        const completed = await transaction.idempotencyRecord.updateMany({
+          where: { id: reservationId, responseJson: { equals: Prisma.DbNull } },
+          data: {
+            responseStatus: 200,
+            responseJson: toJson(result),
+            completedAt: now,
           },
         });
-        if (!existing) throw new IdempotencyInProgressError(idempotencyKey);
-        if (existing.requestHash !== requestHash) throw new IdempotencyConflictError(idempotencyKey);
-        const replay = parseContactRegistryItem(existing.responseJson);
-        if (!replay) throw new IdempotencyInProgressError(idempotencyKey);
-        return replay;
-      }
-      const result = await mutate(transaction, now, actor);
-      const completed = await transaction.idempotencyRecord.updateMany({
-        where: { id: reservationId, responseJson: { equals: Prisma.DbNull } },
-        data: {
-          responseStatus: 200,
-          responseJson: toJson(result),
-          completedAt: now,
-        },
-      });
-      if (completed.count !== 1) throw new Error("Contact mutation reservation could not be completed");
-      return result;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted });
+        if (completed.count !== 1)
+          throw new Error("Contact mutation reservation could not be completed");
+        return result;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
+    );
   }
 }
 
-function contactRegistryWhere(query: {
-  search?: string;
-  status?: string;
-  organizationId?: string;
-}, actor: PersistenceActor): Prisma.ContactWhereInput {
-  const status: Prisma.ContactWhereInput = query.status === "archived"
-    ? { archivedAt: { not: null }, mergedIntoId: null }
-    : query.status === "merged"
-      ? { mergedIntoId: { not: null } }
-      : query.status === "all"
-        ? {}
-        : { archivedAt: null, mergedIntoId: null };
+function contactRegistryWhere(
+  query: {
+    search?: string;
+    status?: string;
+    organizationId?: string;
+  },
+  actor: PersistenceActor,
+): Prisma.ContactWhereInput {
+  const status: Prisma.ContactWhereInput =
+    query.status === "archived"
+      ? { archivedAt: { not: null }, mergedIntoId: null }
+      : query.status === "merged"
+        ? { mergedIntoId: { not: null } }
+        : query.status === "all"
+          ? {}
+          : { archivedAt: null, mergedIntoId: null };
   const search = query.search?.trim();
   return {
     AND: [
       contactScope(actor),
       status,
-      ...(query.organizationId ? [{
-        organizationLinks: { some: { organizationId: query.organizationId, validTo: null } },
-      } satisfies Prisma.ContactWhereInput] : []),
-      ...(search ? [{
-      OR: [
-        { fullName: { contains: search, mode: "insensitive" } },
-        { email: { contains: search, mode: "insensitive" } },
-        { phone: { contains: search } },
-        { messenger: { contains: search, mode: "insensitive" } },
-        {
-          organizationLinks: {
-            some: {
-              validTo: null,
-              organization: { name: { contains: search, mode: "insensitive" } },
-            },
-          },
-        },
-      ],
-      } satisfies Prisma.ContactWhereInput] : []),
+      ...(query.organizationId
+        ? [
+            {
+              organizationLinks: { some: { organizationId: query.organizationId, validTo: null } },
+            } satisfies Prisma.ContactWhereInput,
+          ]
+        : []),
+      ...(search
+        ? [
+            {
+              OR: [
+                { fullName: { contains: search, mode: "insensitive" } },
+                { email: { contains: search, mode: "insensitive" } },
+                { phone: { contains: search } },
+                { messenger: { contains: search, mode: "insensitive" } },
+                {
+                  organizationLinks: {
+                    some: {
+                      validTo: null,
+                      organization: { name: { contains: search, mode: "insensitive" } },
+                    },
+                  },
+                },
+              ],
+            } satisfies Prisma.ContactWhereInput,
+          ]
+        : []),
     ],
   };
 }
@@ -990,29 +1044,30 @@ function toContactRegistryItem(
     organizationLinks: record.organizationLinks
       .filter((link) => !visibleOrganizationIds || visibleOrganizationIds.has(link.organizationId))
       .map((link) => ({
-      id: link.id,
-      organizationId: link.organizationId,
-      organizationName: link.organization.name,
-      role: link.role,
-      department: link.department,
-      isPrimary: link.isPrimary,
-      validFrom: link.validFrom.toISOString(),
-      validTo: link.validTo?.toISOString() ?? null,
+        id: link.id,
+        organizationId: link.organizationId,
+        organizationName: link.organization.name,
+        role: link.role,
+        department: link.department,
+        isPrimary: link.isPrimary,
+        validFrom: link.validFrom.toISOString(),
+        validTo: link.validTo?.toISOString() ?? null,
       })),
-    duplicateMatches: record.archivedAt || record.mergedIntoId
-      ? []
-      : duplicatePool
-          .filter((candidate) => candidate.id !== record.id)
-          .map((candidate) => ({
-            contactId: candidate.id,
-            fullName: candidate.fullName,
-            matchedOn: ([
-              record.email && record.email === candidate.email ? "email" : null,
-              record.phone && record.phone === candidate.phone ? "phone" : null,
-              record.messenger && record.messenger === candidate.messenger ? "messenger" : null,
-            ].filter(Boolean) as Array<"email" | "phone" | "messenger">),
-          }))
-          .filter(({ matchedOn }) => matchedOn.length > 0),
+    duplicateMatches:
+      record.archivedAt || record.mergedIntoId
+        ? []
+        : duplicatePool
+            .filter((candidate) => candidate.id !== record.id)
+            .map((candidate) => ({
+              contactId: candidate.id,
+              fullName: candidate.fullName,
+              matchedOn: [
+                record.email && record.email === candidate.email ? "email" : null,
+                record.phone && record.phone === candidate.phone ? "phone" : null,
+                record.messenger && record.messenger === candidate.messenger ? "messenger" : null,
+              ].filter(Boolean) as Array<"email" | "phone" | "messenger">,
+            }))
+            .filter(({ matchedOn }) => matchedOn.length > 0),
   };
 }
 
@@ -1028,8 +1083,10 @@ function assertEditableContact(
 ): asserts contact is ContactRegistryRecord {
   if (!contact) throw new ContactNotFoundError(contactId);
   if (contact.mergedIntoId) throw new ContactStateError("Контакт уже объединён.");
-  if (contact.archivedAt) throw new ContactStateError("Архивный контакт сначала нужно восстановить.");
-  if (contact.version !== version) throw new ContactVersionConflictError(contactId, contact.version);
+  if (contact.archivedAt)
+    throw new ContactStateError("Архивный контакт сначала нужно восстановить.");
+  if (contact.version !== version)
+    throw new ContactVersionConflictError(contactId, contact.version);
 }
 
 async function lockContact(transaction: Prisma.TransactionClient, contactId: string) {
@@ -1048,7 +1105,8 @@ function parseContactRegistryItem(value: Prisma.JsonValue | null): ContactRegist
     typeof value.fullName !== "string" ||
     !Array.isArray(value.organizationLinks) ||
     !Array.isArray(value.duplicateMatches)
-  ) return null;
+  )
+    return null;
   return value as unknown as ContactRegistryItem;
 }
 

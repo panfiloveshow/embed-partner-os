@@ -1,8 +1,4 @@
-import {
-  createRemoteJWKSet,
-  jwtVerify,
-  type JWTVerifyGetKey,
-} from "jose";
+import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
 
 export const OIDC_TOKEN_VERIFIER = Symbol("OIDC_TOKEN_VERIFIER");
 
@@ -42,11 +38,13 @@ export class OidcJwtVerifier implements OidcTokenVerifierPort {
     private readonly config: OidcVerifierConfig,
     key?: JWTVerifyGetKey,
   ) {
-    this.key = key ?? createRemoteJWKSet(new URL(config.jwksUrl), {
-      timeoutDuration: config.timeoutMs,
-      cooldownDuration: 30_000,
-      cacheMaxAge: 10 * 60_000,
-    });
+    this.key =
+      key ??
+      createRemoteJWKSet(new URL(config.jwksUrl), {
+        timeoutDuration: config.timeoutMs,
+        cooldownDuration: 30_000,
+        cacheMaxAge: 10 * 60_000,
+      });
   }
 
   async verify(token: string): Promise<string> {
@@ -106,13 +104,22 @@ export function oidcConfigFromEnvironment(
 function requiredSetting(value: string | undefined, name: string, maxLength: number) {
   const normalized = value?.trim();
   if (!normalized || normalized.length > maxLength) {
-    throw new OidcConfigurationError(`${name} обязателен и не должен превышать ${maxLength} символов`);
+    throw new OidcConfigurationError(
+      `${name} обязателен и не должен превышать ${maxLength} символов`,
+    );
   }
   return normalized;
 }
 
 function listSetting(value: string | undefined, name: string, maxItems: number) {
-  const items = [...new Set((value ?? "").split(",").map((item) => item.trim()).filter(Boolean))];
+  const items = [
+    ...new Set(
+      (value ?? "")
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ];
   if (items.length === 0 || items.length > maxItems) {
     throw new OidcConfigurationError(`${name} должен содержать от 1 до ${maxItems} значений`);
   }

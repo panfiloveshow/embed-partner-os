@@ -79,10 +79,7 @@ export class TodayService implements TodayPort, ContactPort {
   private rescheduledToday = 1;
   private stageChangesToday = 2;
   private launchesToday = 1;
-  private readonly idempotency = new Map<
-    string,
-    { requestHash: string; response: TodayPayload }
-  >();
+  private readonly idempotency = new Map<string, { requestHash: string; response: TodayPayload }>();
   private readonly taskRescheduleIdempotency = new Map<
     string,
     { requestHash: string; response: TodayPayload }
@@ -120,21 +117,22 @@ export class TodayService implements TodayPort, ContactPort {
         stageChanges: this.stageChangesToday,
         launches: this.launchesToday,
       },
-      actions: this.actions.map((action) => ({
-        ...action,
-        contacts: action.contacts.filter((contact) => {
-          const profile = this.contactProfiles.get(contact.id);
-          return !profile?.archivedAt && !this.mergedContacts.has(contact.id);
-        }),
-      })).sort(sortActions),
+      actions: this.actions
+        .map((action) => ({
+          ...action,
+          contacts: action.contacts.filter((contact) => {
+            const profile = this.contactProfiles.get(contact.id);
+            return !profile?.archivedAt && !this.mergedContacts.has(contact.id);
+          }),
+        }))
+        .sort(sortActions),
     };
   }
 
   getPlacementContext(organizationId: string, opportunityId: string) {
     const action = this.actions.find(
       (candidate) =>
-        candidate.organizationId === organizationId &&
-        candidate.opportunityId === opportunityId,
+        candidate.organizationId === organizationId && candidate.opportunityId === opportunityId,
     );
     if (!action) return null;
     const currentUser = this.getToday().currentUser;
@@ -176,9 +174,7 @@ export class TodayService implements TodayPort, ContactPort {
     command: TransitionOpportunityStageCommand,
   ) {
     if (result.toStageCode === "SL") {
-      this.actions = this.actions.filter(
-        (action) => action.opportunityId !== result.opportunityId,
-      );
+      this.actions = this.actions.filter((action) => action.opportunityId !== result.opportunityId);
     } else {
       this.actions = this.actions.map((action) => {
         if (action.opportunityId !== result.opportunityId) return action;
@@ -315,14 +311,21 @@ export class TodayService implements TodayPort, ContactPort {
       sourceUrl: lead.sourceUrl,
       restrictions: `Публичный рабочий контакт; ${lead.evidence}; confidence ${lead.confidence}`,
     }));
-    const claimedChannels = new Set(named.flatMap(({ email, phone }) => [email, phone]).filter(Boolean));
+    const claimedChannels = new Set(
+      named.flatMap(({ email, phone }) => [email, phone]).filter(Boolean),
+    );
     const general = research.contacts
-      .filter(({ type, value }) => (type === "email" || type === "phone") && !claimedChannels.has(value))
+      .filter(
+        ({ type, value }) => (type === "email" || type === "phone") && !claimedChannels.has(value),
+      )
       .slice(0, Math.max(0, 4 - named.length))
       .map((lead) => {
         const role = research.brief.likelyContactRoles[0] ?? "Представитель площадки";
         return {
-          fullName: lead.type === "email" ? `Публичный email — ${organizationName}` : `Публичный телефон — ${organizationName}`,
+          fullName:
+            lead.type === "email"
+              ? `Публичный email — ${organizationName}`
+              : `Публичный телефон — ${organizationName}`,
           role,
           department: role,
           email: lead.type === "email" ? lead.value : null,
@@ -388,7 +391,8 @@ export class TodayService implements TodayPort, ContactPort {
       !contact ||
       this.contactProfiles.get(command.contactId)?.archivedAt ||
       this.mergedContacts.has(command.contactId)
-    ) throw new ContactNotAvailableError(command.contactId);
+    )
+      throw new ContactNotAvailableError(command.contactId);
 
     this.actions.splice(actionIndex, 1);
     this.completedToday += 1;
@@ -431,11 +435,7 @@ export class TodayService implements TodayPort, ContactPort {
     return response;
   }
 
-  createContact(
-    organizationId: string,
-    input: unknown,
-    idempotencyKey: string,
-  ): ContactOption {
+  createContact(organizationId: string, input: unknown, idempotencyKey: string): ContactOption {
     const command = parseCreateContactCommand(input);
     const requestHash = contactRequestHash(command);
     const scope = `${organizationId}:${idempotencyKey}`;
@@ -625,12 +625,14 @@ export class TodayService implements TodayPort, ContactPort {
     return structuredClone(result);
   }
 
-  listContacts(query: {
-    search?: string;
-    status?: string;
-    organizationId?: string;
-    duplicatesOnly?: boolean;
-  } = {}): ContactRegistryPayload {
+  listContacts(
+    query: {
+      search?: string;
+      status?: string;
+      organizationId?: string;
+      duplicatesOnly?: boolean;
+    } = {},
+  ): ContactRegistryPayload {
     this.ensureContactProfiles();
     const organizations = uniqueOrganizations(this.actions);
     const normalizedSearch = query.search?.trim().toLocaleLowerCase("ru");
@@ -638,9 +640,13 @@ export class TodayService implements TodayPort, ContactPort {
     const contacts = [...this.contactProfiles.values()]
       .map((profile) => this.contactRegistryItem(profile))
       .filter((contact) => requestedStatus === "all" || contact.status === requestedStatus)
-      .filter((contact) => !query.organizationId || contact.organizationLinks.some(
-        ({ organizationId }) => organizationId === query.organizationId,
-      ))
+      .filter(
+        (contact) =>
+          !query.organizationId ||
+          contact.organizationLinks.some(
+            ({ organizationId }) => organizationId === query.organizationId,
+          ),
+      )
       .filter((contact) => !query.duplicatesOnly || contact.duplicateMatches.length > 0)
       .filter((contact) => {
         if (!normalizedSearch) return true;
@@ -710,15 +716,17 @@ export class TodayService implements TodayPort, ContactPort {
         profile.version += 1;
         profile.updatedAt = new Date().toISOString();
         for (const action of this.actions) {
-          action.contacts = action.contacts.map((contact) => contact.id === contactId
-            ? {
-                ...contact,
-                fullName: profile.fullName,
-                email: profile.email,
-                phone: profile.phone,
-                messenger: profile.messenger,
-              }
-            : contact);
+          action.contacts = action.contacts.map((contact) =>
+            contact.id === contactId
+              ? {
+                  ...contact,
+                  fullName: profile.fullName,
+                  email: profile.email,
+                  phone: profile.phone,
+                  messenger: profile.messenger,
+                }
+              : contact,
+          );
         }
         return this.contactRegistryItem(profile);
       },
@@ -749,13 +757,17 @@ export class TodayService implements TodayPort, ContactPort {
         const profile = this.contactProfiles.get(contactId);
         if (!profile) throw new ContactNotFoundError(contactId);
         if (this.mergedContacts.has(contactId)) {
-          throw new ContactStateError("Объединённый контакт нельзя архивировать или восстанавливать.");
+          throw new ContactStateError(
+            "Объединённый контакт нельзя архивировать или восстанавливать.",
+          );
         }
         if (profile.version !== command.version) {
           throw new ContactVersionConflictError(contactId, profile.version);
         }
         if (Boolean(profile.archivedAt) === archived) {
-          throw new ContactStateError(archived ? "Контакт уже архивирован." : "Контакт уже активен.");
+          throw new ContactStateError(
+            archived ? "Контакт уже архивирован." : "Контакт уже активен.",
+          );
         }
         profile.archivedAt = archived ? new Date().toISOString() : null;
         profile.version += 1;
@@ -777,7 +789,10 @@ export class TodayService implements TodayPort, ContactPort {
       return structuredClone(replay.response);
     }
     const response = mutate();
-    this.contactMutationIdempotency.set(scope, { requestHash, response: structuredClone(response) });
+    this.contactMutationIdempotency.set(scope, {
+      requestHash,
+      response: structuredClone(response),
+    });
     return structuredClone(response);
   }
 
@@ -785,8 +800,10 @@ export class TodayService implements TodayPort, ContactPort {
     const profile = this.contactProfiles.get(contactId);
     if (!profile) throw new ContactNotFoundError(contactId);
     if (this.mergedContacts.has(contactId)) throw new ContactStateError("Контакт уже объединён.");
-    if (profile.archivedAt) throw new ContactStateError("Архивный контакт сначала нужно восстановить.");
-    if (profile.version !== version) throw new ContactVersionConflictError(contactId, profile.version);
+    if (profile.archivedAt)
+      throw new ContactStateError("Архивный контакт сначала нужно восстановить.");
+    if (profile.version !== version)
+      throw new ContactVersionConflictError(contactId, profile.version);
     return profile;
   }
 
@@ -877,8 +894,9 @@ export class TodayService implements TodayPort, ContactPort {
 function uniqueOrganizations(actions: TodayAction[]) {
   const organizations = new Map<string, string>();
   for (const action of actions) organizations.set(action.organizationId, action.organizationName);
-  return [...organizations].map(([id, name]) => ({ id, name })).sort((left, right) =>
-    left.name.localeCompare(right.name, "ru"));
+  return [...organizations]
+    .map(([id, name]) => ({ id, name }))
+    .sort((left, right) => left.name.localeCompare(right.name, "ru"));
 }
 
 function uniqueContactLinks(actions: TodayAction[], contactId: string) {
@@ -898,13 +916,11 @@ function uniqueContactLinks(actions: TodayAction[], contactId: string) {
     });
   }
   return [...links.values()].sort((left, right) =>
-    left.organizationName.localeCompare(right.organizationName, "ru"));
+    left.organizationName.localeCompare(right.organizationName, "ru"),
+  );
 }
 
-function duplicateMatches(
-  profiles: Map<string, InMemoryContactProfile>,
-  contactId: string,
-) {
+function duplicateMatches(profiles: Map<string, InMemoryContactProfile>, contactId: string) {
   const source = profiles.get(contactId);
   if (!source) return [];
   return [...profiles.values()]
@@ -912,11 +928,11 @@ function duplicateMatches(
     .map((candidate) => ({
       contactId: candidate.id,
       fullName: candidate.fullName,
-      matchedOn: ([
+      matchedOn: [
         source.email && source.email === candidate.email ? "email" : null,
         source.phone && source.phone === candidate.phone ? "phone" : null,
         source.messenger && source.messenger === candidate.messenger ? "messenger" : null,
-      ].filter(Boolean) as Array<"email" | "phone" | "messenger">),
+      ].filter(Boolean) as Array<"email" | "phone" | "messenger">,
     }))
     .filter(({ matchedOn }) => matchedOn.length > 0);
 }
@@ -928,10 +944,12 @@ function duplicateProfiles(
 ): ContactCandidate[] {
   return [...profiles.values()]
     .filter((candidate) => candidate.id !== contactId && !candidate.archivedAt)
-    .filter((candidate) =>
-      (command.email && command.email === candidate.email) ||
-      (command.phone && command.phone === candidate.phone) ||
-      (command.messenger && command.messenger === candidate.messenger))
+    .filter(
+      (candidate) =>
+        (command.email && command.email === candidate.email) ||
+        (command.phone && command.phone === candidate.phone) ||
+        (command.messenger && command.messenger === candidate.messenger),
+    )
     .map((candidate) => ({
       id: candidate.id,
       fullName: candidate.fullName,
@@ -995,7 +1013,9 @@ function sortActions(left: TodayAction, right: TodayAction) {
     later: 2,
     waiting: 3,
   };
-  return groupOrder[left.group] - groupOrder[right.group] || right.priorityScore - left.priorityScore;
+  return (
+    groupOrder[left.group] - groupOrder[right.group] || right.priorityScore - left.priorityScore
+  );
 }
 
 function buildSeedActions(): TodayAction[] {
@@ -1027,79 +1047,271 @@ const seedContactNames = [
 ];
 
 const seedActions: SeedAction[] = [
-  seed("task-1", "Медиа Новости", "medianovosti.ru", "S7", "Интеграция", "Ответить на запрос по API", "2026-08-15T14:00:00+03:00", "critical", {
-    overdueBusinessDays: 4,
-    partnerScore: 85,
-    hasInboundResponse: true,
-    isIntegrationOrPilot: true,
-  }, "Письмо от партнёра", "Запросили обновлённую спецификацию API и примеры интеграции"),
-  seed("task-2", "Спорт Онлайн", "sport-online.ru", "S7", "Интеграция", "Предоставить тестовый доступ", "2026-08-16T12:00:00+03:00", "critical", {
-    overdueBusinessDays: 2,
-    partnerScore: 90,
-    hasCriticalTechnicalAlert: true,
-    isIntegrationOrPilot: true,
-  }, "Системное событие", "Две последовательные ошибки проверки тестовой страницы"),
-  seed("task-3", "Городской портал", "citymedia.ru", "S4", "Диалог", "Согласовать условия размещения", "2026-08-16T18:00:00+03:00", "critical", {
-    overdueBusinessDays: 1,
-    partnerScore: 78,
-    hasInboundResponse: true,
-    inactiveDays: 9,
-  }, "Входящее письмо", "Партнёр готов обсудить финальный формат размещения"),
-  seed("task-4", "Кинообзор", "kino-review.ru", "S7", "Интеграция", "Проверить готовность плеера", "2026-08-17T11:00:00+03:00", "today", {
-    partnerScore: 72,
-    isIntegrationOrPilot: true,
-    hasCriticalTechnicalAlert: true,
-  }, "Техническая заметка", "Тестовая страница опубликована и ждёт проверки"),
-  seed("task-5", "TechBlog", "techblog.ru", "S7", "Интеграция", "Согласовать параметры плеера", "2026-08-17T13:30:00+03:00", "today", {
-    partnerScore: 68,
-    isIntegrationOrPilot: true,
-    hasInboundResponse: true,
-  }, "Письмо", "Получен список разрешённых параметров iframe"),
-  seed("task-6", "LifeStyle Media", "lifestyle.media", "S5", "Предложение", "Отправить коммерческое предложение", "2026-08-17T15:00:00+03:00", "today", {
-    partnerScore: 81,
-    hasInboundResponse: true,
-  }, "Звонок", "Подтверждён интерес к пилоту на новостном разделе"),
-  seed("task-7", "АвтоПортал", "autoportal.ru", "S6", "Согласование", "Запросить доступ к сайту", "2026-08-17T16:00:00+03:00", "today", {
-    partnerScore: 66,
-    inactiveDays: 12,
-  }, "Встреча", "Техническая команда готовит тестовый контур"),
-  seed("task-8", "Новости Регионов", "regions.news", "S3", "Первичный контакт", "Подготовить follow-up", "2026-08-17T16:30:00+03:00", "today", {
-    partnerScore: 59,
-    inactiveDays: 18,
-  }, "Письмо", "Первое письмо отправлено четыре дня назад"),
-  seed("task-9", "EduVideo", "eduvideo.ru", "S2", "Квалифицирован", "Найти технического контакта", "2026-08-17T17:00:00+03:00", "today", {
-    partnerScore: 74,
-    inactiveDays: 6,
-  }, "Исследование", "Найдены редакционный и коммерческий контакты"),
-  seed("task-10", "Деловой обзор", "business-review.ru", "S4", "Диалог", "Подтвердить встречу", "2026-08-17T18:00:00+03:00", "today", {
-    partnerScore: 70,
-    hasInboundResponse: true,
-  }, "Календарь", "Партнёр предложил два слота для встречи"),
-  seed("task-11", "Travel Guide", "travelguide.ru", "S4", "Диалог", "Договориться о встрече", "2026-08-19T12:00:00+03:00", "later", {
-    partnerScore: 64,
-    inactiveDays: 9,
-  }, "Звонок", "Контакт попросил вернуться после планёрки"),
-  seed("task-12", "Музыка Онлайн", "music-online.ru", "S5", "Предложение", "Уточнить формат размещения", "2026-08-20T15:00:00+03:00", "later", {
-    partnerScore: 57,
-    inactiveDays: 6,
-  }, "Заметка", "Нужно выбрать формат для мобильной версии"),
-  seed("task-13", "Game World", "gameworld.ru", "S7", "Интеграция", "Ожидание доступа в тестовый контур", "2026-08-21T10:00:00+03:00", "waiting", {
-    partnerScore: 80,
-    isIntegrationOrPilot: true,
-    isWaitingBeforeReview: true,
-  }, "Ожидание", "Доступ готовит служба безопасности партнёра"),
-  seed("task-14", "Новости Мира", "world-news.ru", "S4", "Диалог", "Ожидание ответа на КП", "2026-08-22T10:00:00+03:00", "waiting", {
-    partnerScore: 73,
-    isWaitingBeforeReview: true,
-  }, "Ожидание", "Коммерческое предложение на внутреннем согласовании"),
-  seed("task-15", "Домашний уют", "home-style.ru", "S5", "Предложение", "Ожидание материалов", "2026-08-23T10:00:00+03:00", "waiting", {
-    partnerScore: 61,
-    isWaitingBeforeReview: true,
-  }, "Ожидание", "Редакция готовит перечень страниц с видео"),
-  seed("task-16", "Финансы Онлайн", "finance-online.ru", "S6", "Согласование", "Ожидание согласования безопасности", "2026-08-24T10:00:00+03:00", "waiting", {
-    partnerScore: 76,
-    isWaitingBeforeReview: true,
-  }, "Ожидание", "Документы переданы службе информационной безопасности"),
+  seed(
+    "task-1",
+    "Медиа Новости",
+    "medianovosti.ru",
+    "S7",
+    "Интеграция",
+    "Ответить на запрос по API",
+    "2026-08-15T14:00:00+03:00",
+    "critical",
+    {
+      overdueBusinessDays: 4,
+      partnerScore: 85,
+      hasInboundResponse: true,
+      isIntegrationOrPilot: true,
+    },
+    "Письмо от партнёра",
+    "Запросили обновлённую спецификацию API и примеры интеграции",
+  ),
+  seed(
+    "task-2",
+    "Спорт Онлайн",
+    "sport-online.ru",
+    "S7",
+    "Интеграция",
+    "Предоставить тестовый доступ",
+    "2026-08-16T12:00:00+03:00",
+    "critical",
+    {
+      overdueBusinessDays: 2,
+      partnerScore: 90,
+      hasCriticalTechnicalAlert: true,
+      isIntegrationOrPilot: true,
+    },
+    "Системное событие",
+    "Две последовательные ошибки проверки тестовой страницы",
+  ),
+  seed(
+    "task-3",
+    "Городской портал",
+    "citymedia.ru",
+    "S4",
+    "Диалог",
+    "Согласовать условия размещения",
+    "2026-08-16T18:00:00+03:00",
+    "critical",
+    {
+      overdueBusinessDays: 1,
+      partnerScore: 78,
+      hasInboundResponse: true,
+      inactiveDays: 9,
+    },
+    "Входящее письмо",
+    "Партнёр готов обсудить финальный формат размещения",
+  ),
+  seed(
+    "task-4",
+    "Кинообзор",
+    "kino-review.ru",
+    "S7",
+    "Интеграция",
+    "Проверить готовность плеера",
+    "2026-08-17T11:00:00+03:00",
+    "today",
+    {
+      partnerScore: 72,
+      isIntegrationOrPilot: true,
+      hasCriticalTechnicalAlert: true,
+    },
+    "Техническая заметка",
+    "Тестовая страница опубликована и ждёт проверки",
+  ),
+  seed(
+    "task-5",
+    "TechBlog",
+    "techblog.ru",
+    "S7",
+    "Интеграция",
+    "Согласовать параметры плеера",
+    "2026-08-17T13:30:00+03:00",
+    "today",
+    {
+      partnerScore: 68,
+      isIntegrationOrPilot: true,
+      hasInboundResponse: true,
+    },
+    "Письмо",
+    "Получен список разрешённых параметров iframe",
+  ),
+  seed(
+    "task-6",
+    "LifeStyle Media",
+    "lifestyle.media",
+    "S5",
+    "Предложение",
+    "Отправить коммерческое предложение",
+    "2026-08-17T15:00:00+03:00",
+    "today",
+    {
+      partnerScore: 81,
+      hasInboundResponse: true,
+    },
+    "Звонок",
+    "Подтверждён интерес к пилоту на новостном разделе",
+  ),
+  seed(
+    "task-7",
+    "АвтоПортал",
+    "autoportal.ru",
+    "S6",
+    "Согласование",
+    "Запросить доступ к сайту",
+    "2026-08-17T16:00:00+03:00",
+    "today",
+    {
+      partnerScore: 66,
+      inactiveDays: 12,
+    },
+    "Встреча",
+    "Техническая команда готовит тестовый контур",
+  ),
+  seed(
+    "task-8",
+    "Новости Регионов",
+    "regions.news",
+    "S3",
+    "Первичный контакт",
+    "Подготовить follow-up",
+    "2026-08-17T16:30:00+03:00",
+    "today",
+    {
+      partnerScore: 59,
+      inactiveDays: 18,
+    },
+    "Письмо",
+    "Первое письмо отправлено четыре дня назад",
+  ),
+  seed(
+    "task-9",
+    "EduVideo",
+    "eduvideo.ru",
+    "S2",
+    "Квалифицирован",
+    "Найти технического контакта",
+    "2026-08-17T17:00:00+03:00",
+    "today",
+    {
+      partnerScore: 74,
+      inactiveDays: 6,
+    },
+    "Исследование",
+    "Найдены редакционный и коммерческий контакты",
+  ),
+  seed(
+    "task-10",
+    "Деловой обзор",
+    "business-review.ru",
+    "S4",
+    "Диалог",
+    "Подтвердить встречу",
+    "2026-08-17T18:00:00+03:00",
+    "today",
+    {
+      partnerScore: 70,
+      hasInboundResponse: true,
+    },
+    "Календарь",
+    "Партнёр предложил два слота для встречи",
+  ),
+  seed(
+    "task-11",
+    "Travel Guide",
+    "travelguide.ru",
+    "S4",
+    "Диалог",
+    "Договориться о встрече",
+    "2026-08-19T12:00:00+03:00",
+    "later",
+    {
+      partnerScore: 64,
+      inactiveDays: 9,
+    },
+    "Звонок",
+    "Контакт попросил вернуться после планёрки",
+  ),
+  seed(
+    "task-12",
+    "Музыка Онлайн",
+    "music-online.ru",
+    "S5",
+    "Предложение",
+    "Уточнить формат размещения",
+    "2026-08-20T15:00:00+03:00",
+    "later",
+    {
+      partnerScore: 57,
+      inactiveDays: 6,
+    },
+    "Заметка",
+    "Нужно выбрать формат для мобильной версии",
+  ),
+  seed(
+    "task-13",
+    "Game World",
+    "gameworld.ru",
+    "S7",
+    "Интеграция",
+    "Ожидание доступа в тестовый контур",
+    "2026-08-21T10:00:00+03:00",
+    "waiting",
+    {
+      partnerScore: 80,
+      isIntegrationOrPilot: true,
+      isWaitingBeforeReview: true,
+    },
+    "Ожидание",
+    "Доступ готовит служба безопасности партнёра",
+  ),
+  seed(
+    "task-14",
+    "Новости Мира",
+    "world-news.ru",
+    "S4",
+    "Диалог",
+    "Ожидание ответа на КП",
+    "2026-08-22T10:00:00+03:00",
+    "waiting",
+    {
+      partnerScore: 73,
+      isWaitingBeforeReview: true,
+    },
+    "Ожидание",
+    "Коммерческое предложение на внутреннем согласовании",
+  ),
+  seed(
+    "task-15",
+    "Домашний уют",
+    "home-style.ru",
+    "S5",
+    "Предложение",
+    "Ожидание материалов",
+    "2026-08-23T10:00:00+03:00",
+    "waiting",
+    {
+      partnerScore: 61,
+      isWaitingBeforeReview: true,
+    },
+    "Ожидание",
+    "Редакция готовит перечень страниц с видео",
+  ),
+  seed(
+    "task-16",
+    "Финансы Онлайн",
+    "finance-online.ru",
+    "S6",
+    "Согласование",
+    "Ожидание согласования безопасности",
+    "2026-08-24T10:00:00+03:00",
+    "waiting",
+    {
+      partnerScore: 76,
+      isWaitingBeforeReview: true,
+    },
+    "Ожидание",
+    "Документы переданы службе информационной безопасности",
+  ),
 ];
 
 function seed(
@@ -1120,7 +1332,7 @@ function seed(
   const taskNumber = Number(id.replace("task-", ""));
   const contactName = isSharedContact
     ? "Иван Петров"
-    : seedContactNames[(taskNumber - 3) % seedContactNames.length] ?? "Иван Петров";
+    : (seedContactNames[(taskNumber - 3) % seedContactNames.length] ?? "Иван Петров");
   return {
     id,
     organizationId,
@@ -1144,13 +1356,14 @@ function seed(
       {
         id: isSharedContact ? "contact-shared-ivan" : `contact-${id}`,
         fullName: contactName,
-        role: id === "task-1"
-          ? "Технический директор"
-          : id === "task-2"
-            ? "Консультант по интеграции"
-            : stageCode === "S7"
-              ? "Технический руководитель"
-              : "Руководитель направления",
+        role:
+          id === "task-1"
+            ? "Технический директор"
+            : id === "task-2"
+              ? "Консультант по интеграции"
+              : stageCode === "S7"
+                ? "Технический руководитель"
+                : "Руководитель направления",
         department: stageCode === "S7" ? "ИТ" : "Развитие бизнеса",
         email: isSharedContact ? "ivan.petrov@partners.example.invalid" : `ivan.petrov@${domain}`,
         phone: null,

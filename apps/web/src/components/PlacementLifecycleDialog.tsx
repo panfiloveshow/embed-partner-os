@@ -62,9 +62,13 @@ export function PlacementLifecycleDialog({
   }
 
   return (
-    <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget && !busy) onCancel();
-    }}>
+    <div
+      className="dialog-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !busy) onCancel();
+      }}
+    >
       <section
         className="completion-dialog add-placement-dialog placement-lifecycle-dialog"
         role="dialog"
@@ -77,7 +81,13 @@ export function PlacementLifecycleDialog({
             <h2 id={titleId}>Управление размещением</h2>
             <p>{placement.organizationName}: параметры и плановый мониторинг.</p>
           </div>
-          <button className="icon-button" type="button" onClick={onCancel} disabled={busy} aria-label="Закрыть">
+          <button
+            className="icon-button"
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            aria-label="Закрыть"
+          >
             <X size={17} aria-hidden="true" />
           </button>
         </header>
@@ -106,9 +116,12 @@ export function PlacementLifecycleDialog({
             </label>
             <label>
               Тип embed
-              <select value={embedType} onChange={(event) => {
-                setEmbedType(event.target.value as PlacementView["embedType"]);
-              }}>
+              <select
+                value={embedType}
+                onChange={(event) => {
+                  setEmbedType(event.target.value as PlacementView["embedType"]);
+                }}
+              >
                 <option value="video">Видео</option>
                 <option value="live">Трансляция</option>
                 <option value="playlist">Плейлист</option>
@@ -116,9 +129,12 @@ export function PlacementLifecycleDialog({
             </label>
             <label>
               Среда
-              <select value={environment} onChange={(event) => {
-                setEnvironment(event.target.value as PlacementView["environment"]);
-              }}>
+              <select
+                value={environment}
+                onChange={(event) => {
+                  setEnvironment(event.target.value as PlacementView["environment"]);
+                }}
+              >
                 <option value="production">Production</option>
                 <option value="staging">Staging</option>
                 <option value="test">Test</option>
@@ -126,9 +142,12 @@ export function PlacementLifecycleDialog({
             </label>
             <label>
               Бизнес-статус
-              <select value={businessStatus} onChange={(event) => {
-                setBusinessStatus(event.target.value as PlacementView["businessStatus"]);
-              }}>
+              <select
+                value={businessStatus}
+                onChange={(event) => {
+                  setBusinessStatus(event.target.value as PlacementView["businessStatus"]);
+                }}
+              >
                 <option value="active">Активно</option>
                 <option value="planned">Запланировано</option>
                 <option value="paused">На паузе</option>
@@ -159,10 +178,17 @@ export function PlacementLifecycleDialog({
           {confirmArchive ? (
             <div className="placement-archive-warning" role="alert">
               <TriangleAlert size={18} aria-hidden="true" />
-              <p><strong>Архивировать размещение?</strong> Оно исчезнет из реестра, а плановые проверки и открытая техническая задача будут остановлены.</p>
+              <p>
+                <strong>Архивировать размещение?</strong> Оно исчезнет из реестра, а плановые
+                проверки и открытая техническая задача будут остановлены.
+              </p>
             </div>
           ) : null}
-          {error ? <div className="form-error" role="alert">{error}</div> : null}
+          {error ? (
+            <div className="form-error" role="alert">
+              {error}
+            </div>
+          ) : null}
 
           <div className="dialog-actions placement-lifecycle-actions">
             <button
@@ -175,10 +201,19 @@ export function PlacementLifecycleDialog({
               {confirmArchive ? "Подтвердить архив" : "Архивировать"}
             </button>
             <span className="placement-lifecycle-spacer" />
-            <button className="button button-secondary" type="button" onClick={onCancel} disabled={busy}>
+            <button
+              className="button button-secondary"
+              type="button"
+              onClick={onCancel}
+              disabled={busy}
+            >
               Отмена
             </button>
-            <button className="button button-primary" type="submit" disabled={busy || !reason.trim()}>
+            <button
+              className="button button-primary"
+              type="submit"
+              disabled={busy || !reason.trim()}
+            >
               {busy ? "Сохраняем…" : "Сохранить"}
             </button>
           </div>

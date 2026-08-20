@@ -5,11 +5,7 @@ import type {
   WeeklyReportMetric,
   WeeklyReportSnapshot,
 } from "@embed-os/contracts";
-import {
-  ApiError,
-  fetchLatestWeeklyReport,
-  generateWeeklyReport,
-} from "../lib/api";
+import { ApiError, fetchLatestWeeklyReport, generateWeeklyReport } from "../lib/api";
 import { defaultWeeklyReportCommand } from "../lib/reporting";
 
 interface WeeklyReportPageProps {
@@ -49,9 +45,7 @@ export function WeeklyReportPage({ teamName }: WeeklyReportPageProps) {
     setGenerating(true);
     setError(null);
     try {
-      setSnapshot(
-        await generateWeeklyReport(defaultWeeklyReportCommand(), createIdempotencyKey()),
-      );
+      setSnapshot(await generateWeeklyReport(defaultWeeklyReportCommand(), createIdempotencyKey()));
     } catch (generateError) {
       setError(messageFor(generateError));
     } finally {
@@ -131,15 +125,20 @@ function WeeklyReportDashboard({ snapshot }: { snapshot: WeeklyReportSnapshot })
     <section className="report-dashboard" aria-label="Опубликованный недельный отчёт">
       <div className="report-metadata">
         <span>
-          Ревизия {snapshot.revision} <i aria-hidden="true">·</i>{" "}
-          данные на {formatDataAsOf(snapshot.dataAsOf)} <i aria-hidden="true">·</i>{" "}
-          формула {snapshot.formulaVersion}
+          Ревизия {snapshot.revision} <i aria-hidden="true">·</i> данные на{" "}
+          {formatDataAsOf(snapshot.dataAsOf)} <i aria-hidden="true">·</i> формула{" "}
+          {snapshot.formulaVersion}
         </span>
-        <strong><CheckCircle2 size={16} aria-hidden="true" />Опубликован</strong>
+        <strong>
+          <CheckCircle2 size={16} aria-hidden="true" />
+          Опубликован
+        </strong>
       </div>
 
       <section className="report-result-strip" aria-label="Результат недели">
-        {snapshot.payload.result.map((metric) => <ResultMetric metric={metric} key={metric.key} />)}
+        {snapshot.payload.result.map((metric) => (
+          <ResultMetric metric={metric} key={metric.key} />
+        ))}
       </section>
 
       <div className="report-middle-grid">
@@ -147,7 +146,9 @@ function WeeklyReportDashboard({ snapshot }: { snapshot: WeeklyReportSnapshot })
           <section className="report-panel report-funnel">
             <h2>Воронка</h2>
             <div className="report-funnel-head" aria-hidden="true">
-              <span>Стадия</span><span>Партнёры</span><span>Медианный возраст</span>
+              <span>Стадия</span>
+              <span>Партнёры</span>
+              <span>Медианный возраст</span>
             </div>
             <div className="report-funnel-rows">
               {snapshot.payload.funnel.stages.map((stage) => (
@@ -168,9 +169,11 @@ function WeeklyReportDashboard({ snapshot }: { snapshot: WeeklyReportSnapshot })
             <div className="report-execution-grid">
               <ExecutionMetric
                 label="Покрытие следующими действиями"
-                value={snapshot.payload.execution.nextActionCoverage.percent === null
-                  ? "—"
-                  : `${snapshot.payload.execution.nextActionCoverage.percent}%`}
+                value={
+                  snapshot.payload.execution.nextActionCoverage.percent === null
+                    ? "—"
+                    : `${snapshot.payload.execution.nextActionCoverage.percent}%`
+                }
                 detail={`${snapshot.payload.execution.nextActionCoverage.covered} / ${snapshot.payload.execution.nextActionCoverage.total} партнёров`}
               />
               <ExecutionMetric
@@ -190,17 +193,24 @@ function WeeklyReportDashboard({ snapshot }: { snapshot: WeeklyReportSnapshot })
         <section className="report-panel report-decisions">
           <h2>Решения руководителя</h2>
           <div className="report-decision-head" aria-hidden="true">
-            <span>Действие</span><span>Затронутые</span><span>Владелец</span><span>Срок</span>
+            <span>Действие</span>
+            <span>Затронутые</span>
+            <span>Владелец</span>
+            <span>Срок</span>
           </div>
           <div className="report-decision-list">
-            {snapshot.payload.decisions.length > 0 ? snapshot.payload.decisions.map((decision) => (
-              <article key={decision.code}>
-                <p>{decision.question}</p>
-                <strong>{decision.affectedCount}</strong>
-                <span>{decision.owner}</span>
-                <time dateTime={decision.dueAt}>{formatShortDate(decision.dueAt)}</time>
-              </article>
-            )) : <p className="report-no-decisions">Решения руководителя не требуются.</p>}
+            {snapshot.payload.decisions.length > 0 ? (
+              snapshot.payload.decisions.map((decision) => (
+                <article key={decision.code}>
+                  <p>{decision.question}</p>
+                  <strong>{decision.affectedCount}</strong>
+                  <span>{decision.owner}</span>
+                  <time dateTime={decision.dueAt}>{formatShortDate(decision.dueAt)}</time>
+                </article>
+              ))
+            ) : (
+              <p className="report-no-decisions">Решения руководителя не требуются.</p>
+            )}
           </div>
         </section>
       </div>
@@ -214,25 +224,40 @@ function WeeklyReportDashboard({ snapshot }: { snapshot: WeeklyReportSnapshot })
               onClick={() => setShowAllExceptions((current) => !current)}
               aria-expanded={showAllExceptions}
             >
-              {showAllExceptions ? "Показать первые 4" : `Показать все ${snapshot.payload.exceptions.length}`}
+              {showAllExceptions
+                ? "Показать первые 4"
+                : `Показать все ${snapshot.payload.exceptions.length}`}
             </button>
           ) : null}
         </div>
         {snapshot.payload.exceptions.length > 0 ? (
           <div className="report-table-scroll">
             <table className="report-table">
-              <thead><tr><th>Партнёр</th><th>Риск</th><th>Владелец</th><th>Возраст</th><th>Действие</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Партнёр</th>
+                  <th>Риск</th>
+                  <th>Владелец</th>
+                  <th>Возраст</th>
+                  <th>Действие</th>
+                </tr>
+              </thead>
               <tbody>
                 {(showAllExceptions
                   ? snapshot.payload.exceptions
                   : snapshot.payload.exceptions.slice(0, 4)
                 ).map((exception, index) => (
-                  <ExceptionRow exception={exception} key={`${exception.opportunityId}:${exception.code}:${index}`} />
+                  <ExceptionRow
+                    exception={exception}
+                    key={`${exception.opportunityId}:${exception.code}:${index}`}
+                  />
                 ))}
               </tbody>
             </table>
           </div>
-        ) : <p className="report-no-exceptions">Критических исключений нет.</p>}
+        ) : (
+          <p className="report-no-exceptions">Критических исключений нет.</p>
+        )}
       </section>
 
       <footer className="report-data-quality">
@@ -248,7 +273,11 @@ function ResultMetric({ metric }: { metric: WeeklyReportMetric }) {
     <div className="report-result-metric">
       <span>{metricLabel(metric)}</span>
       <strong>{metric.value ?? "—"}</strong>
-      <small className={metric.changeVsPreviousWeek !== null && metric.changeVsPreviousWeek > 0 ? "positive" : ""}>
+      <small
+        className={
+          metric.changeVsPreviousWeek !== null && metric.changeVsPreviousWeek > 0 ? "positive" : ""
+        }
+      >
         {metric.value === null ? "нет данных" : formatChange(metric.changeVsPreviousWeek)}
       </small>
     </div>
@@ -278,16 +307,28 @@ function ExecutionMetric({
   detail?: string;
   tone?: "positive" | "negative";
 }) {
-  return <div><span>{label}</span><strong className={tone}>{value}</strong>{detail ? <small>{detail}</small> : null}</div>;
+  return (
+    <div>
+      <span>{label}</span>
+      <strong className={tone}>{value}</strong>
+      {detail ? <small>{detail}</small> : null}
+    </div>
+  );
 }
 
 function ExceptionRow({ exception }: { exception: WeeklyReportException }) {
   return (
     <tr>
-      <td data-label="Партнёр"><strong>{exception.organizationName}</strong></td>
+      <td data-label="Партнёр">
+        <strong>{exception.organizationName}</strong>
+      </td>
       <td data-label="Риск">{exception.title}</td>
       <td data-label="Владелец">{exception.ownerName}</td>
-      <td data-label="Возраст"><span className={`report-age report-age-${exception.severity}`}>{exception.ageDays} дн.</span></td>
+      <td data-label="Возраст">
+        <span className={`report-age report-age-${exception.severity}`}>
+          {exception.ageDays} дн.
+        </span>
+      </td>
       <td data-label="Действие">{actionFor(exception)}</td>
     </tr>
   );
@@ -303,8 +344,16 @@ function actionFor(exception: WeeklyReportException) {
 function formatPeriod(snapshot: WeeklyReportSnapshot) {
   const start = new Date(snapshot.periodStart);
   const end = new Date(snapshot.periodEnd);
-  const startDay = new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Moscow", day: "numeric" }).format(start);
-  const endPart = new Intl.DateTimeFormat("ru-RU", { timeZone: "Europe/Moscow", day: "numeric", month: "long", year: "numeric" }).format(end);
+  const startDay = new Intl.DateTimeFormat("ru-RU", {
+    timeZone: "Europe/Moscow",
+    day: "numeric",
+  }).format(start);
+  const endPart = new Intl.DateTimeFormat("ru-RU", {
+    timeZone: "Europe/Moscow",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(end);
   return `${startDay}–${endPart.replace(/\s*г\.$/, "")}`;
 }
 

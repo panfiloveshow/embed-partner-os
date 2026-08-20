@@ -93,70 +93,73 @@ export class PostgresRadarService implements RadarPort {
     const requestHash = hash(command);
     const reservationId = randomUUID();
     const now = new Date();
-    return this.prisma.$transaction(async (transaction) => {
-      const actor = await this.actors.current(transaction);
-      const teamId = requireActorTeam(actor);
-      const replay = await reserveIdempotency(transaction, {
-        reservationId,
-        actorId: actor.id,
-        operation: "radar.create",
-        idempotencyKey,
-        requestHash,
-        now,
-      });
-      if (replay) return parseReplay(replay, idempotencyKey);
-      await lockHost(transaction, teamId, normalized.hostNormalized);
-      const [duplicateOrganization, duplicateCandidate] = await Promise.all([
-        transaction.organization.findFirst({
-          where: {
-            archivedAt: null,
-            ...organizationScope(actor),
-            domains: { some: { hostNormalized: normalized.hostNormalized, archivedAt: null } },
-          },
-          select: { id: true, name: true },
-        }),
-        transaction.radarCandidate.findFirst({
-          where: {
-            ...radarCandidateScope(actor),
+    return this.prisma.$transaction(
+      async (transaction) => {
+        const actor = await this.actors.current(transaction);
+        const teamId = requireActorTeam(actor);
+        const replay = await reserveIdempotency(transaction, {
+          reservationId,
+          actorId: actor.id,
+          operation: "radar.create",
+          idempotencyKey,
+          requestHash,
+          now,
+        });
+        if (replay) return parseReplay(replay, idempotencyKey);
+        await lockHost(transaction, teamId, normalized.hostNormalized);
+        const [duplicateOrganization, duplicateCandidate] = await Promise.all([
+          transaction.organization.findFirst({
+            where: {
+              archivedAt: null,
+              ...organizationScope(actor),
+              domains: { some: { hostNormalized: normalized.hostNormalized, archivedAt: null } },
+            },
+            select: { id: true, name: true },
+          }),
+          transaction.radarCandidate.findFirst({
+            where: {
+              ...radarCandidateScope(actor),
+              hostNormalized: normalized.hostNormalized,
+              status: { notIn: ["REJECTED", "MERGED"] },
+            },
+            orderBy: { createdAt: "asc" },
+            select: { id: true },
+          }),
+        ]);
+        const features = emptyRadarFeatures(command);
+        const score = calculatePartnerScore({
+          features,
+          latestEvidence: null,
+          duplicateOrganization: duplicateOrganization !== null,
+          duplicateCandidate: duplicateCandidate !== null,
+          calculatedAt: now,
+        });
+        const created = await transaction.radarCandidate.create({
+          data: {
+            id: randomUUID(),
+            teamId,
+            createdById: actor.id,
+            name: command.name,
+            source: command.source,
+            inputUrl: command.url,
+            pageUrl: normalized.pageUrl,
             hostNormalized: normalized.hostNormalized,
-            status: { notIn: ["REJECTED", "MERGED"] },
+            status: "NEW",
+            featuresJson: serializeFeatures(features, null),
+            ...scoreColumns(score),
+            duplicateOrganizationId: duplicateOrganization?.id ?? null,
+            duplicateCandidateId: duplicateCandidate?.id ?? null,
+            scoreSnapshots: { create: scoreSnapshotData(score) },
           },
-          orderBy: { createdAt: "asc" },
-          select: { id: true },
-        }),
-      ]);
-      const features = emptyRadarFeatures(command);
-      const score = calculatePartnerScore({
-        features,
-        latestEvidence: null,
-        duplicateOrganization: duplicateOrganization !== null,
-        duplicateCandidate: duplicateCandidate !== null,
-        calculatedAt: now,
-      });
-      const created = await transaction.radarCandidate.create({
-        data: {
-          id: randomUUID(),
-          teamId,
-          createdById: actor.id,
-          name: command.name,
-          source: command.source,
-          inputUrl: command.url,
-          pageUrl: normalized.pageUrl,
-          hostNormalized: normalized.hostNormalized,
-          status: "NEW",
-          featuresJson: serializeFeatures(features, null),
-          ...scoreColumns(score),
-          duplicateOrganizationId: duplicateOrganization?.id ?? null,
-          duplicateCandidateId: duplicateCandidate?.id ?? null,
-          scoreSnapshots: { create: scoreSnapshotData(score) },
-        },
-        include: radarInclude,
-      });
-      const response = mapCandidate(created);
-      await recordMutation(transaction, actor.id, response, "radar.candidate-created", now);
-      await completeIdempotency(transaction, reservationId, response, now, 201);
-      return response;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+          include: radarInclude,
+        });
+        const response = mapCandidate(created);
+        await recordMutation(transaction, actor.id, response, "radar.candidate-created", now);
+        await completeIdempotency(transaction, reservationId, response, now, 201);
+        return response;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 
   async import(file: OrganizationImportFile, idempotencyKey: string): Promise<RadarImportResult> {
@@ -167,7 +170,13 @@ export class PostgresRadarService implements RadarPort {
       try {
         const normalized = normalizeRadarTarget(row.command.url);
         if (seen.has(normalized.hostNormalized)) {
-          rows.push({ rowNo: row.rowNo, status: "skipped", candidateId: null, hostNormalized: normalized.hostNormalized, message: "Домен уже встречался в этом файле" });
+          rows.push({
+            rowNo: row.rowNo,
+            status: "skipped",
+            candidateId: null,
+            hostNormalized: normalized.hostNormalized,
+            message: "Домен уже встречался в этом файле",
+          });
           continue;
         }
         seen.add(normalized.hostNormalized);
@@ -185,7 +194,13 @@ export class PostgresRadarService implements RadarPort {
               : "Кандидат добавлен",
         });
       } catch (error) {
-        rows.push({ rowNo: row.rowNo, status: "failed", candidateId: null, hostNormalized: null, message: error instanceof Error ? error.message : "Ошибка строки" });
+        rows.push({
+          rowNo: row.rowNo,
+          status: "failed",
+          candidateId: null,
+          hostNormalized: null,
+          message: error instanceof Error ? error.message : "Ошибка строки",
+        });
       }
     }
     return {
@@ -211,190 +226,216 @@ export class PostgresRadarService implements RadarPort {
     const requestHash = hash({ candidateId });
     const reservationId = randomUUID();
     const now = new Date();
-    return this.prisma.$transaction(async (transaction) => {
-      const replay = await reserveIdempotency(transaction, {
-        reservationId,
-        actorId: actor.id,
-        operation: `radar.inspect:${candidateId}`,
-        idempotencyKey,
-        requestHash,
-        now,
-      });
-      if (replay) return parseReplay(replay, idempotencyKey);
-      await lockCandidate(transaction, candidateId);
-      const current = await findCandidate(transaction, candidateId, actor);
-      assertMutable(current);
-      const evidence = {
-        id: randomUUID(),
-        pageUrl: observation.pageUrl,
-        status: observation.status,
-        playerType: observation.playerType,
-        detectedAt: observation.detectedAt.toISOString(),
-        method: observation.method,
-        confidence: observation.confidence,
-        httpStatus: observation.httpStatus,
-        playerFound: observation.playerFound,
-        embedUrl: observation.embedUrl,
-        errorCode: observation.errorCode,
-      } as const;
-      const currentFeatures = parseFeatures(current.featuresJson);
-      const features = observation.featureExtraction
-        ? mergeRadarFeatures(currentFeatures, observation.featureExtraction.features)
-        : currentFeatures;
-      const previousResearch = parseResearch(current.featuresJson);
-      const research = observation.featureExtraction
-        ? enrichRadarResearchWithChanges(previousResearch, observation.featureExtraction.research)
-        : previousResearch;
-      const score = calculatePartnerScore({
-        features,
-        latestEvidence: evidence,
-        duplicateOrganization: current.duplicateOrganizationId !== null,
-        duplicateCandidate: current.duplicateCandidateId !== null,
-        manualAdjustment: current.scoreManualAdjustment,
-        manualAdjustmentComment: current.scoreManualComment,
-        calculatedAt: now,
-      });
-      const updated = await transaction.radarCandidate.update({
-        where: { id: candidateId },
-        data: {
+    return this.prisma.$transaction(
+      async (transaction) => {
+        const replay = await reserveIdempotency(transaction, {
+          reservationId,
+          actorId: actor.id,
+          operation: `radar.inspect:${candidateId}`,
+          idempotencyKey,
+          requestHash,
+          now,
+        });
+        if (replay) return parseReplay(replay, idempotencyKey);
+        await lockCandidate(transaction, candidateId);
+        const current = await findCandidate(transaction, candidateId, actor);
+        assertMutable(current);
+        const evidence = {
+          id: randomUUID(),
           pageUrl: observation.pageUrl,
-          status: "READY",
-          featuresJson: serializeFeatures(features, research),
-          version: { increment: 1 },
-          ...scoreColumns(score),
-          evidence: {
-            create: {
-              id: evidence.id,
-              pageUrl: evidence.pageUrl,
-              status: evidence.status.toUpperCase(),
-              playerType: evidence.playerType,
-              detectedAt: observation.detectedAt,
-              method: evidence.method,
-              confidence: evidence.confidence.toUpperCase(),
-              httpStatus: evidence.httpStatus,
-              playerFound: evidence.playerFound,
-              embedUrl: evidence.embedUrl,
-              errorCode: evidence.errorCode,
+          status: observation.status,
+          playerType: observation.playerType,
+          detectedAt: observation.detectedAt.toISOString(),
+          method: observation.method,
+          confidence: observation.confidence,
+          httpStatus: observation.httpStatus,
+          playerFound: observation.playerFound,
+          embedUrl: observation.embedUrl,
+          errorCode: observation.errorCode,
+        } as const;
+        const currentFeatures = parseFeatures(current.featuresJson);
+        const features = observation.featureExtraction
+          ? mergeRadarFeatures(currentFeatures, observation.featureExtraction.features)
+          : currentFeatures;
+        const previousResearch = parseResearch(current.featuresJson);
+        const research = observation.featureExtraction
+          ? enrichRadarResearchWithChanges(previousResearch, observation.featureExtraction.research)
+          : previousResearch;
+        const score = calculatePartnerScore({
+          features,
+          latestEvidence: evidence,
+          duplicateOrganization: current.duplicateOrganizationId !== null,
+          duplicateCandidate: current.duplicateCandidateId !== null,
+          manualAdjustment: current.scoreManualAdjustment,
+          manualAdjustmentComment: current.scoreManualComment,
+          calculatedAt: now,
+        });
+        const updated = await transaction.radarCandidate.update({
+          where: { id: candidateId },
+          data: {
+            pageUrl: observation.pageUrl,
+            status: "READY",
+            featuresJson: serializeFeatures(features, research),
+            version: { increment: 1 },
+            ...scoreColumns(score),
+            evidence: {
+              create: {
+                id: evidence.id,
+                pageUrl: evidence.pageUrl,
+                status: evidence.status.toUpperCase(),
+                playerType: evidence.playerType,
+                detectedAt: observation.detectedAt,
+                method: evidence.method,
+                confidence: evidence.confidence.toUpperCase(),
+                httpStatus: evidence.httpStatus,
+                playerFound: evidence.playerFound,
+                embedUrl: evidence.embedUrl,
+                errorCode: evidence.errorCode,
+              },
             },
+            scoreSnapshots: { create: scoreSnapshotData(score) },
           },
-          scoreSnapshots: { create: scoreSnapshotData(score) },
-        },
-        include: radarInclude,
-      });
-      const response = mapCandidate(updated);
-      await recordMutation(transaction, actor.id, response, "radar.candidate-inspected", now);
-      await completeIdempotency(transaction, reservationId, response, now);
-      return response;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+          include: radarInclude,
+        });
+        const response = mapCandidate(updated);
+        await recordMutation(transaction, actor.id, response, "radar.candidate-inspected", now);
+        await completeIdempotency(transaction, reservationId, response, now);
+        return response;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 
-  async decide(candidateId: string, input: unknown, idempotencyKey: string): Promise<RadarCandidate> {
+  async decide(
+    candidateId: string,
+    input: unknown,
+    idempotencyKey: string,
+  ): Promise<RadarCandidate> {
     const command = parseRadarDecisionCommand(input);
     const requestHash = hash(command);
     const reservationId = randomUUID();
     const now = new Date();
-    return this.prisma.$transaction(async (transaction) => {
-      const actor = await this.actors.current(transaction);
-      const replay = await reserveIdempotency(transaction, {
-        reservationId,
-        actorId: actor.id,
-        operation: `radar.decide:${candidateId}`,
-        idempotencyKey,
-        requestHash,
-        now,
-      });
-      if (replay) return parseReplay(replay, idempotencyKey);
-      await lockCandidate(transaction, candidateId);
-      const current = await findCandidate(transaction, candidateId, actor);
-      assertMutable(current);
-      assertVersion(current.version, command.version);
-      const relationIds = await applyDecisionSideEffects(
-        transaction,
-        current,
-        command,
-        actor,
-        now,
-      );
-      const status = decisionStatus(command.decision);
-      const updated = await transaction.radarCandidate.update({
-        where: { id: candidateId },
-        data: {
-          status,
-          deferUntil: command.decision === "defer" && command.deferUntil
-            ? new Date(command.deferUntil)
-            : current.deferUntil,
-          rejectionReason: command.decision === "reject" ? command.reason : current.rejectionReason,
-          rejectionComment: command.decision === "reject" ? command.comment ?? null : current.rejectionComment,
-          mergedIntoCandidateId: command.decision === "merge" ? command.mergeTargetId : null,
-          acceptedOrganizationId: relationIds.organizationId,
-          acceptedOpportunityId: relationIds.opportunityId,
-          version: { increment: 1 },
-          decisions: {
-            create: {
-              id: randomUUID(),
-              actorId: actor.id,
-              decision: command.decision.toUpperCase(),
-              reason: command.reason,
-              comment: command.comment ?? null,
-              deferUntil: command.deferUntil ? new Date(command.deferUntil) : null,
-              mergeTargetId: command.mergeTargetId ?? null,
-              decidedAt: now,
+    return this.prisma.$transaction(
+      async (transaction) => {
+        const actor = await this.actors.current(transaction);
+        const replay = await reserveIdempotency(transaction, {
+          reservationId,
+          actorId: actor.id,
+          operation: `radar.decide:${candidateId}`,
+          idempotencyKey,
+          requestHash,
+          now,
+        });
+        if (replay) return parseReplay(replay, idempotencyKey);
+        await lockCandidate(transaction, candidateId);
+        const current = await findCandidate(transaction, candidateId, actor);
+        assertMutable(current);
+        assertVersion(current.version, command.version);
+        const relationIds = await applyDecisionSideEffects(
+          transaction,
+          current,
+          command,
+          actor,
+          now,
+        );
+        const status = decisionStatus(command.decision);
+        const updated = await transaction.radarCandidate.update({
+          where: { id: candidateId },
+          data: {
+            status,
+            deferUntil:
+              command.decision === "defer" && command.deferUntil
+                ? new Date(command.deferUntil)
+                : current.deferUntil,
+            rejectionReason:
+              command.decision === "reject" ? command.reason : current.rejectionReason,
+            rejectionComment:
+              command.decision === "reject" ? (command.comment ?? null) : current.rejectionComment,
+            mergedIntoCandidateId: command.decision === "merge" ? command.mergeTargetId : null,
+            acceptedOrganizationId: relationIds.organizationId,
+            acceptedOpportunityId: relationIds.opportunityId,
+            version: { increment: 1 },
+            decisions: {
+              create: {
+                id: randomUUID(),
+                actorId: actor.id,
+                decision: command.decision.toUpperCase(),
+                reason: command.reason,
+                comment: command.comment ?? null,
+                deferUntil: command.deferUntil ? new Date(command.deferUntil) : null,
+                mergeTargetId: command.mergeTargetId ?? null,
+                decidedAt: now,
+              },
             },
           },
-        },
-        include: radarInclude,
-      });
-      const response = mapCandidate(updated);
-      await recordMutation(transaction, actor.id, response, `radar.candidate-${command.decision}`, now);
-      await completeIdempotency(transaction, reservationId, response, now);
-      return response;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+          include: radarInclude,
+        });
+        const response = mapCandidate(updated);
+        await recordMutation(
+          transaction,
+          actor.id,
+          response,
+          `radar.candidate-${command.decision}`,
+          now,
+        );
+        await completeIdempotency(transaction, reservationId, response, now);
+        return response;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 
-  async adjustScore(candidateId: string, input: unknown, idempotencyKey: string): Promise<RadarCandidate> {
+  async adjustScore(
+    candidateId: string,
+    input: unknown,
+    idempotencyKey: string,
+  ): Promise<RadarCandidate> {
     const command = parseRadarScoreAdjustmentCommand(input);
     const requestHash = hash(command);
     const reservationId = randomUUID();
     const now = new Date();
-    return this.prisma.$transaction(async (transaction) => {
-      const actor = await this.actors.current(transaction);
-      const replay = await reserveIdempotency(transaction, {
-        reservationId,
-        actorId: actor.id,
-        operation: `radar.score:${candidateId}`,
-        idempotencyKey,
-        requestHash,
-        now,
-      });
-      if (replay) return parseReplay(replay, idempotencyKey);
-      await lockCandidate(transaction, candidateId);
-      const current = await findCandidate(transaction, candidateId, actor);
-      assertMutable(current);
-      assertVersion(current.version, command.version);
-      const latestEvidence = current.evidence.at(-1);
-      const score = calculatePartnerScore({
-        features: parseFeatures(current.featuresJson),
-        latestEvidence: latestEvidence ? mapEvidence(latestEvidence) : null,
-        duplicateOrganization: current.duplicateOrganizationId !== null,
-        duplicateCandidate: current.duplicateCandidateId !== null,
-        manualAdjustment: command.adjustment,
-        manualAdjustmentComment: command.comment,
-        calculatedAt: now,
-      });
-      const updated = await transaction.radarCandidate.update({
-        where: { id: candidateId },
-        data: {
-          version: { increment: 1 },
-          ...scoreColumns(score),
-          scoreSnapshots: { create: scoreSnapshotData(score) },
-        },
-        include: radarInclude,
-      });
-      const response = mapCandidate(updated);
-      await recordMutation(transaction, actor.id, response, "radar.score-adjusted", now);
-      await completeIdempotency(transaction, reservationId, response, now);
-      return response;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    return this.prisma.$transaction(
+      async (transaction) => {
+        const actor = await this.actors.current(transaction);
+        const replay = await reserveIdempotency(transaction, {
+          reservationId,
+          actorId: actor.id,
+          operation: `radar.score:${candidateId}`,
+          idempotencyKey,
+          requestHash,
+          now,
+        });
+        if (replay) return parseReplay(replay, idempotencyKey);
+        await lockCandidate(transaction, candidateId);
+        const current = await findCandidate(transaction, candidateId, actor);
+        assertMutable(current);
+        assertVersion(current.version, command.version);
+        const latestEvidence = current.evidence.at(-1);
+        const score = calculatePartnerScore({
+          features: parseFeatures(current.featuresJson),
+          latestEvidence: latestEvidence ? mapEvidence(latestEvidence) : null,
+          duplicateOrganization: current.duplicateOrganizationId !== null,
+          duplicateCandidate: current.duplicateCandidateId !== null,
+          manualAdjustment: command.adjustment,
+          manualAdjustmentComment: command.comment,
+          calculatedAt: now,
+        });
+        const updated = await transaction.radarCandidate.update({
+          where: { id: candidateId },
+          data: {
+            version: { increment: 1 },
+            ...scoreColumns(score),
+            scoreSnapshots: { create: scoreSnapshotData(score) },
+          },
+          include: radarInclude,
+        });
+        const response = mapCandidate(updated);
+        await recordMutation(transaction, actor.id, response, "radar.score-adjusted", now);
+        await completeIdempotency(transaction, reservationId, response, now);
+        return response;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 }
 
@@ -412,7 +453,11 @@ async function applyDecisionSideEffects(
       });
     }
     const target = await transaction.radarCandidate.findFirst({
-      where: { id: command.mergeTargetId, ...radarCandidateScope(actor), status: { not: "MERGED" } },
+      where: {
+        id: command.mergeTargetId,
+        ...radarCandidateScope(actor),
+        status: { not: "MERGED" },
+      },
       select: { id: true },
     });
     if (!target) {
@@ -447,10 +492,15 @@ async function applyDecisionSideEffects(
   const research = parseResearch(candidate.featuresJson);
   const brief = research?.brief ?? null;
   const decisionContacts = research?.decisionMakers.slice(0, 4) ?? [];
-  const claimedChannels = new Set(decisionContacts.flatMap(({ email, phone }) => [email, phone]).filter(Boolean));
-  const directContacts = research?.contacts
-    .filter(({ type, value }) => (type === "email" || type === "phone") && !claimedChannels.has(value))
-    .slice(0, Math.max(0, 4 - decisionContacts.length)) ?? [];
+  const claimedChannels = new Set(
+    decisionContacts.flatMap(({ email, phone }) => [email, phone]).filter(Boolean),
+  );
+  const directContacts =
+    research?.contacts
+      .filter(
+        ({ type, value }) => (type === "email" || type === "phone") && !claimedChannels.has(value),
+      )
+      .slice(0, Math.max(0, 4 - decisionContacts.length)) ?? [];
   const latestEvidence = candidate.evidence.at(-1);
   await transaction.organization.create({
     data: {
@@ -502,9 +552,10 @@ async function applyDecisionSideEffects(
     await transaction.contact.create({
       data: {
         id: randomUUID(),
-        fullName: lead.type === "email"
-          ? `Публичный email — ${candidate.name}`
-          : `Публичный телефон — ${candidate.name}`,
+        fullName:
+          lead.type === "email"
+            ? `Публичный email — ${candidate.name}`
+            : `Публичный телефон — ${candidate.name}`,
         email: lead.type === "email" ? lead.value : null,
         phone: lead.type === "phone" ? lead.value : null,
         source: `radar:${lead.sourceUrl}`,
@@ -537,7 +588,8 @@ async function applyDecisionSideEffects(
       score: candidate.scoreTotal,
       stageData: toJson({
         dataSource: candidate.source,
-        researchCheckedAt: research?.collectedAt ?? latestEvidence?.detectedAt.toISOString() ?? now.toISOString(),
+        researchCheckedAt:
+          research?.collectedAt ?? latestEvidence?.detectedAt.toISOString() ?? now.toISOString(),
         geography: features.geography ?? "Не определена",
         videoPlayerType: latestEvidence?.playerType ?? "Плеер не подтверждён",
         priorityReason: command.reason,
@@ -551,7 +603,10 @@ async function applyDecisionSideEffects(
       opportunityId,
       ownerId: actor.id,
       type: decisionContacts.length + directContacts.length > 0 ? "contact" : "research",
-      title: (brief?.nextAction ?? `Исследовать кандидата из Радара: ${candidate.name}`).slice(0, 200),
+      title: (brief?.nextAction ?? `Исследовать кандидата из Радара: ${candidate.name}`).slice(
+        0,
+        200,
+      ),
       dueAt,
       priorityScore: priority.score,
       priorityReasons: toJson(priority.reasons),
@@ -559,7 +614,10 @@ async function applyDecisionSideEffects(
       source: `radar:${candidate.id}`,
     },
   });
-  await transaction.opportunity.update({ where: { id: opportunityId }, data: { nextTaskId: taskId } });
+  await transaction.opportunity.update({
+    where: { id: opportunityId },
+    data: { nextTaskId: taskId },
+  });
   return { organizationId, opportunityId };
 }
 
@@ -631,7 +689,7 @@ function mapEvidence(evidence: DbRadarCandidate["evidence"][number]) {
     status: evidenceStatus(evidence.status),
     playerType: evidence.playerType,
     detectedAt: evidence.detectedAt.toISOString(),
-    method: evidence.method === "manual" ? "manual" as const : "l0-html" as const,
+    method: evidence.method === "manual" ? ("manual" as const) : ("l0-html" as const),
     confidence: confidence(evidence.confidence),
     httpStatus: evidence.httpStatus,
     playerFound: evidence.playerFound,
@@ -702,7 +760,8 @@ async function reserveIdempotency(
     },
   });
   if (!existing) throw new IdempotencyInProgressError(input.idempotencyKey);
-  if (existing.requestHash !== input.requestHash) throw new IdempotencyConflictError(input.idempotencyKey);
+  if (existing.requestHash !== input.requestHash)
+    throw new IdempotencyConflictError(input.idempotencyKey);
   if (existing.responseJson === null) throw new IdempotencyInProgressError(input.idempotencyKey);
   return existing.responseJson;
 }
@@ -765,7 +824,9 @@ function lockCandidate(transaction: Prisma.TransactionClient, candidateId: strin
 
 function assertMutable(candidate: DbRadarCandidate) {
   if (["ACCEPTED", "REJECTED", "MERGED"].includes(candidate.status)) {
-    throw new RadarCandidateStateError(`Кандидат уже находится в конечном статусе ${candidate.status.toLocaleLowerCase("en-US")}`);
+    throw new RadarCandidateStateError(
+      `Кандидат уже находится в конечном статусе ${candidate.status.toLocaleLowerCase("en-US")}`,
+    );
   }
 }
 
@@ -784,14 +845,29 @@ function parseReplay(value: Prisma.JsonValue, key: string): RadarCandidate {
   return {
     ...(value as unknown as RadarCandidate),
     research: isRecord(value.research)
-      ? { ...(value.research as unknown as RadarResearch), decisionMakers: Array.isArray(value.research.decisionMakers) ? value.research.decisionMakers as unknown as RadarResearch["decisionMakers"] : [] }
+      ? {
+          ...(value.research as unknown as RadarResearch),
+          decisionMakers: Array.isArray(value.research.decisionMakers)
+            ? (value.research.decisionMakers as unknown as RadarResearch["decisionMakers"])
+            : [],
+        }
       : null,
   };
 }
 
 function parseFeatures(value: Prisma.JsonValue): RadarCandidateFeatures {
   if (!isRecord(value)) {
-    return { topic: null, language: null, geography: null, publicationFrequency: "unknown", contactsFound: false, cms: null, estimatedVideoPagesMin: null, estimatedVideoPagesMax: null, trafficEstimate: null };
+    return {
+      topic: null,
+      language: null,
+      geography: null,
+      publicationFrequency: "unknown",
+      contactsFound: false,
+      cms: null,
+      estimatedVideoPagesMin: null,
+      estimatedVideoPagesMax: null,
+      trafficEstimate: null,
+    };
   }
   return value as unknown as RadarCandidateFeatures;
 }
@@ -808,11 +884,12 @@ function parseResearch(value: Prisma.JsonValue): RadarResearch | null {
     !Array.isArray(research.videoPages) ||
     !isRecord(research.brief) ||
     !Array.isArray(research.notes)
-  ) return null;
+  )
+    return null;
   return {
     ...(research as unknown as RadarResearch),
     decisionMakers: Array.isArray(research.decisionMakers)
-      ? research.decisionMakers as unknown as RadarResearch["decisionMakers"]
+      ? (research.decisionMakers as unknown as RadarResearch["decisionMakers"])
       : [],
   };
 }
@@ -822,20 +899,20 @@ function serializeFeatures(features: RadarCandidateFeatures, research: RadarRese
 }
 
 function parseFactors(value: Prisma.JsonValue): RadarScoreFactor[] {
-  return Array.isArray(value) ? value as unknown as RadarScoreFactor[] : [];
+  return Array.isArray(value) ? (value as unknown as RadarScoreFactor[]) : [];
 }
 
 function candidateStatus(value: string): RadarCandidateStatus {
   const normalized = value.toLocaleLowerCase("en-US");
   return ["new", "ready", "deferred", "rejected", "accepted", "merged"].includes(normalized)
-    ? normalized as RadarCandidateStatus
+    ? (normalized as RadarCandidateStatus)
     : "new";
 }
 
 function evidenceStatus(value: string): RadarEvidenceStatus {
   const normalized = value.toLocaleLowerCase("en-US");
   return ["found", "not_found", "blocked", "unknown"].includes(normalized)
-    ? normalized as RadarEvidenceStatus
+    ? (normalized as RadarEvidenceStatus)
     : "unknown";
 }
 

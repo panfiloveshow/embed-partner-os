@@ -39,9 +39,11 @@ export function MergeContactDialog({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !busy) onCancel();
       if (event.key !== "Tab") return;
-      const focusable = [...(dialogRef.current?.querySelectorAll<HTMLElement>(
-        "button:not(:disabled), select:not(:disabled), textarea:not(:disabled), input:not(:disabled)",
-      ) ?? [])];
+      const focusable = [
+        ...(dialogRef.current?.querySelectorAll<HTMLElement>(
+          "button:not(:disabled), select:not(:disabled), textarea:not(:disabled), input:not(:disabled)",
+        ) ?? []),
+      ];
       const first = focusable[0];
       const last = focusable.at(-1);
       if (!first || !last) return;
@@ -141,7 +143,9 @@ export function MergeContactDialog({
                   target.contact.phone,
                   target.contact.messenger,
                   ...target.organizationNames,
-                ].filter(Boolean).join(" · ")}
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               </small>
             </div>
           ) : null}
@@ -161,8 +165,8 @@ export function MergeContactDialog({
           <div className="merge-warning">
             <ShieldAlert size={19} aria-hidden="true" />
             <p>
-              Исходная запись не удалится. Её связи и взаимодействия перейдут к выбранному
-              контакту, а сам источник останется в истории с причиной слияния.
+              Исходная запись не удалится. Её связи и взаимодействия перейдут к выбранному контакту,
+              а сам источник останется в истории с причиной слияния.
             </p>
           </div>
 
@@ -176,7 +180,11 @@ export function MergeContactDialog({
             <span>Я проверил контакты и подтверждаю их объединение</span>
           </label>
 
-          {error ? <div className="form-error" role="alert">{error}</div> : null}
+          {error ? (
+            <div className="form-error" role="alert">
+              {error}
+            </div>
+          ) : null}
           <div className="dialog-actions">
             <button
               className="button button-secondary"

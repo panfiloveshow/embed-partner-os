@@ -52,11 +52,7 @@ export class TodayController {
     @Body() body: unknown,
     @Headers("idempotency-key") rawIdempotencyKey: string | undefined,
   ): Promise<TodayPayload> {
-    return this.todayService.completeTask(
-      taskId,
-      body,
-      parseIdempotencyKey(rawIdempotencyKey),
-    );
+    return this.todayService.completeTask(taskId, body, parseIdempotencyKey(rawIdempotencyKey));
   }
 
   @Post("tasks/:taskId/reschedule")
@@ -72,10 +68,6 @@ export class TodayController {
     @Body() body: unknown,
     @Headers("idempotency-key") rawIdempotencyKey: string | undefined,
   ): Promise<TodayPayload> {
-    return this.todayService.rescheduleTask(
-      taskId,
-      body,
-      parseIdempotencyKey(rawIdempotencyKey),
-    );
+    return this.todayService.rescheduleTask(taskId, body, parseIdempotencyKey(rawIdempotencyKey));
   }
 }

@@ -26,10 +26,7 @@ export class WeeklyReportScheduler {
   }
 }
 
-export function latestWeeklyReportRun(
-  now: Date,
-  formulaVersion = "weekly-v1",
-): WeeklyReportRun {
+export function latestWeeklyReportRun(now: Date, formulaVersion = "weekly-v1"): WeeklyReportRun {
   assertValidDate(now);
   const dueAt = mondayDueForMoscowWeek(now);
   const latestDueAt = now < dueAt ? new Date(dueAt.getTime() - WEEK_MS) : dueAt;
@@ -69,5 +66,6 @@ function formatMoscowDate(date: Date): string {
 }
 
 function assertValidDate(date: Date) {
-  if (Number.isNaN(date.getTime())) throw new RangeError("Scheduler clock returned an invalid date");
+  if (Number.isNaN(date.getTime()))
+    throw new RangeError("Scheduler clock returned an invalid date");
 }

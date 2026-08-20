@@ -15,8 +15,7 @@ export interface PriorityResult {
   reasons: PriorityReason[];
 }
 
-const clamp = (value: number, min: number, max: number) =>
-  Math.min(max, Math.max(min, value));
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 export function calculatePriority(input: PriorityFactors): PriorityResult {
   let score = 0;
@@ -92,4 +91,3 @@ function businessDayWord(value: number) {
   if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "дня";
   return "дней";
 }
-

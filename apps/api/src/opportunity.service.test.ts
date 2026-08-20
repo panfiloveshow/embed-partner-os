@@ -26,8 +26,9 @@ describe("OpportunityService", () => {
       nextAction: { id: "task-2", title: "Предоставить тестовый доступ" },
       riskFlags: ["overdue", "technical-risk"],
     });
-    expect(funnel.opportunities.find(({ id }) => id === "opp-task-13")?.riskFlags)
-      .toContain("waiting");
+    expect(funnel.opportunities.find(({ id }) => id === "opp-task-13")?.riskFlags).toContain(
+      "waiting",
+    );
   });
 
   it("moves to the next stage idempotently and rejects a stale version", async () => {
@@ -51,47 +52,73 @@ describe("OpportunityService", () => {
       }),
       version: 2,
     });
-    expect(today.getToday().actions.find(({ opportunityId }) => opportunityId === "opp-task-1"))
-      .toMatchObject({ stageCode: "S8", opportunityVersion: 2 });
-    await expect(service.transition("opp-task-1", {
-      version: 1,
-      toStageCode: "S9",
-      reason: "Устаревшая форма",
-    }, "stage-transition-0002")).rejects.toBeInstanceOf(OpportunityVersionConflictError);
+    expect(
+      today.getToday().actions.find(({ opportunityId }) => opportunityId === "opp-task-1"),
+    ).toMatchObject({ stageCode: "S8", opportunityVersion: 2 });
+    await expect(
+      service.transition(
+        "opp-task-1",
+        {
+          version: 1,
+          toStageCode: "S9",
+          reason: "Устаревшая форма",
+        },
+        "stage-transition-0002",
+      ),
+    ).rejects.toBeInstanceOf(OpportunityVersionConflictError);
   });
 
   it("blocks S9 until an active placement has a successful check", async () => {
     const today = new TodayService();
     const placements = new PlacementService(today, new SequenceChecker([healthyObservation()]));
     const service = new OpportunityService(today, placements, fixedClock);
-    await service.transition("opp-task-1", {
-      version: 1,
-      toStageCode: "S8",
-      reason: "Пилот начат",
-    }, "stage-transition-0010");
+    await service.transition(
+      "opp-task-1",
+      {
+        version: 1,
+        toStageCode: "S8",
+        reason: "Пилот начат",
+      },
+      "stage-transition-0010",
+    );
 
-    await expect(service.transition("opp-task-1", {
-      version: 2,
-      toStageCode: "S9",
-      reason: "Запуск",
-    }, "stage-transition-0011")).rejects.toMatchObject({ code: "BR-007" });
+    await expect(
+      service.transition(
+        "opp-task-1",
+        {
+          version: 2,
+          toStageCode: "S9",
+          reason: "Запуск",
+        },
+        "stage-transition-0011",
+      ),
+    ).rejects.toMatchObject({ code: "BR-007" });
 
-    const placement = placements.register({
-      organizationId: "org-task-1",
-      opportunityId: "opp-task-1",
-      pageUrl: "https://medianovosti.ru/active-rutube",
-      embedType: "video",
-      environment: "production",
-      businessStatus: "active",
-      launchedAt: "2026-08-18T08:00:00+03:00",
-    }, "placement-register-stage-0001");
+    const placement = placements.register(
+      {
+        organizationId: "org-task-1",
+        opportunityId: "opp-task-1",
+        pageUrl: "https://medianovosti.ru/active-rutube",
+        embedType: "video",
+        environment: "production",
+        businessStatus: "active",
+        launchedAt: "2026-08-18T08:00:00+03:00",
+      },
+      "placement-register-stage-0001",
+    );
     await placements.runL0Check(placement.id, "placement-check-stage-0001", "manual");
 
-    await expect(service.transition("opp-task-1", {
-      version: 2,
-      toStageCode: "S9",
-      reason: "Работоспособность подтверждена",
-    }, "stage-transition-0012")).resolves.toMatchObject({
+    await expect(
+      service.transition(
+        "opp-task-1",
+        {
+          version: 2,
+          toStageCode: "S9",
+          reason: "Работоспособность подтверждена",
+        },
+        "stage-transition-0012",
+      ),
+    ).resolves.toMatchObject({
       toStageCode: "S9",
       stageLabel: "Активный",
       version: 3,
@@ -103,11 +130,17 @@ describe("OpportunityService", () => {
     const placements = new PlacementService(today, new SequenceChecker([]));
     const service = new OpportunityService(today, placements, fixedClock);
 
-    await expect(service.transition("opp-task-9", {
-      version: 1,
-      toStageCode: "S3",
-      reason: "Первое письмо отправлено",
-    }, "stage-transition-required-0001")).rejects.toMatchObject({
+    await expect(
+      service.transition(
+        "opp-task-9",
+        {
+          version: 1,
+          toStageCode: "S3",
+          reason: "Первое письмо отправлено",
+        },
+        "stage-transition-required-0001",
+      ),
+    ).rejects.toMatchObject({
       code: "BR-003",
       fieldErrors: {
         interactionOutcome: "Зафиксируйте результат контакта",

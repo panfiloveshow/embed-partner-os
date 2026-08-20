@@ -5,10 +5,7 @@ import {
   parseUpdateSlaSettingsCommand,
   slaSettingsFromProcessDefinition,
 } from "@embed-os/domain";
-import {
-  IdempotencyConflictError,
-  slaSettingsRequestHash,
-} from "./application/idempotency.js";
+import { IdempotencyConflictError, slaSettingsRequestHash } from "./application/idempotency.js";
 import type { SlaSettingsPort } from "./sla-settings.port.js";
 
 export class SlaSettingsVersionConflictError extends Error {

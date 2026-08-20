@@ -7,12 +7,8 @@ import type {
 
 export type ImportResolutions = Record<number, "create" | "skip" | undefined>;
 
-export function unresolvedImportRows(
-  job: OrganizationImportJob,
-  resolutions: ImportResolutions,
-) {
-  return job.rows.filter((row) =>
-    row.decision === "conflict" && !resolutions[row.rowNo]);
+export function unresolvedImportRows(job: OrganizationImportJob, resolutions: ImportResolutions) {
+  return job.rows.filter((row) => row.decision === "conflict" && !resolutions[row.rowNo]);
 }
 
 export function buildImportCommand(
@@ -22,9 +18,7 @@ export function buildImportCommand(
   return {
     resolutions: job.rows.flatMap((row) => {
       const decision = resolutions[row.rowNo];
-      return row.decision === "conflict" && decision
-        ? [{ rowNo: row.rowNo, decision }]
-        : [];
+      return row.decision === "conflict" && decision ? [{ rowNo: row.rowNo, decision }] : [];
     }),
   };
 }

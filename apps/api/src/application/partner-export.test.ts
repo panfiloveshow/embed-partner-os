@@ -9,33 +9,41 @@ import {
 
 describe("partner export security boundary", () => {
   it("fails closed in production until the auth-proxy identity header is trusted", () => {
-    expect(() => resolveExportActor("oidc:user-1", {
-      nodeEnv: "production",
-      trustedIdentityHeader: "false",
-    })).toThrow(ExportIdentityConfigurationError);
-    expect(resolveExportActor("oidc:user-1", {
-      nodeEnv: "production",
-      trustedIdentityHeader: "true",
-    })).toBe("oidc:user-1");
+    expect(() =>
+      resolveExportActor("oidc:user-1", {
+        nodeEnv: "production",
+        trustedIdentityHeader: "false",
+      }),
+    ).toThrow(ExportIdentityConfigurationError);
+    expect(
+      resolveExportActor("oidc:user-1", {
+        nodeEnv: "production",
+        trustedIdentityHeader: "true",
+      }),
+    ).toBe("oidc:user-1");
   });
 
   it("rejects missing and malformed actor subjects", () => {
-    expect(() => resolveExportActor(undefined, { nodeEnv: "test" }))
-      .toThrow(ExportAuthenticationRequiredError);
-    expect(() => resolveExportActor("user\r\nx-admin: true", { nodeEnv: "test" }))
-      .toThrow(ExportAuthenticationRequiredError);
+    expect(() => resolveExportActor(undefined, { nodeEnv: "test" })).toThrow(
+      ExportAuthenticationRequiredError,
+    );
+    expect(() => resolveExportActor("user\r\nx-admin: true", { nodeEnv: "test" })).toThrow(
+      ExportAuthenticationRequiredError,
+    );
   });
 
   it("neutralizes spreadsheet formulas in every exported text cell", () => {
-    const csv = buildPartnerCsv([partner({
-      name: "=HYPERLINK(\"https://evil.invalid\")",
-      legalName: " +SUM(1,1)",
-      primaryDomain: "@malicious.invalid",
-    })]);
+    const csv = buildPartnerCsv([
+      partner({
+        name: '=HYPERLINK("https://evil.invalid")',
+        legalName: " +SUM(1,1)",
+        primaryDomain: "@malicious.invalid",
+      }),
+    ]);
 
-    expect(csv).toContain("\"'=HYPERLINK(\"\"https://evil.invalid\"\")\"");
-    expect(csv).toContain("\"' +SUM(1,1)\"");
-    expect(csv).toContain("\"'@malicious.invalid\"");
+    expect(csv).toContain('"\'=HYPERLINK(""https://evil.invalid"")"');
+    expect(csv).toContain('"\' +SUM(1,1)"');
+    expect(csv).toContain('"\'@malicious.invalid"');
   });
 });
 

@@ -45,9 +45,8 @@ export async function parseOrganizationImportFile(
   file: OrganizationImportFile,
 ): Promise<ParsedOrganizationImportFile> {
   const format = fileFormat(file.fileName);
-  const matrix = format === "csv"
-    ? parseCsv(file.buffer.toString("utf8"))
-    : await parseXlsx(file.buffer);
+  const matrix =
+    format === "csv" ? parseCsv(file.buffer.toString("utf8")) : await parseXlsx(file.buffer);
   if (matrix.length === 0) {
     throw new OrganizationImportFileError("IMPORT_EMPTY", "Файл не содержит строк");
   }
@@ -84,7 +83,10 @@ export function classifyOrganizationImportRows(
   existingOrganizations: ExistingImportOrganization[],
 ): OrganizationImportRow[] {
   const byDomain = new Map(
-    existingOrganizations.map((organization) => [normalizeDomain(organization.domain), organization]),
+    existingOrganizations.map((organization) => [
+      normalizeDomain(organization.domain),
+      organization,
+    ]),
   );
   const byName = new Map<string, ExistingImportOrganization[]>();
   for (const organization of existingOrganizations) {
@@ -179,7 +181,8 @@ export function normalizeDomain(value: string) {
       !hostname.includes(".") ||
       hostname === "localhost" ||
       /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname)
-    ) return "";
+    )
+      return "";
     return hostname;
   } catch {
     return "";
@@ -332,7 +335,8 @@ function validateHeaders(headers: string[], warnings: string[]) {
     );
   }
   const unknown = headers.filter((header) => header && !isImportField(header));
-  if (unknown.length > 0) warnings.push(`Неизвестные колонки проигнорированы: ${unknown.join(", ")}`);
+  if (unknown.length > 0)
+    warnings.push(`Неизвестные колонки проигнорированы: ${unknown.join(", ")}`);
 }
 
 function validateValues(values: OrganizationImportValues) {
@@ -394,12 +398,16 @@ function previewRow(input: {
 }
 
 function emptyValues(): OrganizationImportValues {
-  return Object.fromEntries(organizationImportFields.map((field) => [field, ""])) as
-    OrganizationImportValues;
+  return Object.fromEntries(
+    organizationImportFields.map((field) => [field, ""]),
+  ) as OrganizationImportValues;
 }
 
 function normalizeHeader(value: string) {
-  return value.trim().toLocaleLowerCase("en-US").replace(/[\s-]+/g, "_");
+  return value
+    .trim()
+    .toLocaleLowerCase("en-US")
+    .replace(/[\s-]+/g, "_");
 }
 
 function isImportField(value: string): value is OrganizationImportField {

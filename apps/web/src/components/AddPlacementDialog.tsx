@@ -28,8 +28,10 @@ export function AddPlacementDialog({
   const [contextId, setContextId] = useState(contexts[0]?.opportunityId ?? "");
   const [pageUrl, setPageUrl] = useState("");
   const [embedType, setEmbedType] = useState<RegisterPlacementCommand["embedType"]>("video");
-  const [environment, setEnvironment] = useState<RegisterPlacementCommand["environment"]>("production");
-  const [businessStatus, setBusinessStatus] = useState<RegisterPlacementCommand["businessStatus"]>("active");
+  const [environment, setEnvironment] =
+    useState<RegisterPlacementCommand["environment"]>("production");
+  const [businessStatus, setBusinessStatus] =
+    useState<RegisterPlacementCommand["businessStatus"]>("active");
   const [launchedAt, setLaunchedAt] = useState(toLocalDateTime(new Date()));
 
   useEffect(() => {
@@ -54,9 +56,13 @@ export function AddPlacementDialog({
   }
 
   return (
-    <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget && !busy) onCancel();
-    }}>
+    <div
+      className="dialog-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !busy) onCancel();
+      }}
+    >
       <section
         className="completion-dialog add-placement-dialog"
         role="dialog"
@@ -113,9 +119,12 @@ export function AddPlacementDialog({
 
               <label>
                 Тип embed
-                <select value={embedType} onChange={(event) => {
-                  setEmbedType(event.target.value as RegisterPlacementCommand["embedType"]);
-                }}>
+                <select
+                  value={embedType}
+                  onChange={(event) => {
+                    setEmbedType(event.target.value as RegisterPlacementCommand["embedType"]);
+                  }}
+                >
                   <option value="video">Видео</option>
                   <option value="live">Трансляция</option>
                   <option value="playlist">Плейлист</option>
@@ -124,9 +133,12 @@ export function AddPlacementDialog({
 
               <label>
                 Среда
-                <select value={environment} onChange={(event) => {
-                  setEnvironment(event.target.value as RegisterPlacementCommand["environment"]);
-                }}>
+                <select
+                  value={environment}
+                  onChange={(event) => {
+                    setEnvironment(event.target.value as RegisterPlacementCommand["environment"]);
+                  }}
+                >
                   <option value="production">Production</option>
                   <option value="staging">Staging</option>
                   <option value="test">Test</option>
@@ -135,9 +147,14 @@ export function AddPlacementDialog({
 
               <label>
                 Бизнес-статус
-                <select value={businessStatus} onChange={(event) => {
-                  setBusinessStatus(event.target.value as RegisterPlacementCommand["businessStatus"]);
-                }}>
+                <select
+                  value={businessStatus}
+                  onChange={(event) => {
+                    setBusinessStatus(
+                      event.target.value as RegisterPlacementCommand["businessStatus"],
+                    );
+                  }}
+                >
                   <option value="active">Активно</option>
                   <option value="planned">Запланировано</option>
                   <option value="paused">На паузе</option>
@@ -162,13 +179,26 @@ export function AddPlacementDialog({
             </div>
           )}
 
-          {error ? <div className="form-error" role="alert">{error}</div> : null}
+          {error ? (
+            <div className="form-error" role="alert">
+              {error}
+            </div>
+          ) : null}
 
           <div className="dialog-actions">
-            <button className="button button-secondary" type="button" onClick={onCancel} disabled={busy}>
+            <button
+              className="button button-secondary"
+              type="button"
+              onClick={onCancel}
+              disabled={busy}
+            >
               Отмена
             </button>
-            <button className="button button-primary" type="submit" disabled={busy || contexts.length === 0}>
+            <button
+              className="button button-primary"
+              type="submit"
+              disabled={busy || contexts.length === 0}
+            >
               {busy ? "Добавляем…" : "Добавить размещение"}
             </button>
           </div>

@@ -37,26 +37,16 @@ import { PartnerController } from "./partner.controller.js";
 import { PARTNER_PORT } from "./partner.port.js";
 import { PartnerService } from "./partner.service.js";
 import { PostgresPartnerService } from "./persistence/postgres-partner.service.js";
-import {
-  ACTOR_IDENTITY,
-  AccessControlGuard,
-  ActorIdentityService,
-} from "./auth/access-control.js";
+import { ACTOR_IDENTITY, AccessControlGuard, ActorIdentityService } from "./auth/access-control.js";
 import { SessionController } from "./auth/session.controller.js";
 import { SlaSettingsController } from "./sla-settings.controller.js";
 import { SLA_SETTINGS_PORT } from "./sla-settings.port.js";
 import { SlaSettingsService } from "./sla-settings.service.js";
 import { PostgresSlaSettingsService } from "./persistence/postgres-sla-settings.service.js";
-import {
-  EnvironmentOidcTokenVerifier,
-  OIDC_TOKEN_VERIFIER,
-} from "./auth/oidc-token-verifier.js";
+import { EnvironmentOidcTokenVerifier, OIDC_TOKEN_VERIFIER } from "./auth/oidc-token-verifier.js";
 import { AccessAdministrationController } from "./access-administration.controller.js";
 import { AccessAdministrationService } from "./access-administration.service.js";
-import {
-  ActorContextInterceptor,
-  ActorExecutionContext,
-} from "./auth/actor-execution-context.js";
+import { ActorContextInterceptor, ActorExecutionContext } from "./auth/actor-execution-context.js";
 import { PersistenceActorService } from "./persistence/persistence-actor.service.js";
 
 @Module({
@@ -122,7 +112,8 @@ import { PersistenceActorService } from "./persistence/persistence-actor.service
     },
     {
       provide: RADAR_INSPECTOR,
-      useFactory: () => new RadarPageInspector(undefined, undefined, trafficProviderFromEnvironment()),
+      useFactory: () =>
+        new RadarPageInspector(undefined, undefined, trafficProviderFromEnvironment()),
     },
     {
       provide: TODAY_PORT,
@@ -160,7 +151,7 @@ import { PersistenceActorService } from "./persistence/persistence-actor.service
       useFactory: (
         memory: OrganizationImportService,
         postgres: PostgresOrganizationImportService,
-      ) => process.env.PERSISTENCE_MODE === "postgres" ? postgres : memory,
+      ) => (process.env.PERSISTENCE_MODE === "postgres" ? postgres : memory),
     },
     {
       provide: RADAR_PORT,

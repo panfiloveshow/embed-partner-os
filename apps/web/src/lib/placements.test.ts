@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PlacementView } from "@embed-os/contracts";
-import {
-  filterPlacements,
-  sortPlacementChecks,
-  summarizePlacements,
-} from "./placements.js";
+import { filterPlacements, sortPlacementChecks, summarizePlacements } from "./placements.js";
 
 describe("placement registry model", () => {
   it("summarizes active placements without treating unchecked as healthy", () => {
@@ -26,16 +22,31 @@ describe("placement registry model", () => {
 
   it("filters by partner or URL, health status and environment", () => {
     const placements = [
-      { ...placement("healthy", "active"), organizationName: "Спорт Онлайн", pageUrl: "https://sport.ru/live" },
-      { ...placement("failed", "active"), organizationName: "Медиа Новости", pageUrl: "https://news.ru/video" },
-      { ...placement("healthy", "active"), organizationName: "Тест", pageUrl: "https://stage.ru", environment: "staging" as const },
+      {
+        ...placement("healthy", "active"),
+        organizationName: "Спорт Онлайн",
+        pageUrl: "https://sport.ru/live",
+      },
+      {
+        ...placement("failed", "active"),
+        organizationName: "Медиа Новости",
+        pageUrl: "https://news.ru/video",
+      },
+      {
+        ...placement("healthy", "active"),
+        organizationName: "Тест",
+        pageUrl: "https://stage.ru",
+        environment: "staging" as const,
+      },
     ];
 
-    expect(filterPlacements(placements, {
-      query: "новости",
-      status: "failed",
-      environment: "production",
-    }).map(({ organizationName }) => organizationName)).toEqual(["Медиа Новости"]);
+    expect(
+      filterPlacements(placements, {
+        query: "новости",
+        status: "failed",
+        environment: "production",
+      }).map(({ organizationName }) => organizationName),
+    ).toEqual(["Медиа Новости"]);
   });
 
   it("sorts health checks newest first without mutating the source", () => {

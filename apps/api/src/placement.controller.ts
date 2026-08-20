@@ -51,11 +51,7 @@ export class PlacementController {
     @Body() body: unknown,
     @Headers("idempotency-key") rawIdempotencyKey: string | undefined,
   ): PlacementView | Promise<PlacementView> {
-    return this.placements.update(
-      placementId,
-      body,
-      parseIdempotencyKey(rawIdempotencyKey),
-    );
+    return this.placements.update(placementId, body, parseIdempotencyKey(rawIdempotencyKey));
   }
 
   @Post(":placementId/archive")
@@ -69,11 +65,7 @@ export class PlacementController {
     @Body() body: unknown,
     @Headers("idempotency-key") rawIdempotencyKey: string | undefined,
   ): PlacementView | Promise<PlacementView> {
-    return this.placements.archive(
-      placementId,
-      body,
-      parseIdempotencyKey(rawIdempotencyKey),
-    );
+    return this.placements.archive(placementId, body, parseIdempotencyKey(rawIdempotencyKey));
   }
 
   @Post(":placementId/l0-checks")
@@ -96,7 +88,9 @@ export class PlacementController {
   @Get(":placementId/checks")
   @RequirePermission("placements.read")
   @ApiOperation({ summary: "Получить историю L0-проверок размещения" })
-  listChecks(@Param("placementId") placementId: string): HealthCheckView[] | Promise<HealthCheckView[]> {
+  listChecks(
+    @Param("placementId") placementId: string,
+  ): HealthCheckView[] | Promise<HealthCheckView[]> {
     return this.placements.listChecks(placementId);
   }
 }

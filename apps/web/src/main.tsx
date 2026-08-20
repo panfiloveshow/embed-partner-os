@@ -9,8 +9,6 @@ if (!root) throw new Error("Root element is missing");
 
 createRoot(root).render(
   <StrictMode>
-    <AuthenticationBoundary>
-      {({ logout }) => <App onLogout={logout} />}
-    </AuthenticationBoundary>
+    <AuthenticationBoundary>{({ logout }) => <App onLogout={logout} />}</AuthenticationBoundary>
   </StrictMode>,
 );

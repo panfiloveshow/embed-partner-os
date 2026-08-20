@@ -2,10 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CallHandler, ExecutionContext } from "@nestjs/common";
 import type { SessionPayload } from "@embed-os/contracts";
 import { delay, firstValueFrom, map, of } from "rxjs";
-import {
-  ActorContextInterceptor,
-  ActorExecutionContext,
-} from "./actor-execution-context.js";
+import { ActorContextInterceptor, ActorExecutionContext } from "./actor-execution-context.js";
 
 function actor(userId: string): SessionPayload {
   return {
@@ -47,10 +44,11 @@ describe("ActorExecutionContext", () => {
       switchToHttp: () => ({ getRequest: () => ({ actor: requestActor }) }),
     } as unknown as ExecutionContext;
     const next = {
-      handle: () => of(null).pipe(
-        delay(1),
-        map(() => context.current()?.userId),
-      ),
+      handle: () =>
+        of(null).pipe(
+          delay(1),
+          map(() => context.current()?.userId),
+        ),
     } satisfies CallHandler;
 
     await expect(firstValueFrom(interceptor.intercept(execution, next))).resolves.toBe("user-3");

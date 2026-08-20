@@ -18,11 +18,7 @@ export interface OutboxRelayStore {
     batchSize: number;
     eventTypes?: readonly string[];
   }): Promise<OutboxEnvelope[]>;
-  markPublished(input: {
-    eventId: string;
-    workerId: string;
-    publishedAt: Date;
-  }): Promise<void>;
+  markPublished(input: { eventId: string; workerId: string; publishedAt: Date }): Promise<void>;
   markFailed(input: {
     eventId: string;
     workerId: string;
@@ -99,10 +95,7 @@ export class OutboxRelayService {
   }
 
   private retryDelay(attempts: number) {
-    return Math.min(
-      this.baseRetryMs * 2 ** Math.max(0, attempts - 1),
-      this.maxRetryMs,
-    );
+    return Math.min(this.baseRetryMs * 2 ** Math.max(0, attempts - 1), this.maxRetryMs);
   }
 }
 

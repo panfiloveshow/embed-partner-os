@@ -18,7 +18,8 @@ export function SettingsPage({ teamName }: SettingsPageProps) {
           onClick={() => setSection("sla")}
           aria-current={section === "sla" ? "page" : undefined}
         >
-          <Clock3 size={16} aria-hidden="true" />SLA и эскалации
+          <Clock3 size={16} aria-hidden="true" />
+          SLA и эскалации
         </button>
         <button
           type="button"
@@ -26,12 +27,15 @@ export function SettingsPage({ teamName }: SettingsPageProps) {
           onClick={() => setSection("access")}
           aria-current={section === "access" ? "page" : undefined}
         >
-          <ShieldCheck size={16} aria-hidden="true" />Роли и доступ
+          <ShieldCheck size={16} aria-hidden="true" />
+          Роли и доступ
         </button>
       </nav>
-      {section === "sla"
-        ? <SlaSettingsPage teamName={teamName} />
-        : <AccessManagementPage teamName={teamName} />}
+      {section === "sla" ? (
+        <SlaSettingsPage teamName={teamName} />
+      ) : (
+        <AccessManagementPage teamName={teamName} />
+      )}
     </div>
   );
 }

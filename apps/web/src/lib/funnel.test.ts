@@ -9,12 +9,14 @@ const opportunities: FunnelOpportunity[] = [
 
 describe("funnel selectors", () => {
   it("combines search, stage, owner and risk filters", () => {
-    expect(filterFunnel(opportunities, {
-      query: "медиа",
-      stageCode: "S7",
-      ownerId: "user-1",
-      risk: "technical-risk",
-    }).map(({ id }) => id)).toEqual(["opp-1"]);
+    expect(
+      filterFunnel(opportunities, {
+        query: "медиа",
+        stageCode: "S7",
+        ownerId: "user-1",
+        risk: "technical-risk",
+      }).map(({ id }) => id),
+    ).toEqual(["opp-1"]);
   });
 
   it("summarizes operational risks", () => {

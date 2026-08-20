@@ -1,12 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma, TaskStatus } from "@prisma/client";
-import type {
-  ActionGroup,
-  PriorityReason,
-  TodayAction,
-  TodayPayload,
-} from "@embed-os/contracts";
+import type { ActionGroup, PriorityReason, TodayAction, TodayPayload } from "@embed-os/contracts";
 import {
   assertLaterDeadline,
   parseOpportunityStageData,
@@ -156,11 +151,12 @@ export class PostgresTodayService implements TodayPort {
 
     return {
       generatedAt: now.toISOString(),
-      teamName: actor.scopeMode === "all"
-        ? "Все команды"
-        : actor.scopeMode === "team"
-          ? actor.teamName ?? "Без команды"
-          : actor.displayName,
+      teamName:
+        actor.scopeMode === "all"
+          ? "Все команды"
+          : actor.scopeMode === "team"
+            ? (actor.teamName ?? "Без команды")
+            : actor.displayName,
       currentUser: {
         id: actor.id,
         name: actor.displayName,
@@ -190,12 +186,7 @@ export class PostgresTodayService implements TodayPort {
       select: { id: true },
     });
     if (!visible) throw new TaskNotFoundError(taskId);
-    await this.completionService.complete(
-      taskId,
-      actor.id,
-      input,
-      idempotencyKey,
-    );
+    await this.completionService.complete(taskId, actor.id, input, idempotencyKey);
     return this.getToday();
   }
 

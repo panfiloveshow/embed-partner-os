@@ -82,9 +82,31 @@ const permissionGroups: Array<{
   label: string;
   permissions: ActorPermission[];
 }> = [
-  { label: "Работа с партнёрами", permissions: ["today.read", "tasks.write", "partners.read", "partners.write", "partners.export", "partners.export.audit"] },
-  { label: "Данные и воронка", permissions: ["contacts.view", "contacts.write", "opportunities.read", "opportunities.stage.write", "imports.organizations.write"] },
-  { label: "Радар и размещения", permissions: ["radar.read", "radar.write", "placements.read", "placements.write"] },
+  {
+    label: "Работа с партнёрами",
+    permissions: [
+      "today.read",
+      "tasks.write",
+      "partners.read",
+      "partners.write",
+      "partners.export",
+      "partners.export.audit",
+    ],
+  },
+  {
+    label: "Данные и воронка",
+    permissions: [
+      "contacts.view",
+      "contacts.write",
+      "opportunities.read",
+      "opportunities.stage.write",
+      "imports.organizations.write",
+    ],
+  },
+  {
+    label: "Радар и размещения",
+    permissions: ["radar.read", "radar.write", "placements.read", "placements.write"],
+  },
   { label: "Отчёты и система", permissions: ["reports.view", "reports.generate", "system.admin"] },
 ];
 
@@ -111,27 +133,34 @@ export function AccessManagementPage({ teamName }: AccessManagementPageProps) {
     mutation.current = null;
   }, []);
 
-  const applyPayload = useCallback((next: AccessAdministrationPayload) => {
-    setPayload(next);
-    const nextSelected = next.users.find(({ id }) => id === selectedIdRef.current)
-      ?? next.users.find(({ currentUser }) => !currentUser)
-      ?? next.users[0]
-      ?? null;
-    if (nextSelected) selectUser(nextSelected);
-  }, [selectUser]);
+  const applyPayload = useCallback(
+    (next: AccessAdministrationPayload) => {
+      setPayload(next);
+      const nextSelected =
+        next.users.find(({ id }) => id === selectedIdRef.current) ??
+        next.users.find(({ currentUser }) => !currentUser) ??
+        next.users[0] ??
+        null;
+      if (nextSelected) selectUser(nextSelected);
+    },
+    [selectUser],
+  );
 
-  const load = useCallback(async (signal?: AbortSignal) => {
-    setLoading(true);
-    setError(null);
-    try {
-      applyPayload(await fetchAccessAdministration(signal));
-    } catch (loadError) {
-      if (loadError instanceof DOMException && loadError.name === "AbortError") return;
-      setError(messageFor(loadError));
-    } finally {
-      if (!signal?.aborted) setLoading(false);
-    }
-  }, [applyPayload]);
+  const load = useCallback(
+    async (signal?: AbortSignal) => {
+      setLoading(true);
+      setError(null);
+      try {
+        applyPayload(await fetchAccessAdministration(signal));
+      } catch (loadError) {
+        if (loadError instanceof DOMException && loadError.name === "AbortError") return;
+        setError(messageFor(loadError));
+      } finally {
+        if (!signal?.aborted) setLoading(false);
+      }
+    },
+    [applyPayload],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -143,11 +172,13 @@ export function AccessManagementPage({ teamName }: AccessManagementPageProps) {
     () => payload?.users.find(({ id }) => id === selectedId) ?? null,
     [payload, selectedId],
   );
-  const dirty = Boolean(selected && draft && (
-    selected.role !== draft.role ||
-    selected.status !== draft.status ||
-    sorted(selected.permissions) !== sorted(draft.permissions)
-  ));
+  const dirty = Boolean(
+    selected &&
+    draft &&
+    (selected.role !== draft.role ||
+      selected.status !== draft.status ||
+      sorted(selected.permissions) !== sorted(draft.permissions)),
+  );
 
   async function save() {
     if (!payload || !selected || !draft || selected.currentUser) return;
@@ -167,13 +198,16 @@ export function AccessManagementPage({ teamName }: AccessManagementPageProps) {
     setNotice(null);
     try {
       const updated = await updateAccessUser(selected.id, command, mutation.current.key);
-      const users = payload.users.map((user) => user.id === updated.id ? updated : user);
+      const users = payload.users.map((user) => (user.id === updated.id ? updated : user));
       setPayload({ ...payload, users });
       selectUser(updated);
       setNotice(`Доступ пользователя ${updated.displayName} обновлён.`);
       mutation.current = null;
     } catch (saveError) {
-      if (saveError instanceof ApiError && saveError.problem.code === "ACCESS_USER_VERSION_CONFLICT") {
+      if (
+        saveError instanceof ApiError &&
+        saveError.problem.code === "ACCESS_USER_VERSION_CONFLICT"
+      ) {
         mutation.current = null;
         setNotice("Права уже изменил другой администратор. Загружена актуальная версия.");
         await load();
@@ -221,8 +255,9 @@ export function AccessManagementPage({ teamName }: AccessManagementPageProps) {
     setNotice(null);
     try {
       const created = await createAccessUser(command, createMutation.current.key);
-      const users = [...payload.users, created]
-        .sort((left, right) => left.displayName.localeCompare(right.displayName, "ru"));
+      const users = [...payload.users, created].sort((left, right) =>
+        left.displayName.localeCompare(right.displayName, "ru"),
+      );
       setPayload({ ...payload, users });
       selectUser(created);
       setCreating(false);
@@ -238,31 +273,43 @@ export function AccessManagementPage({ teamName }: AccessManagementPageProps) {
 
   function changeRole(role: ActorRole) {
     if (!payload) return;
-    setDraft((current) => current ? {
-      ...current,
-      role,
-      permissions: [...payload.roleDefaults[role]],
-    } : current);
+    setDraft((current) =>
+      current
+        ? {
+            ...current,
+            role,
+            permissions: [...payload.roleDefaults[role]],
+          }
+        : current,
+    );
     mutation.current = null;
   }
 
   function togglePermission(permission: ActorPermission) {
-    setDraft((current) => current ? {
-      ...current,
-      permissions: current.permissions.includes(permission)
-        ? current.permissions.filter((candidate) => candidate !== permission)
-        : [...current.permissions, permission],
-    } : current);
+    setDraft((current) =>
+      current
+        ? {
+            ...current,
+            permissions: current.permissions.includes(permission)
+              ? current.permissions.filter((candidate) => candidate !== permission)
+              : [...current.permissions, permission],
+          }
+        : current,
+    );
     mutation.current = null;
   }
 
   function changeCreateRole(role: ActorRole) {
     if (!payload) return;
-    setCreateDraft((current) => current ? {
-      ...current,
-      role,
-      permissions: [...payload.roleDefaults[role]],
-    } : current);
+    setCreateDraft((current) =>
+      current
+        ? {
+            ...current,
+            role,
+            permissions: [...payload.roleDefaults[role]],
+          }
+        : current,
+    );
     createMutation.current = null;
   }
 
@@ -277,97 +324,349 @@ export function AccessManagementPage({ teamName }: AccessManagementPageProps) {
           <label className="team-select">
             <UsersRound size={17} aria-hidden="true" />
             <span className="sr-only">Команда</span>
-            <select value={teamName} onChange={() => undefined}><option>{teamName}</option></select>
+            <select value={teamName} onChange={() => undefined}>
+              <option>{teamName}</option>
+            </select>
           </label>
-          <button className="button button-secondary" type="button" onClick={beginCreate} disabled={loading || creating}>
-            <UserPlus size={16} aria-hidden="true" />Добавить пользователя
+          <button
+            className="button button-secondary"
+            type="button"
+            onClick={beginCreate}
+            disabled={loading || creating}
+          >
+            <UserPlus size={16} aria-hidden="true" />
+            Добавить пользователя
           </button>
           <button
             className="button button-primary"
             type="button"
             onClick={() => void save()}
-            disabled={saving || !dirty || !draft || draft.reason.trim().length < 5 || selected?.currentUser}
+            disabled={
+              saving || !dirty || !draft || draft.reason.trim().length < 5 || selected?.currentUser
+            }
           >
-            <Save size={16} aria-hidden="true" />{saving ? "Сохраняем…" : "Сохранить доступ"}
+            <Save size={16} aria-hidden="true" />
+            {saving ? "Сохраняем…" : "Сохранить доступ"}
           </button>
         </div>
       </header>
 
-      {notice ? <div className="operation-notice" role="status"><CheckCircle2 size={17} aria-hidden="true" /><span>{notice}</span></div> : null}
+      {notice ? (
+        <div className="operation-notice" role="status">
+          <CheckCircle2 size={17} aria-hidden="true" />
+          <span>{notice}</span>
+        </div>
+      ) : null}
       {error ? (
         <div className="sla-settings-error" role="alert">
-          <AlertTriangle size={18} aria-hidden="true" /><span>{error}</span>
-          <button className="button button-secondary" type="button" onClick={() => void load()}><RefreshCw size={15} aria-hidden="true" />Повторить</button>
+          <AlertTriangle size={18} aria-hidden="true" />
+          <span>{error}</span>
+          <button className="button button-secondary" type="button" onClick={() => void load()}>
+            <RefreshCw size={15} aria-hidden="true" />
+            Повторить
+          </button>
         </div>
       ) : null}
 
       {creating && createDraft && payload ? (
-        <form className="access-create-panel" onSubmit={(event) => { event.preventDefault(); void submitCreate(); }}>
+        <form
+          className="access-create-panel"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submitCreate();
+          }}
+        >
           <div className="access-create-head">
-            <div><span className="access-editor-icon"><UserPlus size={20} aria-hidden="true" /></span><div><h2>Новый корпоративный пользователь</h2><p>Subject должен точно совпасть с claim <code>sub</code> в OIDC-токене.</p></div></div>
-            <button className="icon-button" type="button" aria-label="Закрыть форму" onClick={() => { setCreating(false); setCreateDraft(null); }}><X size={18} aria-hidden="true" /></button>
+            <div>
+              <span className="access-editor-icon">
+                <UserPlus size={20} aria-hidden="true" />
+              </span>
+              <div>
+                <h2>Новый корпоративный пользователь</h2>
+                <p>
+                  Subject должен точно совпасть с claim <code>sub</code> в OIDC-токене.
+                </p>
+              </div>
+            </div>
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="Закрыть форму"
+              onClick={() => {
+                setCreating(false);
+                setCreateDraft(null);
+              }}
+            >
+              <X size={18} aria-hidden="true" />
+            </button>
           </div>
           <div className="access-create-fields">
-            <label><span>OIDC subject</span><input required minLength={3} maxLength={255} autoComplete="off" placeholder="00u123… или corp:ivan.petrov" value={createDraft.subject} onChange={(event) => setCreateDraft((current) => current ? { ...current, subject: event.target.value } : current)} /></label>
-            <label><span>Имя</span><input required minLength={2} maxLength={200} autoComplete="name" placeholder="Иван Петров" value={createDraft.displayName} onChange={(event) => setCreateDraft((current) => current ? { ...current, displayName: event.target.value } : current)} /></label>
-            <label><span>Корпоративный email</span><input required type="email" maxLength={254} autoComplete="email" placeholder="ivan.petrov@company.ru" value={createDraft.email} onChange={(event) => setCreateDraft((current) => current ? { ...current, email: event.target.value } : current)} /></label>
-            <label><span>Команда</span><select value={createDraft.teamId ?? ""} onChange={(event) => setCreateDraft((current) => current ? { ...current, teamId: event.target.value || null } : current)}><option value="">Без команды</option>{payload.teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>
-            <label><span>Роль</span><select value={createDraft.role} onChange={(event) => changeCreateRole(event.target.value as ActorRole)}>{payload.roles.map((role) => <option value={role} key={role}>{roleLabels[role]}</option>)}</select></label>
-            <label><span>Причина регистрации</span><input required minLength={5} maxLength={1_000} placeholder="Например: участник пилота" value={createDraft.reason} onChange={(event) => setCreateDraft((current) => current ? { ...current, reason: event.target.value } : current)} /></label>
+            <label>
+              <span>OIDC subject</span>
+              <input
+                required
+                minLength={3}
+                maxLength={255}
+                autoComplete="off"
+                placeholder="00u123… или corp:ivan.petrov"
+                value={createDraft.subject}
+                onChange={(event) =>
+                  setCreateDraft((current) =>
+                    current ? { ...current, subject: event.target.value } : current,
+                  )
+                }
+              />
+            </label>
+            <label>
+              <span>Имя</span>
+              <input
+                required
+                minLength={2}
+                maxLength={200}
+                autoComplete="name"
+                placeholder="Иван Петров"
+                value={createDraft.displayName}
+                onChange={(event) =>
+                  setCreateDraft((current) =>
+                    current ? { ...current, displayName: event.target.value } : current,
+                  )
+                }
+              />
+            </label>
+            <label>
+              <span>Корпоративный email</span>
+              <input
+                required
+                type="email"
+                maxLength={254}
+                autoComplete="email"
+                placeholder="ivan.petrov@company.ru"
+                value={createDraft.email}
+                onChange={(event) =>
+                  setCreateDraft((current) =>
+                    current ? { ...current, email: event.target.value } : current,
+                  )
+                }
+              />
+            </label>
+            <label>
+              <span>Команда</span>
+              <select
+                value={createDraft.teamId ?? ""}
+                onChange={(event) =>
+                  setCreateDraft((current) =>
+                    current ? { ...current, teamId: event.target.value || null } : current,
+                  )
+                }
+              >
+                <option value="">Без команды</option>
+                {payload.teams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Роль</span>
+              <select
+                value={createDraft.role}
+                onChange={(event) => changeCreateRole(event.target.value as ActorRole)}
+              >
+                {payload.roles.map((role) => (
+                  <option value={role} key={role}>
+                    {roleLabels[role]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Причина регистрации</span>
+              <input
+                required
+                minLength={5}
+                maxLength={1_000}
+                placeholder="Например: участник пилота"
+                value={createDraft.reason}
+                onChange={(event) =>
+                  setCreateDraft((current) =>
+                    current ? { ...current, reason: event.target.value } : current,
+                  )
+                }
+              />
+            </label>
           </div>
-          <div className="access-create-actions"><span>{createDraft.permissions.length} разрешений по роли</span><button className="button button-primary" type="submit" disabled={saving || createDraft.subject.trim().length < 3 || createDraft.displayName.trim().length < 2 || createDraft.reason.trim().length < 5}><UserPlus size={16} aria-hidden="true" />{saving ? "Регистрируем…" : "Зарегистрировать"}</button></div>
+          <div className="access-create-actions">
+            <span>{createDraft.permissions.length} разрешений по роли</span>
+            <button
+              className="button button-primary"
+              type="submit"
+              disabled={
+                saving ||
+                createDraft.subject.trim().length < 3 ||
+                createDraft.displayName.trim().length < 2 ||
+                createDraft.reason.trim().length < 5
+              }
+            >
+              <UserPlus size={16} aria-hidden="true" />
+              {saving ? "Регистрируем…" : "Зарегистрировать"}
+            </button>
+          </div>
         </form>
       ) : null}
 
       {loading ? (
-        <section className="sla-settings-loading" aria-live="polite"><span className="loader" aria-hidden="true" /><p>Загружаем матрицу доступа…</p></section>
+        <section className="sla-settings-loading" aria-live="polite">
+          <span className="loader" aria-hidden="true" />
+          <p>Загружаем матрицу доступа…</p>
+        </section>
       ) : payload && selected && draft ? (
         <div className="access-settings-layout">
           <section className="access-user-list" aria-label="Пользователи">
-            <div className="access-user-list-head"><strong>Пользователи</strong><span>{payload.users.length}</span></div>
+            <div className="access-user-list-head">
+              <strong>Пользователи</strong>
+              <span>{payload.users.length}</span>
+            </div>
             {payload.users.map((user) => (
               <button
                 type="button"
                 key={user.id}
-                className={user.id === selected.id ? "access-user-row access-user-row-active" : "access-user-row"}
+                className={
+                  user.id === selected.id
+                    ? "access-user-row access-user-row-active"
+                    : "access-user-row"
+                }
                 onClick={() => selectUser(user)}
                 aria-pressed={user.id === selected.id}
               >
                 <span className="access-user-avatar">{initials(user.displayName)}</span>
-                <span><strong>{user.displayName}</strong><small>{roleLabels[user.role]}</small></span>
-                <i className={user.status === "active" ? "access-status access-status-active" : "access-status"} aria-label={user.status === "active" ? "Активен" : "Отключён"} />
+                <span>
+                  <strong>{user.displayName}</strong>
+                  <small>{roleLabels[user.role]}</small>
+                </span>
+                <i
+                  className={
+                    user.status === "active"
+                      ? "access-status access-status-active"
+                      : "access-status"
+                  }
+                  aria-label={user.status === "active" ? "Активен" : "Отключён"}
+                />
               </button>
             ))}
           </section>
 
           <section className="access-editor">
             <div className="access-editor-head">
-              <div><span className="access-editor-icon"><UserRoundCheck size={20} aria-hidden="true" /></span><div><h2>{selected.displayName}</h2><p>{selected.email}</p></div></div>
-              <span className={selected.status === "active" ? "access-state-badge access-state-active" : "access-state-badge"}>{selected.status === "active" ? "Активен" : "Отключён"}</span>
+              <div>
+                <span className="access-editor-icon">
+                  <UserRoundCheck size={20} aria-hidden="true" />
+                </span>
+                <div>
+                  <h2>{selected.displayName}</h2>
+                  <p>{selected.email}</p>
+                </div>
+              </div>
+              <span
+                className={
+                  selected.status === "active"
+                    ? "access-state-badge access-state-active"
+                    : "access-state-badge"
+                }
+              >
+                {selected.status === "active" ? "Активен" : "Отключён"}
+              </span>
             </div>
             {selected.currentUser ? (
-              <div className="access-self-note"><ShieldCheck size={17} aria-hidden="true" /><span>Это ваша учётная запись. Самостоятельное изменение доступа заблокировано.</span></div>
+              <div className="access-self-note">
+                <ShieldCheck size={17} aria-hidden="true" />
+                <span>
+                  Это ваша учётная запись. Самостоятельное изменение доступа заблокировано.
+                </span>
+              </div>
             ) : null}
             <div className="access-primary-fields">
-              <label><span>Роль</span><select value={draft.role} disabled={selected.currentUser} onChange={(event) => changeRole(event.target.value as ActorRole)}>{payload.roles.map((role) => <option value={role} key={role}>{roleLabels[role]}</option>)}</select></label>
-              <label><span>Статус</span><select value={draft.status} disabled={selected.currentUser} onChange={(event) => setDraft((current) => current ? { ...current, status: event.target.value as AccessUserStatus } : current)}><option value="active">Активен</option><option value="inactive">Отключён</option></select></label>
-              <label><span>Команда</span><input value={selected.teamName ?? "Без команды"} readOnly /></label>
+              <label>
+                <span>Роль</span>
+                <select
+                  value={draft.role}
+                  disabled={selected.currentUser}
+                  onChange={(event) => changeRole(event.target.value as ActorRole)}
+                >
+                  {payload.roles.map((role) => (
+                    <option value={role} key={role}>
+                      {roleLabels[role]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Статус</span>
+                <select
+                  value={draft.status}
+                  disabled={selected.currentUser}
+                  onChange={(event) =>
+                    setDraft((current) =>
+                      current
+                        ? { ...current, status: event.target.value as AccessUserStatus }
+                        : current,
+                    )
+                  }
+                >
+                  <option value="active">Активен</option>
+                  <option value="inactive">Отключён</option>
+                </select>
+              </label>
+              <label>
+                <span>Команда</span>
+                <input value={selected.teamName ?? "Без команды"} readOnly />
+              </label>
             </div>
-            <div className="access-permissions-head"><div><h3>Разрешения</h3><p>Роль задаёт стартовый набор, отдельные права можно уточнить.</p></div><span>{draft.permissions.length} из {payload.permissions.length}</span></div>
+            <div className="access-permissions-head">
+              <div>
+                <h3>Разрешения</h3>
+                <p>Роль задаёт стартовый набор, отдельные права можно уточнить.</p>
+              </div>
+              <span>
+                {draft.permissions.length} из {payload.permissions.length}
+              </span>
+            </div>
             <div className="access-permission-groups">
               {permissionGroups.map((group) => (
                 <fieldset key={group.label}>
                   <legend>{group.label}</legend>
                   {group.permissions.map((permission) => (
                     <label key={permission}>
-                      <input type="checkbox" checked={draft.permissions.includes(permission)} disabled={selected.currentUser || draft.role === "admin"} onChange={() => togglePermission(permission)} />
-                      <span><b>{permissionLabels[permission]}</b><small>{permission}</small></span>
+                      <input
+                        type="checkbox"
+                        checked={draft.permissions.includes(permission)}
+                        disabled={selected.currentUser || draft.role === "admin"}
+                        onChange={() => togglePermission(permission)}
+                      />
+                      <span>
+                        <b>{permissionLabels[permission]}</b>
+                        <small>{permission}</small>
+                      </span>
                     </label>
                   ))}
                 </fieldset>
               ))}
             </div>
-            <label className="access-reason-field"><span>Причина изменения</span><textarea value={draft.reason} disabled={selected.currentUser} maxLength={1_000} placeholder="Например: перевод в другую функцию или отзыв доступа" onChange={(event) => setDraft((current) => current ? { ...current, reason: event.target.value } : current)} /><small>Обязательно для аудита, минимум 5 символов</small></label>
+            <label className="access-reason-field">
+              <span>Причина изменения</span>
+              <textarea
+                value={draft.reason}
+                disabled={selected.currentUser}
+                maxLength={1_000}
+                placeholder="Например: перевод в другую функцию или отзыв доступа"
+                onChange={(event) =>
+                  setDraft((current) =>
+                    current ? { ...current, reason: event.target.value } : current,
+                  )
+                }
+              />
+              <small>Обязательно для аудита, минимум 5 символов</small>
+            </label>
           </section>
         </div>
       ) : null}
@@ -384,7 +683,13 @@ function sorted(values: string[]) {
 }
 
 function initials(name: string) {
-  return name.trim().split(/\s+/u).slice(0, 2).map((part) => part[0] ?? "").join("").toLocaleUpperCase("ru-RU");
+  return name
+    .trim()
+    .split(/\s+/u)
+    .slice(0, 2)
+    .map((part) => part[0] ?? "")
+    .join("")
+    .toLocaleUpperCase("ru-RU");
 }
 
 function createIdempotencyKey() {

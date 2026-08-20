@@ -6,13 +6,22 @@ import {
 } from "@embed-os/contracts";
 import { DomainRuleError } from "./task-completion.js";
 
-const STAGE_CODES = new Set<OpportunityStageCode>(
-  opportunityStageCatalog.map(({ code }) => code),
-);
+const STAGE_CODES = new Set<OpportunityStageCode>(opportunityStageCatalog.map(({ code }) => code));
 const WORKING_STAGES: OpportunityStageCode[] = [
-  "S0", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "S10",
+  "S0",
+  "S1",
+  "S2",
+  "S3",
+  "S4",
+  "S5",
+  "S6",
+  "S7",
+  "S8",
+  "S9",
+  "S10",
 ];
-const ISO_WITH_TIMEZONE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/;
+const ISO_WITH_TIMEZONE =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/;
 
 export interface OpportunityStageReadinessFacts {
   primaryDomain: string | null;
@@ -96,9 +105,10 @@ export function assertOpportunityTransitionAllowed(
   }
   if (!allowed.includes(toStageCode)) {
     throw stageError({
-      toStageCode: allowed.length > 0
-        ? `Допустимые переходы: ${allowed.join(", ")}`
-        : "Из этой стадии переходы запрещены",
+      toStageCode:
+        allowed.length > 0
+          ? `Допустимые переходы: ${allowed.join(", ")}`
+          : "Из этой стадии переходы запрещены",
     });
   }
 }
@@ -179,10 +189,13 @@ export function assertOpportunityStageReady(
     if (!facts.hasNextAction) fieldErrors.nextAction = "Создайте следующее действие";
   }
   if (toStageCode === "S3") {
-    if (!facts.hasContactOrChannel) fieldErrors.contactOrChannel = "Укажите контакт или канал связи";
-    if (!facts.latestInteraction?.occurredAt) fieldErrors.interactionAt = "Зафиксируйте дату контакта";
+    if (!facts.hasContactOrChannel)
+      fieldErrors.contactOrChannel = "Укажите контакт или канал связи";
+    if (!facts.latestInteraction?.occurredAt)
+      fieldErrors.interactionAt = "Зафиксируйте дату контакта";
     if (!facts.latestInteraction?.type) fieldErrors.interactionType = "Укажите тип взаимодействия";
-    if (!facts.latestInteraction?.outcome) fieldErrors.interactionOutcome = "Зафиксируйте результат контакта";
+    if (!facts.latestInteraction?.outcome)
+      fieldErrors.interactionOutcome = "Зафиксируйте результат контакта";
     if (!facts.hasNextAction) fieldErrors.nextAction = "Создайте следующий шаг";
   }
   if (toStageCode === "S4") {
@@ -211,7 +224,8 @@ export function assertOpportunityStageReady(
     if (!facts.hasHealthyMonitoredPlacement) {
       fieldErrors.monitoring = "Получите успешную L0-проверку активного размещения";
     }
-    if (!facts.hasPlacementOwner) fieldErrors.responsible = "Назначьте ответственного за размещение";
+    if (!facts.hasPlacementOwner)
+      fieldErrors.responsible = "Назначьте ответственного за размещение";
   }
 
   if (Object.keys(fieldErrors).length > 0) {
@@ -265,8 +279,14 @@ function optionalTextList(
     throw stageError({ [field]: `Передайте список не более чем из ${maxItems} значений` });
   }
   const normalized = value.map((item) => {
-    if (typeof item !== "string" || item.trim().length === 0 || item.trim().length > maxItemLength) {
-      throw stageError({ [field]: `Каждое значение обязательно, не более ${maxItemLength} символов` });
+    if (
+      typeof item !== "string" ||
+      item.trim().length === 0 ||
+      item.trim().length > maxItemLength
+    ) {
+      throw stageError({
+        [field]: `Каждое значение обязательно, не более ${maxItemLength} символов`,
+      });
     }
     return item.trim();
   });
@@ -278,7 +298,8 @@ function optionalHttpUrl(value: unknown, field: string): string | undefined {
   if (!normalized) return undefined;
   try {
     const url = new URL(normalized);
-    if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("unsupported protocol");
+    if (url.protocol !== "http:" && url.protocol !== "https:")
+      throw new Error("unsupported protocol");
     return url.toString();
   } catch {
     throw stageError({ [field]: "Укажите корректный HTTP(S) URL" });
@@ -294,9 +315,7 @@ function optionalEmbedType(value: unknown): OpportunityStageData["embedType"] {
 }
 
 function compact<T extends object>(value: T): T {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, item]) => item !== undefined),
-  ) as T;
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
 }
 
 function requiredDate(value: unknown, field: string) {
@@ -307,7 +326,11 @@ function requiredDate(value: unknown, field: string) {
 
 function optionalDate(value: unknown, field: string): string | undefined {
   if (value === undefined || value === null || value === "") return undefined;
-  if (typeof value !== "string" || !ISO_WITH_TIMEZONE.test(value) || Number.isNaN(Date.parse(value))) {
+  if (
+    typeof value !== "string" ||
+    !ISO_WITH_TIMEZONE.test(value) ||
+    Number.isNaN(Date.parse(value))
+  ) {
     throw stageError({ [field]: "Укажите ISO 8601 дату и время с часовым поясом" });
   }
   return new Date(value).toISOString();

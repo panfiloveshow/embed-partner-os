@@ -16,11 +16,7 @@ import {
   type OpportunityRiskFlag,
 } from "@embed-os/contracts";
 import { ApiError, fetchFunnel } from "../lib/api";
-import {
-  filterFunnel,
-  summarizeFunnel,
-  type FunnelFilters,
-} from "../lib/funnel";
+import { filterFunnel, summarizeFunnel, type FunnelFilters } from "../lib/funnel";
 
 interface FunnelPageProps {
   teamName: string;
@@ -68,17 +64,19 @@ export function FunnelPage({ teamName, onOpenOpportunity }: FunnelPageProps) {
   }, [load]);
 
   const opportunities = payload?.opportunities ?? [];
-  const filtered = useMemo(
-    () => filterFunnel(opportunities, filters),
-    [opportunities, filters],
-  );
+  const filtered = useMemo(() => filterFunnel(opportunities, filters), [opportunities, filters]);
   const summary = useMemo(() => summarizeFunnel(opportunities), [opportunities]);
-  const owners = useMemo(() => [...new Map(
-    opportunities.map(({ owner }) => [owner.id, owner]),
-  ).values()].sort((left, right) => left.name.localeCompare(right.name, "ru")), [opportunities]);
-  const visibleStages = opportunityStageCatalog.filter((stage) =>
-    opportunities.some(({ stageCode }) => stageCode === stage.code) ||
-    filters.stageCode === stage.code,
+  const owners = useMemo(
+    () =>
+      [...new Map(opportunities.map(({ owner }) => [owner.id, owner])).values()].sort(
+        (left, right) => left.name.localeCompare(right.name, "ru"),
+      ),
+    [opportunities],
+  );
+  const visibleStages = opportunityStageCatalog.filter(
+    (stage) =>
+      opportunities.some(({ stageCode }) => stageCode === stage.code) ||
+      filters.stageCode === stage.code,
   );
   const hasFilters = Object.entries(filters).some(([key, value]) =>
     key === "query" ? value !== "" : value !== "all",
@@ -112,11 +110,7 @@ export function FunnelPage({ teamName, onOpenOpportunity }: FunnelPageProps) {
               <Columns3 size={16} aria-hidden="true" />
               Канбан
             </button>
-            <button
-              type="button"
-              aria-pressed={view === "table"}
-              onClick={() => setView("table")}
-            >
+            <button type="button" aria-pressed={view === "table"} onClick={() => setView("table")}>
               <List size={16} aria-hidden="true" />
               Таблица
             </button>
@@ -127,7 +121,11 @@ export function FunnelPage({ teamName, onOpenOpportunity }: FunnelPageProps) {
       <section className="funnel-summary" aria-label="Состояние воронки">
         <SummaryMetric label="Активные" value={summary.active} tone="active" />
         <SummaryMetric label="Просрочены" value={summary.overdue} tone="overdue" />
-        <SummaryMetric label="Без следующего шага" value={summary.missingNextAction} tone="missing" />
+        <SummaryMetric
+          label="Без следующего шага"
+          value={summary.missingNextAction}
+          tone="missing"
+        />
         <SummaryMetric label="Технический риск" value={summary.technicalRisk} tone="technical" />
       </section>
 
@@ -138,7 +136,9 @@ export function FunnelPage({ teamName, onOpenOpportunity }: FunnelPageProps) {
           <input
             type="search"
             value={filters.query}
-            onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
+            onChange={(event) =>
+              setFilters((current) => ({ ...current, query: event.target.value }))
+            }
             placeholder="Партнёр, домен или действие"
           />
         </label>
@@ -147,14 +147,18 @@ export function FunnelPage({ teamName, onOpenOpportunity }: FunnelPageProps) {
           <select
             aria-label="Стадия"
             value={filters.stageCode}
-            onChange={(event) => setFilters((current) => ({
-              ...current,
-              stageCode: event.target.value as FunnelFilters["stageCode"],
-            }))}
+            onChange={(event) =>
+              setFilters((current) => ({
+                ...current,
+                stageCode: event.target.value as FunnelFilters["stageCode"],
+              }))
+            }
           >
             <option value="all">Все стадии</option>
             {opportunityStageCatalog.map(({ code, label }) => (
-              <option key={code} value={code}>{code} · {label}</option>
+              <option key={code} value={code}>
+                {code} · {label}
+              </option>
             ))}
           </select>
         </label>
@@ -163,13 +167,19 @@ export function FunnelPage({ teamName, onOpenOpportunity }: FunnelPageProps) {
           <select
             aria-label="Ответственный"
             value={filters.ownerId}
-            onChange={(event) => setFilters((current) => ({
-              ...current,
-              ownerId: event.target.value,
-            }))}
+            onChange={(event) =>
+              setFilters((current) => ({
+                ...current,
+                ownerId: event.target.value,
+              }))
+            }
           >
             <option value="all">Все ответственные</option>
-            {owners.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
+            {owners.map(({ id, name }) => (
+              <option key={id} value={id}>
+                {name}
+              </option>
+            ))}
           </select>
         </label>
         <label>
@@ -177,14 +187,18 @@ export function FunnelPage({ teamName, onOpenOpportunity }: FunnelPageProps) {
           <select
             aria-label="Риск"
             value={filters.risk}
-            onChange={(event) => setFilters((current) => ({
-              ...current,
-              risk: event.target.value as FunnelFilters["risk"],
-            }))}
+            onChange={(event) =>
+              setFilters((current) => ({
+                ...current,
+                risk: event.target.value as FunnelFilters["risk"],
+              }))
+            }
           >
             <option value="all">Все риски</option>
             {Object.entries(riskLabels).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
+              <option key={value} value={value}>
+                {label}
+              </option>
             ))}
           </select>
         </label>
@@ -216,7 +230,11 @@ export function FunnelPage({ teamName, onOpenOpportunity }: FunnelPageProps) {
           <h2>Ничего не найдено</h2>
           <p>Измените фильтры или очистите поиск.</p>
           {hasFilters ? (
-            <button className="button button-secondary" type="button" onClick={() => setFilters(defaultFilters)}>
+            <button
+              className="button button-secondary"
+              type="button"
+              onClick={() => setFilters(defaultFilters)}
+            >
               Сбросить фильтры
             </button>
           ) : null}
@@ -226,24 +244,36 @@ export function FunnelPage({ teamName, onOpenOpportunity }: FunnelPageProps) {
           {visibleStages.map((stage) => {
             const items = filtered.filter(({ stageCode }) => stageCode === stage.code);
             if (filters.stageCode === "all" && items.length === 0) return null;
-            const totalAtStage = payload?.stageCounts.find(({ code }) => code === stage.code)?.count ?? 0;
+            const totalAtStage =
+              payload?.stageCounts.find(({ code }) => code === stage.code)?.count ?? 0;
             return (
-              <section className="funnel-column" key={stage.code} aria-labelledby={`stage-${stage.code}`}>
+              <section
+                className="funnel-column"
+                key={stage.code}
+                aria-labelledby={`stage-${stage.code}`}
+              >
                 <header>
                   <span className="funnel-stage-code">{stage.code}</span>
                   <h2 id={`stage-${stage.code}`}>{stage.label}</h2>
-                  <span className="funnel-stage-count" aria-label={`${items.length} из ${totalAtStage}`}>
+                  <span
+                    className="funnel-stage-count"
+                    aria-label={`${items.length} из ${totalAtStage}`}
+                  >
                     {hasFilters ? `${items.length}/${totalAtStage}` : totalAtStage}
                   </span>
                 </header>
                 <div className="funnel-card-list">
-                  {items.length > 0 ? items.map((opportunity) => (
-                    <OpportunityCard
-                      key={opportunity.id}
-                      opportunity={opportunity}
-                      onOpen={onOpenOpportunity}
-                    />
-                  )) : <p className="funnel-column-empty">Нет возможностей</p>}
+                  {items.length > 0 ? (
+                    items.map((opportunity) => (
+                      <OpportunityCard
+                        key={opportunity.id}
+                        opportunity={opportunity}
+                        onOpen={onOpenOpportunity}
+                      />
+                    ))
+                  ) : (
+                    <p className="funnel-column-empty">Нет возможностей</p>
+                  )}
                 </div>
               </section>
             );
@@ -262,11 +292,7 @@ export function FunnelPage({ teamName, onOpenOpportunity }: FunnelPageProps) {
   );
 }
 
-function SummaryMetric({
-  label,
-  value,
-  tone,
-}: { label: string; value: number; tone: string }) {
+function SummaryMetric({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
     <article className={`funnel-summary-item funnel-summary-${tone}`}>
       <span>{label}</span>
@@ -278,7 +304,10 @@ function SummaryMetric({
 function OpportunityCard({
   opportunity,
   onOpen,
-}: { opportunity: FunnelOpportunity; onOpen: (id: string) => void }) {
+}: {
+  opportunity: FunnelOpportunity;
+  onOpen: (id: string) => void;
+}) {
   return (
     <article className="funnel-card">
       <div className="funnel-card-heading">
@@ -291,18 +320,26 @@ function OpportunityCard({
         </span>
       </div>
       <div className="funnel-owner">
-        <span className="funnel-owner-avatar" aria-hidden="true">{initials(opportunity.owner.name)}</span>
+        <span className="funnel-owner-avatar" aria-hidden="true">
+          {initials(opportunity.owner.name)}
+        </span>
         <span>{opportunity.owner.name}</span>
-        {opportunity.stageAgeDays !== null ? <small>{opportunity.stageAgeDays} дн. на стадии</small> : null}
+        {opportunity.stageAgeDays !== null ? (
+          <small>{opportunity.stageAgeDays} дн. на стадии</small>
+        ) : null}
       </div>
       <div className="funnel-next-action">
         <span>Следующее действие</span>
         {opportunity.nextAction ? (
           <>
             <strong>{opportunity.nextAction.title}</strong>
-            <time dateTime={opportunity.nextAction.dueAt}>{formatDate(opportunity.nextAction.dueAt)}</time>
+            <time dateTime={opportunity.nextAction.dueAt}>
+              {formatDate(opportunity.nextAction.dueAt)}
+            </time>
           </>
-        ) : <strong className="funnel-no-action">Не назначено</strong>}
+        ) : (
+          <strong className="funnel-no-action">Не назначено</strong>
+        )}
       </div>
       <RiskBadges flags={opportunity.riskFlags} />
       <button className="funnel-open-button" type="button" onClick={() => onOpen(opportunity.id)}>
@@ -316,7 +353,10 @@ function OpportunityCard({
 function FunnelTable({
   opportunities,
   onOpen,
-}: { opportunities: FunnelOpportunity[]; onOpen: (id: string) => void }) {
+}: {
+  opportunities: FunnelOpportunity[];
+  onOpen: (id: string) => void;
+}) {
   return (
     <section className="funnel-table-frame" aria-label="Таблица воронки">
       <div className="funnel-table-scroll">
@@ -329,7 +369,9 @@ function FunnelTable({
               <th>Ответственный</th>
               <th>Следующее действие</th>
               <th>Риски</th>
-              <th><span className="sr-only">Действие</span></th>
+              <th>
+                <span className="sr-only">Действие</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -343,7 +385,9 @@ function FunnelTable({
                   <span className="funnel-table-stage">{opportunity.stageCode}</span>
                   {opportunity.stageLabel}
                 </td>
-                <td data-label="Скор"><span className="funnel-score">{opportunity.partnerScore}</span></td>
+                <td data-label="Скор">
+                  <span className="funnel-score">{opportunity.partnerScore}</span>
+                </td>
                 <td data-label="Ответственный">{opportunity.owner.name}</td>
                 <td data-label="Следующее действие">
                   {opportunity.nextAction ? (
@@ -353,9 +397,13 @@ function FunnelTable({
                         {formatDate(opportunity.nextAction.dueAt)}
                       </time>
                     </>
-                  ) : <span className="funnel-no-action">Не назначено</span>}
+                  ) : (
+                    <span className="funnel-no-action">Не назначено</span>
+                  )}
                 </td>
-                <td data-label="Риски"><RiskBadges flags={opportunity.riskFlags} /></td>
+                <td data-label="Риски">
+                  <RiskBadges flags={opportunity.riskFlags} />
+                </td>
                 <td>
                   <button
                     className="funnel-table-open"
@@ -381,9 +429,9 @@ function RiskBadges({ flags }: { flags: OpportunityRiskFlag[] }) {
     <div className="funnel-risks">
       {flags.map((flag) => (
         <span className={`funnel-risk funnel-risk-${flag}`} key={flag}>
-          {flag === "overdue" || flag === "technical-risk"
-            ? <AlertTriangle size={11} aria-hidden="true" />
-            : null}
+          {flag === "overdue" || flag === "technical-risk" ? (
+            <AlertTriangle size={11} aria-hidden="true" />
+          ) : null}
           {riskLabels[flag]}
         </span>
       ))}
@@ -392,7 +440,12 @@ function RiskBadges({ flags }: { flags: OpportunityRiskFlag[] }) {
 }
 
 function initials(name: string) {
-  return name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toLocaleUpperCase("ru");
+  return name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toLocaleUpperCase("ru");
 }
 
 function formatDate(value: string) {

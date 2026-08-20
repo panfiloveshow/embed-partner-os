@@ -24,17 +24,20 @@ export function filterPlacements(
 ): PlacementView[] {
   const query = filters.query.trim().toLocaleLowerCase("ru");
   return placements.filter((placement) => {
-    const matchesQuery = !query ||
+    const matchesQuery =
+      !query ||
       placement.organizationName.toLocaleLowerCase("ru").includes(query) ||
       placement.pageUrl.toLocaleLowerCase("ru").includes(query);
     const matchesStatus = filters.status === "all" || placement.healthStatus === filters.status;
-    const matchesEnvironment = filters.environment === "all" ||
-      placement.environment === filters.environment;
+    const matchesEnvironment =
+      filters.environment === "all" || placement.environment === filters.environment;
     return matchesQuery && matchesStatus && matchesEnvironment;
   });
 }
 
-export function sortPlacementChecks<T extends Pick<HealthCheckView, "checkedAt">>(checks: T[]): T[] {
+export function sortPlacementChecks<T extends Pick<HealthCheckView, "checkedAt">>(
+  checks: T[],
+): T[] {
   return [...checks].sort(
     (left, right) => new Date(right.checkedAt).getTime() - new Date(left.checkedAt).getTime(),
   );

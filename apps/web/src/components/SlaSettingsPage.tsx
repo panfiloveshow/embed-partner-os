@@ -45,18 +45,21 @@ export function SlaSettingsPage({ teamName }: SlaSettingsPageProps) {
     });
   }, []);
 
-  const load = useCallback(async (signal?: AbortSignal) => {
-    setLoading(true);
-    setError(null);
-    try {
-      applySettings(await fetchSlaSettings(signal));
-    } catch (loadError) {
-      if (loadError instanceof DOMException && loadError.name === "AbortError") return;
-      setError(messageFor(loadError));
-    } finally {
-      if (!signal?.aborted) setLoading(false);
-    }
-  }, [applySettings]);
+  const load = useCallback(
+    async (signal?: AbortSignal) => {
+      setLoading(true);
+      setError(null);
+      try {
+        applySettings(await fetchSlaSettings(signal));
+      } catch (loadError) {
+        if (loadError instanceof DOMException && loadError.name === "AbortError") return;
+        setError(messageFor(loadError));
+      } finally {
+        if (!signal?.aborted) setLoading(false);
+      }
+    },
+    [applySettings],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -102,11 +105,13 @@ export function SlaSettingsPage({ teamName }: SlaSettingsPageProps) {
     }
   }
 
-  const dirty = Boolean(settings && draft && (
-    draft.escalationAfterDays !== settings.escalationAfterDays ||
-    draft.reason.trim().length > 0 ||
-    settings.stages.some(({ code, thresholdDays }) => draft.thresholds[code] !== thresholdDays)
-  ));
+  const dirty = Boolean(
+    settings &&
+    draft &&
+    (draft.escalationAfterDays !== settings.escalationAfterDays ||
+      draft.reason.trim().length > 0 ||
+      settings.stages.some(({ code, thresholdDays }) => draft.thresholds[code] !== thresholdDays)),
+  );
 
   return (
     <main className="main-area sla-settings-main">
@@ -139,7 +144,14 @@ export function SlaSettingsPage({ teamName }: SlaSettingsPageProps) {
         <div className="operation-notice" role="status">
           <CheckCircle2 size={17} aria-hidden="true" />
           <span>{notice}</span>
-          <button className="icon-button" type="button" onClick={() => setNotice(null)} aria-label="Скрыть уведомление">×</button>
+          <button
+            className="icon-button"
+            type="button"
+            onClick={() => setNotice(null)}
+            aria-label="Скрыть уведомление"
+          >
+            ×
+          </button>
         </div>
       ) : null}
 
@@ -148,7 +160,8 @@ export function SlaSettingsPage({ teamName }: SlaSettingsPageProps) {
           <AlertTriangle size={18} aria-hidden="true" />
           <span>{error}</span>
           <button className="button button-secondary" type="button" onClick={() => void load()}>
-            <RefreshCw size={15} aria-hidden="true" />Повторить
+            <RefreshCw size={15} aria-hidden="true" />
+            Повторить
           </button>
         </div>
       ) : null}
@@ -163,15 +176,23 @@ export function SlaSettingsPage({ teamName }: SlaSettingsPageProps) {
           <section className="sla-settings-panel">
             <div className="sla-settings-panel-head">
               <div>
-                <span className="sla-settings-icon"><Clock3 size={18} aria-hidden="true" /></span>
-                <div><h2>Порог бездействия</h2><p>Через сколько дней без активности создать задачу владельцу.</p></div>
+                <span className="sla-settings-icon">
+                  <Clock3 size={18} aria-hidden="true" />
+                </span>
+                <div>
+                  <h2>Порог бездействия</h2>
+                  <p>Через сколько дней без активности создать задачу владельцу.</p>
+                </div>
               </div>
               <span className="sla-version">Версия {settings.version}</span>
             </div>
             <div className="sla-stage-grid">
               {settings.stages.map((stage) => (
                 <label className="sla-stage-field" key={stage.code}>
-                  <span><b>{stage.code}</b>{stage.label}</span>
+                  <span>
+                    <b>{stage.code}</b>
+                    {stage.label}
+                  </span>
                   <span className="sla-number-input">
                     <input
                       type="number"
@@ -179,13 +200,19 @@ export function SlaSettingsPage({ teamName }: SlaSettingsPageProps) {
                       max={365}
                       step={1}
                       value={draft.thresholds[stage.code]}
-                      onChange={(event) => setDraft((current) => current ? {
-                        ...current,
-                        thresholds: {
-                          ...current.thresholds,
-                          [stage.code]: Number(event.target.value),
-                        },
-                      } : current)}
+                      onChange={(event) =>
+                        setDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                thresholds: {
+                                  ...current.thresholds,
+                                  [stage.code]: Number(event.target.value),
+                                },
+                              }
+                            : current,
+                        )
+                      }
                       aria-label={`Порог стадии ${stage.label}, дней`}
                     />
                     <small>дн.</small>
@@ -199,8 +226,13 @@ export function SlaSettingsPage({ teamName }: SlaSettingsPageProps) {
             <section className="sla-settings-panel sla-escalation-panel">
               <div className="sla-settings-panel-head">
                 <div>
-                  <span className="sla-settings-icon sla-settings-icon-warning"><AlertTriangle size={18} aria-hidden="true" /></span>
-                  <div><h2>Эскалация</h2><p>Срок после первого предупреждения владельцу.</p></div>
+                  <span className="sla-settings-icon sla-settings-icon-warning">
+                    <AlertTriangle size={18} aria-hidden="true" />
+                  </span>
+                  <div>
+                    <h2>Эскалация</h2>
+                    <p>Срок после первого предупреждения владельцу.</p>
+                  </div>
                 </div>
               </div>
               <label className="sla-escalation-field">
@@ -212,10 +244,16 @@ export function SlaSettingsPage({ teamName }: SlaSettingsPageProps) {
                     max={365}
                     step={1}
                     value={draft.escalationAfterDays}
-                    onChange={(event) => setDraft((current) => current ? {
-                      ...current,
-                      escalationAfterDays: Number(event.target.value),
-                    } : current)}
+                    onChange={(event) =>
+                      setDraft((current) =>
+                        current
+                          ? {
+                              ...current,
+                              escalationAfterDays: Number(event.target.value),
+                            }
+                          : current,
+                      )
+                    }
                     aria-label="Срок эскалации, дней"
                   />
                   <small>дн.</small>
@@ -226,14 +264,28 @@ export function SlaSettingsPage({ teamName }: SlaSettingsPageProps) {
             <section className="sla-settings-panel">
               <div className="sla-settings-panel-head">
                 <div>
-                  <span className="sla-settings-icon"><ShieldCheck size={18} aria-hidden="true" /></span>
-                  <div><h2>Публикация</h2><p>Изменение создаст новую неизменяемую версию.</p></div>
+                  <span className="sla-settings-icon">
+                    <ShieldCheck size={18} aria-hidden="true" />
+                  </span>
+                  <div>
+                    <h2>Публикация</h2>
+                    <p>Изменение создаст новую неизменяемую версию.</p>
+                  </div>
                 </div>
               </div>
               <dl className="sla-settings-meta">
-                <div><dt>Действующая версия</dt><dd>{settings.version}</dd></div>
-                <div><dt>Активных возможностей</dt><dd>{settings.affectedOpportunities}</dd></div>
-                <div><dt>Опубликована</dt><dd>{formatDate(settings.publishedAt)}</dd></div>
+                <div>
+                  <dt>Действующая версия</dt>
+                  <dd>{settings.version}</dd>
+                </div>
+                <div>
+                  <dt>Активных возможностей</dt>
+                  <dd>{settings.affectedOpportunities}</dd>
+                </div>
+                <div>
+                  <dt>Опубликована</dt>
+                  <dd>{formatDate(settings.publishedAt)}</dd>
+                </div>
               </dl>
               <label className="sla-reason-field">
                 <span>Причина изменения</span>
@@ -241,10 +293,16 @@ export function SlaSettingsPage({ teamName }: SlaSettingsPageProps) {
                   rows={4}
                   maxLength={500}
                   value={draft.reason}
-                  onChange={(event) => setDraft((current) => current ? {
-                    ...current,
-                    reason: event.target.value,
-                  } : current)}
+                  onChange={(event) =>
+                    setDraft((current) =>
+                      current
+                        ? {
+                            ...current,
+                            reason: event.target.value,
+                          }
+                        : current,
+                    )
+                  }
                   placeholder="Например: скорректировали сроки после пилота"
                 />
                 <small>Обязательна для аудита, минимум 5 символов.</small>

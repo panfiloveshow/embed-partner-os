@@ -1,8 +1,5 @@
 import type { CreateRadarCandidateCommand } from "@embed-os/contracts";
-import {
-  parseOrganizationImportFile,
-  type OrganizationImportFile,
-} from "./organization-import.js";
+import { parseOrganizationImportFile, type OrganizationImportFile } from "./organization-import.js";
 
 export async function parseRadarImportFile(file: OrganizationImportFile) {
   const parsed = await parseOrganizationImportFile(file);

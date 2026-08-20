@@ -196,11 +196,9 @@ export class PlacementService implements PlacementPort {
     }
     const current = this.activePlacement(placementId);
     if (current.businessStatus !== "active") {
-      throw new DomainRuleError(
-        "EMB-004",
-        "L0-проверка доступна только для активного размещения",
-        { businessStatus: "Переведите размещение в активное состояние" },
-      );
+      throw new DomainRuleError("EMB-004", "L0-проверка доступна только для активного размещения", {
+        businessStatus: "Переведите размещение в активное состояние",
+      });
     }
     const observation = await this.checker.check(current.pageUrl);
     const transition = applyPlacementHealthCheck(
@@ -256,11 +254,12 @@ export class PlacementService implements PlacementPort {
     const response: PlacementCheckResult = {
       placement: structuredClone(updated),
       check: structuredClone(check),
-      alertChange: transition.alertAction === "open"
-        ? "opened"
-        : transition.alertAction === "close"
-          ? "closed"
-          : "none",
+      alertChange:
+        transition.alertAction === "open"
+          ? "opened"
+          : transition.alertAction === "close"
+            ? "closed"
+            : "none",
     };
     this.checkIdempotency.set(scope, { requestHash, response: structuredClone(response) });
     return response;
@@ -287,22 +286,23 @@ function applyPlacementUpdate(
 ): PlacementView {
   const businessStatus = command.businessStatus ?? current.businessStatus;
   const launchedAt = Object.hasOwn(command, "launchedAt")
-    ? command.launchedAt ?? null
+    ? (command.launchedAt ?? null)
     : current.launchedAt;
   if (businessStatus === "active" && !launchedAt) {
-    throw new DomainRuleError(
-      "EMB-001",
-      "Для активного размещения укажите дату запуска",
-      { launchedAt: "Дата запуска обязательна для активного размещения" },
-    );
+    throw new DomainRuleError("EMB-001", "Для активного размещения укажите дату запуска", {
+      launchedAt: "Дата запуска обязательна для активного размещения",
+    });
   }
-  const monitoringTargetChanged = command.pageUrl !== undefined ||
+  const monitoringTargetChanged =
+    command.pageUrl !== undefined ||
     command.urlPattern !== undefined ||
     command.embedType !== undefined ||
     command.environment !== undefined;
-  const shouldCheckNow = businessStatus === "active" && (
-    current.businessStatus !== "active" || current.nextCheckAt === null || monitoringTargetChanged
-  );
+  const shouldCheckNow =
+    businessStatus === "active" &&
+    (current.businessStatus !== "active" ||
+      current.nextCheckAt === null ||
+      monitoringTargetChanged);
   return {
     ...current,
     ...(command.pageUrl !== undefined ? { pageUrl: command.pageUrl } : {}),
@@ -311,9 +311,12 @@ function applyPlacementUpdate(
     ...(command.environment !== undefined ? { environment: command.environment } : {}),
     businessStatus,
     launchedAt,
-    nextCheckAt: businessStatus === "active"
-      ? shouldCheckNow ? now.toISOString() : current.nextCheckAt
-      : null,
+    nextCheckAt:
+      businessStatus === "active"
+        ? shouldCheckNow
+          ? now.toISOString()
+          : current.nextCheckAt
+        : null,
     version: current.version + 1,
   };
 }

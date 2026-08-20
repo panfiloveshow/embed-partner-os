@@ -55,9 +55,7 @@ export function slaSettingsFromProcessDefinition(input: {
 }): SlaSettingsPayload {
   const sla = isRecord(input.schema) && isRecord(input.schema.sla) ? input.schema.sla : {};
   const configured = isRecord(sla.thresholds) ? sla.thresholds : {};
-  const escalationAfterDays = validDays(sla.escalationAfterDays)
-    ? sla.escalationAfterDays
-    : 3;
+  const escalationAfterDays = validDays(sla.escalationAfterDays) ? sla.escalationAfterDays : 3;
   return {
     processDefinitionId: input.id,
     version: input.version,
@@ -66,9 +64,7 @@ export function slaSettingsFromProcessDefinition(input: {
     stages: slaWorkingStageCodes.map((code) => ({
       code,
       label: opportunityStageCatalog.find((stage) => stage.code === code)?.label ?? code,
-      thresholdDays: validDays(configured[code])
-        ? configured[code]
-        : defaultSlaThresholds[code],
+      thresholdDays: validDays(configured[code]) ? configured[code] : defaultSlaThresholds[code],
     })),
     affectedOpportunities: input.affectedOpportunities,
   };

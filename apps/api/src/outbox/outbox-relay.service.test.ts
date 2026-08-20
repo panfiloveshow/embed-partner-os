@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type {
-  OutboxEnvelope,
-  OutboxPublisher,
-  OutboxRelayStore,
-} from "./outbox-relay.service.js";
+import type { OutboxEnvelope, OutboxPublisher, OutboxRelayStore } from "./outbox-relay.service.js";
 import { OutboxRelayService } from "./outbox-relay.service.js";
 
 const NOW = new Date("2026-08-17T13:00:00.000Z");
@@ -68,12 +64,7 @@ describe("OutboxRelayService", () => {
   it("does not misclassify a database acknowledgement failure as publish failure", async () => {
     const store = new FakeOutboxStore([event("event-3", 1)]);
     store.failAcknowledgement = true;
-    const relay = new OutboxRelayService(
-      store,
-      new RecordingPublisher(),
-      "worker-4",
-      () => NOW,
-    );
+    const relay = new OutboxRelayService(store, new RecordingPublisher(), "worker-4", () => NOW);
 
     await expect(relay.runBatch()).rejects.toThrow("lease lost");
     expect(store.failed).toHaveLength(0);
@@ -136,11 +127,7 @@ class FakeOutboxStore implements OutboxRelayStore {
     return this.events.slice(0, input.batchSize);
   }
 
-  async markPublished(input: {
-    eventId: string;
-    workerId: string;
-    publishedAt: Date;
-  }) {
+  async markPublished(input: { eventId: string; workerId: string; publishedAt: Date }) {
     if (this.failAcknowledgement) throw new Error("lease lost");
     this.published.push(input);
   }

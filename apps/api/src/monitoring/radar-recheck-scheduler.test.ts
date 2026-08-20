@@ -23,7 +23,10 @@ describe("RadarRecheckScheduler", () => {
     const now = new Date("2026-08-20T12:00:00.000Z");
     const intervalMs = 7 * 24 * 60 * 60_000;
 
-    const result = await new RadarRecheckScheduler(store, radar, () => now).runBatch(intervalMs, 25);
+    const result = await new RadarRecheckScheduler(store, radar, () => now).runBatch(
+      intervalMs,
+      25,
+    );
 
     expect(result).toEqual({ selected: 2, inspected: 2, failed: 0 });
     expect(calls).toEqual([
@@ -33,7 +36,11 @@ describe("RadarRecheckScheduler", () => {
   });
 
   it("continues the batch when one site cannot be inspected", async () => {
-    const store: RadarRecheckStore = { async listDue() { return [{ id: "bad" }, { id: "ok" }]; } };
+    const store: RadarRecheckStore = {
+      async listDue() {
+        return [{ id: "bad" }, { id: "ok" }];
+      },
+    };
     const radar = {
       async inspect(id: string) {
         if (id === "bad") throw new Error("site unavailable");

@@ -39,10 +39,7 @@ import { RadarPage } from "./components/RadarPage";
 import { SettingsPage } from "./components/SettingsPage";
 import { StageTransitionDialog } from "./components/StageTransitionDialog";
 import { RescheduleTaskDialog } from "./components/RescheduleTaskDialog";
-import {
-  MergeContactDialog,
-  type MergeTargetOption,
-} from "./components/MergeContactDialog";
+import { MergeContactDialog, type MergeTargetOption } from "./components/MergeContactDialog";
 
 interface AppProps {
   onLogout?: () => Promise<void>;
@@ -104,7 +101,11 @@ export function App({ onLogout }: AppProps) {
     try {
       const nextPayload = await fetchToday();
       setPayload(nextPayload);
-      setSelectedId(nextPayload.actions.find((action) => action.opportunityId === opportunityId)?.id ?? nextPayload.actions[0]?.id ?? null);
+      setSelectedId(
+        nextPayload.actions.find((action) => action.opportunityId === opportunityId)?.id ??
+          nextPayload.actions[0]?.id ??
+          null,
+      );
       setActivePage("today");
     } catch (loadError) {
       setError(messageFor(loadError));
@@ -122,18 +123,19 @@ export function App({ onLogout }: AppProps) {
     [payload, selectedId],
   );
   const mergeTargets = useMemo(
-    () => payload && mergeSource
-      ? collectMergeTargets(payload, mergeSource.contact.id)
-      : [],
+    () => (payload && mergeSource ? collectMergeTargets(payload, mergeSource.contact.id) : []),
     [payload, mergeSource],
   );
   const placementContexts = useMemo(() => {
     if (!payload) return [];
-    const contexts = new Map<string, {
-      organizationId: string;
-      opportunityId: string;
-      organizationName: string;
-    }>();
+    const contexts = new Map<
+      string,
+      {
+        organizationId: string;
+        opportunityId: string;
+        organizationName: string;
+      }
+    >();
     for (const action of payload.actions) {
       if (!contexts.has(action.opportunityId)) {
         contexts.set(action.opportunityId, {
@@ -144,7 +146,8 @@ export function App({ onLogout }: AppProps) {
       }
     }
     return [...contexts.values()].sort((left, right) =>
-      left.organizationName.localeCompare(right.organizationName, "ru"));
+      left.organizationName.localeCompare(right.organizationName, "ru"),
+    );
   }, [payload]);
 
   async function submitCompletion(command: CompleteTaskCommand) {
@@ -182,19 +185,19 @@ export function App({ onLogout }: AppProps) {
     setContactError(null);
     setContactCandidates([]);
     try {
-      const contact = await createContact(
-        contactTask.organizationId,
-        command,
-        contactKey,
+      const contact = await createContact(contactTask.organizationId, command, contactKey);
+      setPayload((current) =>
+        current
+          ? {
+              ...current,
+              actions: current.actions.map((action) =>
+                action.organizationId === contactTask.organizationId
+                  ? { ...action, contacts: [...action.contacts, contact] }
+                  : action,
+              ),
+            }
+          : current,
       );
-      setPayload((current) => current ? {
-        ...current,
-        actions: current.actions.map((action) =>
-          action.organizationId === contactTask.organizationId
-            ? { ...action, contacts: [...action.contacts, contact] }
-            : action,
-        ),
-      } : current);
       setContactTask(null);
       setContactKey(null);
       setContactCandidates([]);
@@ -240,14 +243,18 @@ export function App({ onLogout }: AppProps) {
         command,
         idempotencyKey,
       );
-      setPayload((current) => current ? {
-        ...current,
-        actions: current.actions.map((action) =>
-          action.organizationId === contactTask.organizationId
-            ? { ...action, contacts: [...action.contacts, linked] }
-            : action,
-        ),
-      } : current);
+      setPayload((current) =>
+        current
+          ? {
+              ...current,
+              actions: current.actions.map((action) =>
+                action.organizationId === contactTask.organizationId
+                  ? { ...action, contacts: [...action.contacts, linked] }
+                  : action,
+              ),
+            }
+          : current,
+      );
       setContactTask(null);
       setContactKey(null);
       setContactCandidates([]);
@@ -260,9 +267,8 @@ export function App({ onLogout }: AppProps) {
   }
 
   function openMergeContact(task: TodayAction, contact: ContactOption) {
-    mergeReturnFocus.current = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null;
+    mergeReturnFocus.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setMergeSource({ task, contact });
     setMergeKey(createIdempotencyKey());
     setMergeError(null);
@@ -282,12 +288,14 @@ export function App({ onLogout }: AppProps) {
     setMergeError(null);
     try {
       const result = await mergeContact(mergeSource.contact.id, command, mergeKey);
-      setPayload((current) => current
-        ? applyContactMerge(current, result.sourceContactId, result.targetContactId)
-        : current);
+      setPayload((current) =>
+        current
+          ? applyContactMerge(current, result.sourceContactId, result.targetContactId)
+          : current,
+      );
       setMergeNotice(
         `Контакты объединены. Перенесено связей: ${result.movedOrganizationLinks}; ` +
-        `закрыто совпадающих связей: ${result.closedConflictingLinks}.`,
+          `закрыто совпадающих связей: ${result.closedConflictingLinks}.`,
       );
       setMergeSource(null);
       setMergeKey(null);
@@ -328,30 +336,36 @@ export function App({ onLogout }: AppProps) {
         command,
         stageMutation.current.key,
       );
-      const nextSelectedId = result.toStageCode === "SL"
-        ? currentPayload.actions.find(({ opportunityId }) => opportunityId !== result.opportunityId)?.id ?? null
-        : selectedId;
+      const nextSelectedId =
+        result.toStageCode === "SL"
+          ? (currentPayload.actions.find(
+              ({ opportunityId }) => opportunityId !== result.opportunityId,
+            )?.id ?? null)
+          : selectedId;
       setPayload((current) => {
         if (!current) return current;
-        const actions = result.toStageCode === "SL"
-          ? current.actions.filter(({ opportunityId }) => opportunityId !== result.opportunityId)
-          : current.actions.map((action) => action.opportunityId === result.opportunityId
-            ? {
-                ...action,
-                opportunityVersion: result.version,
-                opportunityStatus: result.status,
-                opportunityStageData: result.stageData,
-                stageCode: result.toStageCode,
-                stageLabel: result.stageLabel,
-                ...(result.toStageCode === "SX"
+        const actions =
+          result.toStageCode === "SL"
+            ? current.actions.filter(({ opportunityId }) => opportunityId !== result.opportunityId)
+            : current.actions.map((action) =>
+                action.opportunityId === result.opportunityId
                   ? {
-                      group: "waiting" as const,
-                      dueAt: command.reviewAt ?? action.dueAt,
-                      title: `Вернуться к паузе: ${command.pauseReason ?? command.reason}`,
+                      ...action,
+                      opportunityVersion: result.version,
+                      opportunityStatus: result.status,
+                      opportunityStageData: result.stageData,
+                      stageCode: result.toStageCode,
+                      stageLabel: result.stageLabel,
+                      ...(result.toStageCode === "SX"
+                        ? {
+                            group: "waiting" as const,
+                            dueAt: command.reviewAt ?? action.dueAt,
+                            title: `Вернуться к паузе: ${command.pauseReason ?? command.reason}`,
+                          }
+                        : {}),
                     }
-                  : {}),
-              }
-            : action);
+                  : action,
+              );
         return {
           ...current,
           actions,
@@ -472,111 +486,118 @@ export function App({ onLogout }: AppProps) {
       ) : activePage === "partners" ? (
         <PartnersPage teamName={payload.teamName} onNavigate={setActivePage} />
       ) : activePage === "radar" ? (
-        <RadarPage teamName={payload.teamName} onOpenToday={(opportunityId) => void openRadarWork(opportunityId)} />
+        <RadarPage
+          teamName={payload.teamName}
+          onOpenToday={(opportunityId) => void openRadarWork(opportunityId)}
+        />
       ) : activePage === "placements" ? (
         <PlacementPage teamName={payload.teamName} contexts={placementContexts} />
       ) : activePage === "funnel" ? (
         <FunnelPage
           teamName={payload.teamName}
           onOpenOpportunity={(opportunityId) => {
-            const action = payload.actions.find((candidate) =>
-              candidate.opportunityId === opportunityId);
+            const action = payload.actions.find(
+              (candidate) => candidate.opportunityId === opportunityId,
+            );
             setSelectedId(action?.id ?? null);
             setActivePage("today");
           }}
         />
       ) : (
-      <main className="main-area">
-        <header className="page-header">
-          <div>
-            <h1>Сегодня</h1>
-            <p>{formatCurrentDate(payload.generatedAt)}</p>
-          </div>
-          <div className="header-actions">
-            <label className="team-select">
-              <UsersRound size={17} aria-hidden="true" />
-              <span className="sr-only">Команда</span>
-              <select defaultValue={payload.teamName}>
-                <option>{payload.teamName}</option>
-              </select>
-            </label>
-            <button
-              className="button button-primary"
-              type="button"
-              onClick={() => selectedTask && openCompletion(selectedTask)}
-              disabled={!selectedTask || !canWriteTasks}
-              title={!canWriteTasks ? "Нет разрешения tasks.write" : undefined}
-            >
-              <Send size={17} aria-hidden="true" />
-              Зафиксировать контакт
-            </button>
-          </div>
-        </header>
+        <main className="main-area">
+          <header className="page-header">
+            <div>
+              <h1>Сегодня</h1>
+              <p>{formatCurrentDate(payload.generatedAt)}</p>
+            </div>
+            <div className="header-actions">
+              <label className="team-select">
+                <UsersRound size={17} aria-hidden="true" />
+                <span className="sr-only">Команда</span>
+                <select defaultValue={payload.teamName}>
+                  <option>{payload.teamName}</option>
+                </select>
+              </label>
+              <button
+                className="button button-primary"
+                type="button"
+                onClick={() => selectedTask && openCompletion(selectedTask)}
+                disabled={!selectedTask || !canWriteTasks}
+                title={!canWriteTasks ? "Нет разрешения tasks.write" : undefined}
+              >
+                <Send size={17} aria-hidden="true" />
+                Зафиксировать контакт
+              </button>
+            </div>
+          </header>
 
-        {mergeNotice ? (
-          <div
-            ref={mergeNoticeRef}
-            className="operation-notice"
-            role="status"
-            tabIndex={-1}
-          >
-            <CheckCircle2 size={17} aria-hidden="true" />
-            <span>{mergeNotice}</span>
-            <button
-              className="icon-button"
-              type="button"
-              onClick={() => setMergeNotice(null)}
-              aria-label="Скрыть уведомление"
-            >
-              ×
-            </button>
-          </div>
-        ) : null}
+          {mergeNotice ? (
+            <div ref={mergeNoticeRef} className="operation-notice" role="status" tabIndex={-1}>
+              <CheckCircle2 size={17} aria-hidden="true" />
+              <span>{mergeNotice}</span>
+              <button
+                className="icon-button"
+                type="button"
+                onClick={() => setMergeNotice(null)}
+                aria-label="Скрыть уведомление"
+              >
+                ×
+              </button>
+            </div>
+          ) : null}
 
-        <section className="workspace-frame">
-          <SummaryStrip summary={payload.summary} />
+          <section className="workspace-frame">
+            <SummaryStrip summary={payload.summary} />
 
-          {hasActions ? (
-            <div className="work-columns">
-              <div className="queue-pane">
-                <TaskGroups
-                  actions={payload.actions}
-                  selectedId={selectedId}
-                  onSelect={(task) => setSelectedId(task.id)}
+            {hasActions ? (
+              <div className="work-columns">
+                <div className="queue-pane">
+                  <TaskGroups
+                    actions={payload.actions}
+                    selectedId={selectedId}
+                    onSelect={(task) => setSelectedId(task.id)}
+                    onComplete={canWriteTasks ? openCompletion : undefined}
+                    onReschedule={canWriteTasks ? openReschedule : undefined}
+                    onAddContact={canWriteContacts ? openContact : undefined}
+                    onChangeStage={canWriteStages ? openStageTransition : undefined}
+                  />
+                </div>
+                <DetailPanel
+                  task={selectedTask}
+                  onClose={() => setSelectedId(null)}
                   onComplete={canWriteTasks ? openCompletion : undefined}
-                  onReschedule={canWriteTasks ? openReschedule : undefined}
                   onAddContact={canWriteContacts ? openContact : undefined}
+                  onMergeContact={canWriteContacts ? openMergeContact : undefined}
                   onChangeStage={canWriteStages ? openStageTransition : undefined}
+                  onReschedule={canWriteTasks ? openReschedule : undefined}
                 />
               </div>
-              <DetailPanel
-                task={selectedTask}
-                onClose={() => setSelectedId(null)}
-                onComplete={canWriteTasks ? openCompletion : undefined}
-                onAddContact={canWriteContacts ? openContact : undefined}
-                onMergeContact={canWriteContacts ? openMergeContact : undefined}
-                onChangeStage={canWriteStages ? openStageTransition : undefined}
-                onReschedule={canWriteTasks ? openReschedule : undefined}
-              />
-            </div>
-          ) : (
-            <div className="empty-state">
-              <CheckCircle2 size={36} aria-hidden="true" />
-              <h2>Очередь разобрана</h2>
-              <p>Новых действий и просрочек сейчас нет.</p>
-            </div>
-          )}
+            ) : (
+              <div className="empty-state">
+                <CheckCircle2 size={36} aria-hidden="true" />
+                <h2>Очередь разобрана</h2>
+                <p>Новых действий и просрочек сейчас нет.</p>
+              </div>
+            )}
 
-          <footer className="day-summary">
-            <CheckCircle2 size={18} aria-hidden="true" />
-            <strong>Итог дня:</strong>
-            <span>выполнено <b>{payload.summary.completed}</b></span>
-            <span>перенесено <b>{payload.summary.rescheduled}</b></span>
-            <span>изменено стадий <b>{payload.summary.stageChanges}</b></span>
-            <span>запусков <b>{payload.summary.launches}</b></span>
-          </footer>
-        </section>
-      </main>
+            <footer className="day-summary">
+              <CheckCircle2 size={18} aria-hidden="true" />
+              <strong>Итог дня:</strong>
+              <span>
+                выполнено <b>{payload.summary.completed}</b>
+              </span>
+              <span>
+                перенесено <b>{payload.summary.rescheduled}</b>
+              </span>
+              <span>
+                изменено стадий <b>{payload.summary.stageChanges}</b>
+              </span>
+              <span>
+                запусков <b>{payload.summary.launches}</b>
+              </span>
+            </footer>
+          </section>
+        </main>
       )}
 
       {completingTask ? (
@@ -653,9 +674,10 @@ export function collectMergeTargets(
       }
     }
   }
-  return [...contacts.values()].sort((left, right) =>
-    left.contact.fullName.localeCompare(right.contact.fullName, "ru") ||
-    left.contact.id.localeCompare(right.contact.id)
+  return [...contacts.values()].sort(
+    (left, right) =>
+      left.contact.fullName.localeCompare(right.contact.fullName, "ru") ||
+      left.contact.id.localeCompare(right.contact.id),
   );
 }
 
@@ -682,14 +704,16 @@ export function applyContactMerge(
       }
       return {
         ...action,
-        contacts: action.contacts.map((contact) => contact.id === sourceContactId
-          ? {
-              ...target,
-              role: source.role,
-              department: source.department,
-              isPrimary: source.isPrimary,
-            }
-          : contact),
+        contacts: action.contacts.map((contact) =>
+          contact.id === sourceContactId
+            ? {
+                ...target,
+                role: source.role,
+                department: source.department,
+                isPrimary: source.isPrimary,
+              }
+            : contact,
+        ),
       };
     }),
   };

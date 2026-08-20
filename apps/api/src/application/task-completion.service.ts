@@ -145,7 +145,10 @@ export class TaskNotFoundError extends Error {
 export class ConcurrencyConflictError extends Error {
   readonly code = "CONCURRENT_MODIFICATION";
 
-  constructor(readonly entityType: "Task" | "Opportunity", readonly entityId: string) {
+  constructor(
+    readonly entityType: "Task" | "Opportunity",
+    readonly entityId: string,
+  ) {
     super("Запись уже изменена другим пользователем. Обновите данные и повторите действие.");
     this.name = "ConcurrencyConflictError";
   }
@@ -242,10 +245,7 @@ export class TaskCompletionApplicationService {
         throw new ConcurrencyConflictError("Opportunity", task.opportunityId);
       }
 
-      if (
-        opportunityPatch.stageCode &&
-        opportunityPatch.stageCode !== task.opportunity.stageCode
-      ) {
+      if (opportunityPatch.stageCode && opportunityPatch.stageCode !== task.opportunity.stageCode) {
         await transaction.createStageHistory({
           id: this.idGenerator(),
           opportunityId: task.opportunityId,

@@ -60,14 +60,19 @@ function parseDailyVisits(body: string) {
     return [];
   }
   const records = findVisitsArray(value);
-  return records.flatMap((item) => {
-    if (!isRecord(item) || typeof item.date !== "string") return [];
-    const rawVisits = typeof item.visits === "number" ? item.visits
-      : typeof item.value === "number" ? item.value
-        : null;
-    if (rawVisits === null || !Number.isFinite(rawVisits) || rawVisits < 0) return [];
-    return [{ date: item.date.slice(0, 10), visits: rawVisits }];
-  }).sort((left, right) => left.date.localeCompare(right.date));
+  return records
+    .flatMap((item) => {
+      if (!isRecord(item) || typeof item.date !== "string") return [];
+      const rawVisits =
+        typeof item.visits === "number"
+          ? item.visits
+          : typeof item.value === "number"
+            ? item.value
+            : null;
+      if (rawVisits === null || !Number.isFinite(rawVisits) || rawVisits < 0) return [];
+      return [{ date: item.date.slice(0, 10), visits: rawVisits }];
+    })
+    .sort((left, right) => left.date.localeCompare(right.date));
 }
 
 function findVisitsArray(value: unknown): unknown[] {

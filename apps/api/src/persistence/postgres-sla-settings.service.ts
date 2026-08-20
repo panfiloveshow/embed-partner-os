@@ -52,8 +52,9 @@ export class PostgresSlaSettingsService implements SlaSettingsPort {
     const reservationId = randomUUID();
     const now = new Date();
 
-    return this.prisma.$transaction(async (transaction) => {
-      const inserted = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    return this.prisma.$transaction(
+      async (transaction) => {
+        const inserted = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
         INSERT INTO "idempotency_record" (
           "id", "actor_id", "operation", "request_key", "request_hash", "created_at", "expires_at"
         ) VALUES (
@@ -68,114 +69,119 @@ export class PostgresSlaSettingsService implements SlaSettingsPort {
         ON CONFLICT ("actor_id", "operation", "request_key") DO NOTHING
         RETURNING "id"
       `);
-      if (inserted.length === 0) {
-        const existing = await transaction.idempotencyRecord.findUnique({
-          where: {
-            actorId_operation_requestKey: {
-              actorId,
-              operation: "settings.sla.update",
-              requestKey: idempotencyKey,
+        if (inserted.length === 0) {
+          const existing = await transaction.idempotencyRecord.findUnique({
+            where: {
+              actorId_operation_requestKey: {
+                actorId,
+                operation: "settings.sla.update",
+                requestKey: idempotencyKey,
+              },
             },
-          },
-        });
-        if (!existing) throw new IdempotencyInProgressError(idempotencyKey);
-        if (existing.requestHash !== requestHash) throw new IdempotencyConflictError(idempotencyKey);
-        const replay = parseResponse(existing.responseJson);
-        if (!replay) throw new IdempotencyInProgressError(idempotencyKey);
-        return replay;
-      }
+          });
+          if (!existing) throw new IdempotencyInProgressError(idempotencyKey);
+          if (existing.requestHash !== requestHash)
+            throw new IdempotencyConflictError(idempotencyKey);
+          const replay = parseResponse(existing.responseJson);
+          if (!replay) throw new IdempotencyInProgressError(idempotencyKey);
+          return replay;
+        }
 
-      await transaction.$queryRaw(Prisma.sql`
+        await transaction.$queryRaw(Prisma.sql`
         SELECT pg_advisory_xact_lock(hashtextextended(${"settings.sla.publish"}, 0))
       `);
-      const current = await transaction.processDefinition.findFirst({
-        where: { status: "PUBLISHED", publishedAt: { not: null } },
-        orderBy: { version: "desc" },
-      });
-      if (!current?.publishedAt) throw configurationMissing();
-      if (current.version !== command.version) {
-        throw new SlaSettingsVersionConflictError(current.version);
-      }
-      const maxVersion = await transaction.processDefinition.aggregate({ _max: { version: true } });
-      const nextVersion = (maxVersion._max.version ?? current.version) + 1;
-      const processDefinitionId = randomUUID();
-      const schema = processSchemaWithSla(current.schemaJson, command);
-      await transaction.processDefinition.create({
-        data: {
+        const current = await transaction.processDefinition.findFirst({
+          where: { status: "PUBLISHED", publishedAt: { not: null } },
+          orderBy: { version: "desc" },
+        });
+        if (!current?.publishedAt) throw configurationMissing();
+        if (current.version !== command.version) {
+          throw new SlaSettingsVersionConflictError(current.version);
+        }
+        const maxVersion = await transaction.processDefinition.aggregate({
+          _max: { version: true },
+        });
+        const nextVersion = (maxVersion._max.version ?? current.version) + 1;
+        const processDefinitionId = randomUUID();
+        const schema = processSchemaWithSla(current.schemaJson, command);
+        await transaction.processDefinition.create({
+          data: {
+            id: processDefinitionId,
+            version: nextVersion,
+            status: "PUBLISHED",
+            schemaJson: schema as Prisma.InputJsonObject,
+            publishedAt: now,
+          },
+        });
+        const migrated = await transaction.opportunity.updateMany({
+          where: {
+            processVersion: current.version,
+            archivedAt: null,
+            status: { not: OpportunityStatus.CLOSED },
+          },
+          data: { processVersion: nextVersion },
+        });
+        const response = slaSettingsFromProcessDefinition({
           id: processDefinitionId,
           version: nextVersion,
-          status: "PUBLISHED",
-          schemaJson: schema as Prisma.InputJsonObject,
           publishedAt: now,
-        },
-      });
-      const migrated = await transaction.opportunity.updateMany({
-        where: {
-          processVersion: current.version,
-          archivedAt: null,
-          status: { not: OpportunityStatus.CLOSED },
-        },
-        data: { processVersion: nextVersion },
-      });
-      const response = slaSettingsFromProcessDefinition({
-        id: processDefinitionId,
-        version: nextVersion,
-        publishedAt: now,
-        schema,
-        affectedOpportunities: migrated.count,
-      });
-      await transaction.auditLog.create({
-        data: {
-          id: randomUUID(),
-          actorId,
-          action: "settings.sla.published",
-          entityType: "ProcessDefinition",
-          entityId: processDefinitionId,
-          beforeJson: toJson({
-            processDefinitionId: current.id,
-            version: current.version,
-          }),
-          afterJson: toJson({
-            ...response,
-            reason: command.reason,
-          }),
-          occurredAt: now,
-        },
-      });
-      await transaction.outboxEvent.create({
-        data: {
-          id: randomUUID(),
-          eventType: "settings.sla.published",
-          aggregateType: "ProcessDefinition",
-          aggregateId: processDefinitionId,
-          aggregateVersion: 1,
-          schemaVersion: 1,
-          payload: toJson({
-            processDefinitionId,
-            version: nextVersion,
-            previousVersion: current.version,
-            affectedOpportunities: migrated.count,
-            escalationAfterDays: command.escalationAfterDays,
-            thresholds: command.thresholds,
-            reason: command.reason,
+          schema,
+          affectedOpportunities: migrated.count,
+        });
+        await transaction.auditLog.create({
+          data: {
+            id: randomUUID(),
             actorId,
-          }),
-          occurredAt: now,
-        },
-      });
-      const completed = await transaction.idempotencyRecord.updateMany({
-        where: { id: reservationId, responseJson: { equals: Prisma.DbNull } },
-        data: {
-          responseStatus: 200,
-          responseJson: toJson(response),
-          completedAt: now,
-        },
-      });
-      if (completed.count !== 1) {
-        throw new Error("SLA settings idempotency reservation could not be completed");
-      }
-      return response;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+            action: "settings.sla.published",
+            entityType: "ProcessDefinition",
+            entityId: processDefinitionId,
+            beforeJson: toJson({
+              processDefinitionId: current.id,
+              version: current.version,
+            }),
+            afterJson: toJson({
+              ...response,
+              reason: command.reason,
+            }),
+            occurredAt: now,
+          },
+        });
+        await transaction.outboxEvent.create({
+          data: {
+            id: randomUUID(),
+            eventType: "settings.sla.published",
+            aggregateType: "ProcessDefinition",
+            aggregateId: processDefinitionId,
+            aggregateVersion: 1,
+            schemaVersion: 1,
+            payload: toJson({
+              processDefinitionId,
+              version: nextVersion,
+              previousVersion: current.version,
+              affectedOpportunities: migrated.count,
+              escalationAfterDays: command.escalationAfterDays,
+              thresholds: command.thresholds,
+              reason: command.reason,
+              actorId,
+            }),
+            occurredAt: now,
+          },
+        });
+        const completed = await transaction.idempotencyRecord.updateMany({
+          where: { id: reservationId, responseJson: { equals: Prisma.DbNull } },
+          data: {
+            responseStatus: 200,
+            responseJson: toJson(response),
+            completedAt: now,
+          },
+        });
+        if (completed.count !== 1) {
+          throw new Error("SLA settings idempotency reservation could not be completed");
+        }
+        return response;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 }
 
@@ -192,7 +198,8 @@ function parseResponse(value: unknown): SlaSettingsPayload | null {
     typeof (value as { processDefinitionId?: unknown }).processDefinitionId !== "string" ||
     typeof (value as { version?: unknown }).version !== "number" ||
     !Array.isArray((value as { stages?: unknown }).stages)
-  ) return null;
+  )
+    return null;
   return value as SlaSettingsPayload;
 }
 

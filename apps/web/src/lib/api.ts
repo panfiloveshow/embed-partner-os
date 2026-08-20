@@ -69,9 +69,7 @@ export function configureApiAccessTokenProvider(provider: ApiAccessTokenProvider
   if (!provider) configureApiAccessToken(null);
 }
 
-export function subscribeApiAuthenticationRequired(
-  listener: (problem: ProblemDetails) => void,
-) {
+export function subscribeApiAuthenticationRequired(listener: (problem: ProblemDetails) => void) {
   authenticationRequiredListeners.add(listener);
   return () => authenticationRequiredListeners.delete(listener);
 }
@@ -120,17 +118,14 @@ export async function updateAccessUser(
   command: UpdateAccessUserCommand,
   idempotencyKey: string,
 ): Promise<AccessUserView> {
-  return request<AccessUserView>(
-    `/settings/access/users/${encodeURIComponent(userId)}`,
-    {
-      method: "PATCH",
-      headers: {
-        "content-type": "application/json",
-        "idempotency-key": idempotencyKey,
-      },
-      body: JSON.stringify(command),
+  return request<AccessUserView>(`/settings/access/users/${encodeURIComponent(userId)}`, {
+    method: "PATCH",
+    headers: {
+      "content-type": "application/json",
+      "idempotency-key": idempotencyKey,
     },
-  );
+    body: JSON.stringify(command),
+  });
 }
 
 export async function createAccessUser(
@@ -212,10 +207,7 @@ export async function fetchPartnerCard(
   organizationId: string,
   signal?: AbortSignal,
 ): Promise<PartnerCardPayload> {
-  return request<PartnerCardPayload>(
-    `/partners/${encodeURIComponent(organizationId)}`,
-    { signal },
-  );
+  return request<PartnerCardPayload>(`/partners/${encodeURIComponent(organizationId)}`, { signal });
 }
 
 export async function fetchRadar(signal?: AbortSignal): Promise<RadarPayload> {
@@ -253,10 +245,10 @@ export async function inspectRadarCandidate(
   candidateId: string,
   idempotencyKey: string,
 ): Promise<RadarCandidate> {
-  return request<RadarCandidate>(
-    `/radar/candidates/${encodeURIComponent(candidateId)}/checks`,
-    { method: "POST", headers: { "idempotency-key": idempotencyKey } },
-  );
+  return request<RadarCandidate>(`/radar/candidates/${encodeURIComponent(candidateId)}/checks`, {
+    method: "POST",
+    headers: { "idempotency-key": idempotencyKey },
+  });
 }
 
 export async function decideRadarCandidate(
@@ -264,17 +256,14 @@ export async function decideRadarCandidate(
   command: RadarCandidateDecisionCommand,
   idempotencyKey: string,
 ): Promise<RadarCandidate> {
-  return request<RadarCandidate>(
-    `/radar/candidates/${encodeURIComponent(candidateId)}/decisions`,
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "idempotency-key": idempotencyKey,
-      },
-      body: JSON.stringify(command),
+  return request<RadarCandidate>(`/radar/candidates/${encodeURIComponent(candidateId)}/decisions`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "idempotency-key": idempotencyKey,
     },
-  );
+    body: JSON.stringify(command),
+  });
 }
 
 export async function adjustRadarCandidateScore(
@@ -295,9 +284,7 @@ export async function adjustRadarCandidateScore(
   );
 }
 
-export async function previewOrganizationImport(
-  file: File,
-): Promise<OrganizationImportJob> {
+export async function previewOrganizationImport(file: File): Promise<OrganizationImportJob> {
   const body = new FormData();
   body.append("file", file);
   return request<OrganizationImportJob>("/imports/organizations/preview", {
@@ -337,9 +324,7 @@ export async function cancelOrganizationImport(
   );
 }
 
-export async function fetchLatestWeeklyReport(
-  signal?: AbortSignal,
-): Promise<WeeklyReportSnapshot> {
+export async function fetchLatestWeeklyReport(signal?: AbortSignal): Promise<WeeklyReportSnapshot> {
   return request<WeeklyReportSnapshot>("/reports/weekly/snapshots/latest", { signal });
 }
 
@@ -383,23 +368,19 @@ export async function fetchPlacementChecks(
   placementId: string,
   signal?: AbortSignal,
 ): Promise<HealthCheckView[]> {
-  return request<HealthCheckView[]>(
-    `/placements/${encodeURIComponent(placementId)}/checks`,
-    { signal },
-  );
+  return request<HealthCheckView[]>(`/placements/${encodeURIComponent(placementId)}/checks`, {
+    signal,
+  });
 }
 
 export async function runPlacementL0Check(
   placementId: string,
   idempotencyKey: string,
 ): Promise<PlacementCheckResult> {
-  return request<PlacementCheckResult>(
-    `/placements/${encodeURIComponent(placementId)}/l0-checks`,
-    {
-      method: "POST",
-      headers: { "idempotency-key": idempotencyKey },
-    },
-  );
+  return request<PlacementCheckResult>(`/placements/${encodeURIComponent(placementId)}/l0-checks`, {
+    method: "POST",
+    headers: { "idempotency-key": idempotencyKey },
+  });
 }
 
 export async function registerPlacement(
@@ -499,17 +480,14 @@ export async function createContact(
   command: CreateContactCommand,
   idempotencyKey: string,
 ): Promise<ContactOption> {
-  return request<ContactOption>(
-    `/organizations/${encodeURIComponent(organizationId)}/contacts`,
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "idempotency-key": idempotencyKey,
-      },
-      body: JSON.stringify(command),
+  return request<ContactOption>(`/organizations/${encodeURIComponent(organizationId)}/contacts`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "idempotency-key": idempotencyKey,
     },
-  );
+    body: JSON.stringify(command),
+  });
 }
 
 export async function linkContact(
@@ -536,17 +514,14 @@ export async function mergeContact(
   command: MergeContactCommand,
   idempotencyKey: string,
 ): Promise<MergeContactResult> {
-  return request<MergeContactResult>(
-    `/contacts/${encodeURIComponent(sourceContactId)}/merge`,
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "idempotency-key": idempotencyKey,
-      },
-      body: JSON.stringify(command),
+  return request<MergeContactResult>(`/contacts/${encodeURIComponent(sourceContactId)}/merge`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "idempotency-key": idempotencyKey,
     },
-  );
+    body: JSON.stringify(command),
+  });
 }
 
 export async function updateContactRecord(
@@ -586,17 +561,14 @@ function changeContactStatus(
   command: ChangeContactStatusCommand,
   idempotencyKey: string,
 ) {
-  return request<ContactRegistryItem>(
-    `/contacts/${encodeURIComponent(contactId)}/${action}`,
-    {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "idempotency-key": idempotencyKey,
-      },
-      body: JSON.stringify(command),
+  return request<ContactRegistryItem>(`/contacts/${encodeURIComponent(contactId)}/${action}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "idempotency-key": idempotencyKey,
     },
-  );
+    body: JSON.stringify(command),
+  });
 }
 
 async function request<T>(path: string, init: RequestInit): Promise<T> {
@@ -629,11 +601,10 @@ async function resolveApiAccessToken(forceRefresh: boolean) {
     return inFlightAccessToken.promise;
   }
   const provider = apiAccessTokenProvider;
-  const promise = Promise.resolve(provider.getAccessToken({ forceRefresh }))
-    .then((token) => {
-      if (apiAccessTokenProvider === provider) configureApiAccessToken(token);
-      return token;
-    });
+  const promise = Promise.resolve(provider.getAccessToken({ forceRefresh })).then((token) => {
+    if (apiAccessTokenProvider === provider) configureApiAccessToken(token);
+    return token;
+  });
   const pending = { forceRefresh, promise };
   inFlightAccessToken = pending;
   try {
@@ -643,11 +614,7 @@ async function resolveApiAccessToken(forceRefresh: boolean) {
   }
 }
 
-function fetchWithToken(
-  input: RequestInfo | URL,
-  init: RequestInit,
-  token: string | null,
-) {
+function fetchWithToken(input: RequestInfo | URL, init: RequestInit, token: string | null) {
   return fetch(input, token ? { ...init, headers: withAuthorization(init.headers) } : init);
 }
 
@@ -659,9 +626,10 @@ async function readProblem(response: Response): Promise<ProblemDetails> {
       type: "about:blank",
       title: "Запрос отклонён",
       status: response.status,
-      detail: response.status === 401
-        ? "Корпоративная сессия отсутствует или истекла"
-        : "Сервер вернул некорректный ответ",
+      detail:
+        response.status === 401
+          ? "Корпоративная сессия отсутствует или истекла"
+          : "Сервер вернул некорректный ответ",
       code: response.status === 401 ? "AUTHENTICATION_REQUIRED" : "INVALID_ERROR_RESPONSE",
     };
   }

@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type {
-  HealthCheckView,
-  PlacementCheckResult,
-  PlacementView,
-} from "@embed-os/contracts";
+import type { HealthCheckView, PlacementCheckResult, PlacementView } from "@embed-os/contracts";
 import type { PlacementPort } from "../placement.port.js";
 import {
   PlacementMonitorService,
@@ -24,11 +20,13 @@ describe("PlacementMonitorService", () => {
     const result = await monitor.runBatch(10);
 
     expect(result).toEqual({ claimed: 1, succeeded: 1, failed: 0, deadLettered: 0 });
-    expect(placements.checks).toEqual([{
-      placementId: "placement-1",
-      idempotencyKey: "placement-monitor:placement-1:1787050800000",
-      source: "schedule",
-    }]);
+    expect(placements.checks).toEqual([
+      {
+        placementId: "placement-1",
+        idempotencyKey: "placement-monitor:placement-1:1787050800000",
+        source: "schedule",
+      },
+    ]);
     expect(store.completed).toEqual([{ placementId: "placement-1", workerId: "monitor-1" }]);
   });
 
@@ -43,13 +41,15 @@ describe("PlacementMonitorService", () => {
     const result = await monitor.runBatch();
 
     expect(result).toEqual({ claimed: 2, succeeded: 1, failed: 1, deadLettered: 0 });
-    expect(store.failed).toEqual([{
-      placementId: "placement-failed",
-      workerId: "monitor-2",
-      nextAttemptAt: new Date("2026-08-18T12:04:00.000Z"),
-      error: "checker unavailable",
-      deadAt: null,
-    }]);
+    expect(store.failed).toEqual([
+      {
+        placementId: "placement-failed",
+        workerId: "monitor-2",
+        nextAttemptAt: new Date("2026-08-18T12:04:00.000Z"),
+        error: "checker unavailable",
+        deadAt: null,
+      },
+    ]);
     expect(store.completed).toEqual([{ placementId: "placement-ok", workerId: "monitor-2" }]);
   });
 
@@ -63,13 +63,15 @@ describe("PlacementMonitorService", () => {
     const result = await monitor.runBatch();
 
     expect(result).toEqual({ claimed: 1, succeeded: 0, failed: 0, deadLettered: 1 });
-    expect(store.failed).toEqual([{
-      placementId: "placement-dead",
-      workerId: "monitor-3",
-      nextAttemptAt: null,
-      error: "checker unavailable",
-      deadAt: NOW,
-    }]);
+    expect(store.failed).toEqual([
+      {
+        placementId: "placement-dead",
+        workerId: "monitor-3",
+        nextAttemptAt: null,
+        error: "checker unavailable",
+        deadAt: NOW,
+      },
+    ]);
   });
 
   it("uses the lease expiry boundary and rejects unsafe batch sizes", async () => {

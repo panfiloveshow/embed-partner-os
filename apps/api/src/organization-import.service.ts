@@ -39,10 +39,9 @@ export class OrganizationImportResolutionError extends Error {
   constructor(rows: OrganizationImportRow[]) {
     super("Разрешите каждый конфликт перед применением импорта");
     this.name = "OrganizationImportResolutionError";
-    this.fieldErrors = Object.fromEntries(rows.map(({ rowNo }) => [
-      `rows.${rowNo}`,
-      "Выберите «Создать отдельно» или «Пропустить»",
-    ]));
+    this.fieldErrors = Object.fromEntries(
+      rows.map(({ rowNo }) => [`rows.${rowNo}`, "Выберите «Создать отдельно» или «Пропустить»"]),
+    );
   }
 }
 
@@ -54,7 +53,10 @@ interface ImportedOrganization extends ExistingImportOrganization {
 export class OrganizationImportService implements OrganizationImportPort {
   private readonly jobs = new Map<string, OrganizationImportJob>();
   private readonly importedOrganizations = new Map<string, ImportedOrganization>();
-  private readonly idempotency = new Map<string, { hash: string; response: OrganizationImportJob }>();
+  private readonly idempotency = new Map<
+    string,
+    { hash: string; response: OrganizationImportJob }
+  >();
 
   constructor(
     @Inject(TodayService) private readonly today: TodayService,
@@ -100,8 +102,9 @@ export class OrganizationImportService implements OrganizationImportPort {
     const resolutions = new Map(
       (command.resolutions ?? []).map(({ rowNo, decision }) => [rowNo, decision]),
     );
-    const unresolved = job.rows.filter((row) =>
-      row.decision === "conflict" && !resolutions.has(row.rowNo));
+    const unresolved = job.rows.filter(
+      (row) => row.decision === "conflict" && !resolutions.has(row.rowNo),
+    );
     if (unresolved.length > 0) throw new OrganizationImportResolutionError(unresolved);
     const now = this.clock().toISOString();
     const rows = job.rows.map((row) => this.applyRow(row, resolutions.get(row.rowNo), now));
@@ -144,8 +147,9 @@ export class OrganizationImportService implements OrganizationImportPort {
       return { ...row, resolvedDecision: "skip", appliedAt: null };
     }
     if (effectiveDecision === "update" && row.matchedOrganization) {
-      const current = this.existingOrganizations().find(({ id }) =>
-        id === row.matchedOrganization?.id);
+      const current = this.existingOrganizations().find(
+        ({ id }) => id === row.matchedOrganization?.id,
+      );
       if (current) {
         this.importedOrganizations.set(current.id, {
           ...current,

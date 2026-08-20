@@ -30,9 +30,11 @@ export function AuthenticationBoundary({ children }: AuthenticationBoundaryProps
     try {
       const token = await currentBridge.getAccessToken({ forceRefresh: false });
       configureApiAccessToken(token);
-      setState(token
-        ? { status: "ready" }
-        : { status: "required", message: "Войдите через корпоративную учётную запись" });
+      setState(
+        token
+          ? { status: "ready" }
+          : { status: "required", message: "Войдите через корпоративную учётную запись" },
+      );
     } catch {
       configureApiAccessToken(null);
       setState({
@@ -132,9 +134,11 @@ export function AuthenticationBoundary({ children }: AuthenticationBoundaryProps
   const canLogin = state.status === "required" && Boolean(bridge?.login);
   return (
     <main className="center-state auth-state" aria-live="polite">
-      {state.status === "misconfigured"
-        ? <ShieldAlert size={34} aria-hidden="true" />
-        : <LogIn size={34} aria-hidden="true" />}
+      {state.status === "misconfigured" ? (
+        <ShieldAlert size={34} aria-hidden="true" />
+      ) : (
+        <LogIn size={34} aria-hidden="true" />
+      )}
       <h1>{state.status === "misconfigured" ? "Вход не настроен" : "Нужен корпоративный вход"}</h1>
       <p>{state.message}</p>
       {canLogin ? (

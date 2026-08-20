@@ -21,17 +21,22 @@ describe("TaskCompletionApplicationService", () => {
     const store = new FakeCompletionStore();
     const service = createService(store);
 
-    const result = await service.complete("task-1", "user-1", {
-      contactId: "contact-1",
-      interactionType: "email",
-      outcome: "Получена спецификация",
-      summary: "Партнёр подтвердил состав API",
-      next: {
-        mode: "task",
-        title: "Передать примеры интеграции",
-        dueAt: "2026-08-18T12:00:00+03:00",
+    const result = await service.complete(
+      "task-1",
+      "user-1",
+      {
+        contactId: "contact-1",
+        interactionType: "email",
+        outcome: "Получена спецификация",
+        summary: "Партнёр подтвердил состав API",
+        next: {
+          mode: "task",
+          title: "Передать примеры интеграции",
+          dueAt: "2026-08-18T12:00:00+03:00",
+        },
       },
-    }, "test-key-success-0001");
+      "test-key-success-0001",
+    );
 
     expect(store.state.task.status).toBe("COMPLETED");
     expect(store.state.task.version).toBe(4);
@@ -79,18 +84,23 @@ describe("TaskCompletionApplicationService", () => {
     const store = new FakeCompletionStore();
     const service = createService(store);
 
-    await service.complete("task-1", "user-1", {
-      contactId: "contact-1",
-      interactionType: "call",
-      outcome: "Ждём решение ИБ",
-      summary: "Документы переданы партнёру",
-      next: {
-        mode: "waiting",
-        waitingReason: "Согласование безопасности",
-        waitingFor: "Служба ИБ партнёра",
-        reviewAt: "2026-08-21T10:00:00+03:00",
+    await service.complete(
+      "task-1",
+      "user-1",
+      {
+        contactId: "contact-1",
+        interactionType: "call",
+        outcome: "Ждём решение ИБ",
+        summary: "Документы переданы партнёру",
+        next: {
+          mode: "waiting",
+          waitingReason: "Согласование безопасности",
+          waitingFor: "Служба ИБ партнёра",
+          reviewAt: "2026-08-21T10:00:00+03:00",
+        },
       },
-    }, "test-key-waiting-0001");
+      "test-key-waiting-0001",
+    );
 
     expect(store.state.createdTasks).toHaveLength(1);
     expect(store.state.createdTasks[0]).toMatchObject({
@@ -108,18 +118,23 @@ describe("TaskCompletionApplicationService", () => {
     const store = new FakeCompletionStore();
     const service = createService(store);
 
-    await service.complete("task-1", "user-1", {
-      contactId: "contact-1",
-      interactionType: "meeting",
-      outcome: "Партнёр отказался",
-      summary: "Нет ресурсов на интеграцию в этом году",
-      next: {
-        mode: "close",
-        closeReason: "Нет ресурсов",
-        comment: "Вернуться после пересмотра бюджета",
-        returnAt: "2027-02-01T10:00:00+03:00",
+    await service.complete(
+      "task-1",
+      "user-1",
+      {
+        contactId: "contact-1",
+        interactionType: "meeting",
+        outcome: "Партнёр отказался",
+        summary: "Нет ресурсов на интеграцию в этом году",
+        next: {
+          mode: "close",
+          closeReason: "Нет ресурсов",
+          comment: "Вернуться после пересмотра бюджета",
+          returnAt: "2027-02-01T10:00:00+03:00",
+        },
       },
-    }, "test-key-close-0001");
+      "test-key-close-0001",
+    );
 
     expect(store.state.createdTasks).toHaveLength(0);
     expect(store.state.opportunityPatch).toMatchObject({
@@ -138,17 +153,22 @@ describe("TaskCompletionApplicationService", () => {
     const service = createService(store);
 
     await expect(
-      service.complete("task-1", "user-1", {
-        contactId: "contact-1",
-        interactionType: "messenger",
-        outcome: "Получен ответ",
-        summary: "Согласовали следующий созвон",
-        next: {
-          mode: "task",
-          title: "Провести созвон",
-          dueAt: "2026-08-18T12:00:00+03:00",
+      service.complete(
+        "task-1",
+        "user-1",
+        {
+          contactId: "contact-1",
+          interactionType: "messenger",
+          outcome: "Получен ответ",
+          summary: "Согласовали следующий созвон",
+          next: {
+            mode: "task",
+            title: "Провести созвон",
+            dueAt: "2026-08-18T12:00:00+03:00",
+          },
         },
-      }, "test-key-conflict-0001"),
+        "test-key-conflict-0001",
+      ),
     ).rejects.toBeInstanceOf(ConcurrencyConflictError);
 
     expect(store.state.task.status).toBe("OPEN");
@@ -176,18 +196,8 @@ describe("TaskCompletionApplicationService", () => {
       },
     };
 
-    const first = await service.complete(
-      "task-1",
-      "user-1",
-      command,
-      "test-key-replay-0001",
-    );
-    const replay = await service.complete(
-      "task-1",
-      "user-1",
-      command,
-      "test-key-replay-0001",
-    );
+    const first = await service.complete("task-1", "user-1", command, "test-key-replay-0001");
+    const replay = await service.complete("task-1", "user-1", command, "test-key-replay-0001");
 
     expect(replay).toEqual(first);
     expect(store.state.createdTasks).toHaveLength(1);
@@ -231,17 +241,22 @@ describe("TaskCompletionApplicationService", () => {
     const service = createService(store);
 
     await expect(
-      service.complete("task-1", "user-1", {
-        contactId: "contact-from-another-organization",
-        interactionType: "email",
-        outcome: "Получен ответ",
-        summary: "Ответ получен от другого контакта",
-        next: {
-          mode: "task",
-          title: "Уточнить контакт",
-          dueAt: "2026-08-18T12:00:00+03:00",
+      service.complete(
+        "task-1",
+        "user-1",
+        {
+          contactId: "contact-from-another-organization",
+          interactionType: "email",
+          outcome: "Получен ответ",
+          summary: "Ответ получен от другого контакта",
+          next: {
+            mode: "task",
+            title: "Уточнить контакт",
+            dueAt: "2026-08-18T12:00:00+03:00",
+          },
         },
-      }, "test-key-contact-scope-0001"),
+        "test-key-contact-scope-0001",
+      ),
     ).rejects.toBeInstanceOf(ContactNotAvailableError);
 
     expect(store.state.task.status).toBe("OPEN");
@@ -346,10 +361,7 @@ class FakeCompletionStore implements CompletionTransactionRunner, CompletionTran
     return { state: "reserved" as const, recordId: input.id };
   }
 
-  async completeIdempotency(input: {
-    recordId: string;
-    result: CompletionResult;
-  }) {
+  async completeIdempotency(input: { recordId: string; result: CompletionResult }) {
     const record = this.state.idempotencyRecords.find(({ id }) => id === input.recordId);
     if (!record) throw new Error("Missing fake idempotency reservation");
     record.result = input.result;
@@ -365,7 +377,8 @@ class FakeCompletionStore implements CompletionTransactionRunner, CompletionTran
       input.taskId !== this.state.task.id ||
       input.expectedVersion !== this.state.task.version ||
       this.state.task.status !== "OPEN"
-    ) return false;
+    )
+      return false;
     this.state.task.status = "COMPLETED";
     this.state.task.version += 1;
     return true;

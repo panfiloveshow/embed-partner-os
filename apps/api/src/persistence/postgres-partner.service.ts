@@ -56,54 +56,80 @@ export class PostgresPartnerService implements PartnerPort {
       where: {
         archivedAt: null,
         ...organizationScope(actor),
-        ...(query.search ? {
-          AND: [{
-            OR: [
-              { name: { contains: query.search, mode: "insensitive" } },
-              { legalName: { contains: query.search, mode: "insensitive" } },
-              { segment: { contains: query.search, mode: "insensitive" } },
-              { group: { is: { archivedAt: null, name: { contains: query.search, mode: "insensitive" } } } },
-              { domains: { some: { archivedAt: null, hostNormalized: { contains: query.search, mode: "insensitive" } } } },
-            ],
-          }],
-        } : {}),
-        ...(query.groupId ? {
-          groupId: query.groupId,
-          group: { is: { archivedAt: null } },
-        } : {}),
+        ...(query.search
+          ? {
+              AND: [
+                {
+                  OR: [
+                    { name: { contains: query.search, mode: "insensitive" } },
+                    { legalName: { contains: query.search, mode: "insensitive" } },
+                    { segment: { contains: query.search, mode: "insensitive" } },
+                    {
+                      group: {
+                        is: {
+                          archivedAt: null,
+                          name: { contains: query.search, mode: "insensitive" },
+                        },
+                      },
+                    },
+                    {
+                      domains: {
+                        some: {
+                          archivedAt: null,
+                          hostNormalized: { contains: query.search, mode: "insensitive" },
+                        },
+                      },
+                    },
+                  ],
+                },
+              ],
+            }
+          : {}),
+        ...(query.groupId
+          ? {
+              groupId: query.groupId,
+              group: { is: { archivedAt: null } },
+            }
+          : {}),
         ...(query.segment ? { segment: query.segment } : {}),
         ...(query.ownerId ? { ownerId: query.ownerId } : {}),
-        ...(
-          query.stageCode || query.scoreMin !== undefined || query.scoreMax !== undefined
-            ? {
-                opportunities: {
-                  some: {
-                    archivedAt: null,
-                    ...(query.stageCode ? { stageCode: query.stageCode } : {}),
-                    ...(query.scoreMin !== undefined || query.scoreMax !== undefined ? {
-                      score: {
-                        ...(query.scoreMin !== undefined ? { gte: query.scoreMin } : {}),
-                        ...(query.scoreMax !== undefined ? { lte: query.scoreMax } : {}),
-                      },
-                    } : {}),
-                  },
+        ...(query.stageCode || query.scoreMin !== undefined || query.scoreMax !== undefined
+          ? {
+              opportunities: {
+                some: {
+                  archivedAt: null,
+                  ...(query.stageCode ? { stageCode: query.stageCode } : {}),
+                  ...(query.scoreMin !== undefined || query.scoreMax !== undefined
+                    ? {
+                        score: {
+                          ...(query.scoreMin !== undefined ? { gte: query.scoreMin } : {}),
+                          ...(query.scoreMax !== undefined ? { lte: query.scoreMax } : {}),
+                        },
+                      }
+                    : {}),
                 },
-              }
-            : {}
-        ),
+              },
+            }
+          : {}),
       },
       include: partnerOrganizationRelations,
       orderBy: [{ name: "asc" }, { id: "asc" }],
     });
     const allPartners = records.map((record) => mapPartner(record, now));
     const partners = allPartners
-      .filter((partner) => !query.integrationStatus || partner.integrationStatus === query.integrationStatus)
-      .filter((partner) => !query.activeAfter || (
-        partner.lastActivityAt !== null && partner.lastActivityAt >= query.activeAfter
-      ))
-      .sort((left, right) =>
-        (right.partnerScore ?? -1) - (left.partnerScore ?? -1) ||
-        left.name.localeCompare(right.name, "ru"),
+      .filter(
+        (partner) =>
+          !query.integrationStatus || partner.integrationStatus === query.integrationStatus,
+      )
+      .filter(
+        (partner) =>
+          !query.activeAfter ||
+          (partner.lastActivityAt !== null && partner.lastActivityAt >= query.activeAfter),
+      )
+      .sort(
+        (left, right) =>
+          (right.partnerScore ?? -1) - (left.partnerScore ?? -1) ||
+          left.name.localeCompare(right.name, "ru"),
       );
 
     return { now, allPartners, partners };
@@ -130,9 +156,13 @@ export class PostgresPartnerService implements PartnerPort {
       where: {
         OR: [
           { entityType: "Organization", entityId: organizationId },
-          ...(opportunityIds.length ? [{ entityType: "Opportunity", entityId: { in: opportunityIds } }] : []),
+          ...(opportunityIds.length
+            ? [{ entityType: "Opportunity", entityId: { in: opportunityIds } }]
+            : []),
           ...(taskIds.length ? [{ entityType: "Task", entityId: { in: taskIds } }] : []),
-          ...(placementIds.length ? [{ entityType: "Placement", entityId: { in: placementIds } }] : []),
+          ...(placementIds.length
+            ? [{ entityType: "Placement", entityId: { in: placementIds } }]
+            : []),
           ...(contactIds.length ? [{ entityType: "Contact", entityId: { in: contactIds } }] : []),
         ],
       },
@@ -176,13 +206,14 @@ export class PostgresPartnerService implements PartnerPort {
       status: opportunity.status,
       score: opportunity.score,
       owner: { id: opportunity.owner.id, name: opportunity.owner.displayName },
-      nextAction: opportunity.nextTask?.status === TaskStatus.OPEN
-        ? {
-            id: opportunity.nextTask.id,
-            title: opportunity.nextTask.title,
-            dueAt: opportunity.nextTask.dueAt.toISOString(),
-          }
-        : null,
+      nextAction:
+        opportunity.nextTask?.status === TaskStatus.OPEN
+          ? {
+              id: opportunity.nextTask.id,
+              title: opportunity.nextTask.title,
+              dueAt: opportunity.nextTask.dueAt.toISOString(),
+            }
+          : null,
       updatedAt: opportunity.updatedAt.toISOString(),
     }));
     return {
@@ -205,13 +236,7 @@ export class PostgresPartnerService implements PartnerPort {
     const actor = await this.exportActor(rawActorSubject);
     const persistenceActor = await this.actors.current();
     const { partners, now } = await this.loadPartnersForActor(query, persistenceActor);
-    const result = createPartnerExport(
-      partners,
-      query,
-      actor.subject,
-      randomUUID(),
-      now,
-    );
+    const result = createPartnerExport(partners, query, actor.subject, randomUUID(), now);
     await this.prisma.auditLog.create({
       data: {
         id: result.audit.id,
@@ -265,17 +290,11 @@ export class PostgresPartnerService implements PartnerPort {
         },
       },
     });
-    if (
-      !user ||
-      user.status !== "ACTIVE" ||
-      !user.teamId ||
-      user.permissions.length === 0
-    ) {
+    if (!user || user.status !== "ACTIVE" || !user.teamId || user.permissions.length === 0) {
       throw new ExportPermissionDeniedError();
     }
     return { id: user.id, teamId: user.teamId, subject };
   }
-
 }
 
 const PARTNER_PAGE_LIMIT = 200;
@@ -353,8 +372,10 @@ function mapPartner(record: PartnerOrganizationRecord, now: Date): PartnerRegist
   const primaryOpportunity = record.opportunities[0] ?? null;
   const lastActivityAt = latestDate([
     ...record.opportunities.map(({ updatedAt }) => updatedAt),
-    ...record.opportunities.flatMap(({ interactions }) => interactions.map(({ occurredAt }) => occurredAt)),
-    ...record.placements.flatMap(({ lastCheckAt }) => lastCheckAt ? [lastCheckAt] : []),
+    ...record.opportunities.flatMap(({ interactions }) =>
+      interactions.map(({ occurredAt }) => occurredAt),
+    ),
+    ...record.placements.flatMap(({ lastCheckAt }) => (lastCheckAt ? [lastCheckAt] : [])),
   ]);
   return {
     id: record.id,
@@ -370,9 +391,10 @@ function mapPartner(record: PartnerOrganizationRecord, now: Date): PartnerRegist
       isPrimary: domain.isPrimary,
       verifiedAt: domain.verifiedAt?.toISOString() ?? null,
     })),
-    organizationGroup: record.group && record.group.archivedAt === null
-      ? { id: record.group.id, name: record.group.name }
-      : null,
+    organizationGroup:
+      record.group && record.group.archivedAt === null
+        ? { id: record.group.id, name: record.group.name }
+        : null,
     owner: record.owner ? { id: record.owner.id, name: record.owner.displayName } : null,
     currentStage: primaryOpportunity
       ? { code: primaryOpportunity.stageCode, label: primaryOpportunity.stageLabel }
@@ -380,18 +402,22 @@ function mapPartner(record: PartnerOrganizationRecord, now: Date): PartnerRegist
     partnerScore: primaryOpportunity?.score ?? null,
     integrationStatus: integrationStatus(record),
     lastActivityAt: lastActivityAt?.toISOString() ?? null,
-    nextAction: primaryOpportunity?.nextTask?.status === TaskStatus.OPEN
-      ? {
-          id: primaryOpportunity.nextTask.id,
-          title: primaryOpportunity.nextTask.title,
-          dueAt: primaryOpportunity.nextTask.dueAt.toISOString(),
-        }
-      : null,
+    nextAction:
+      primaryOpportunity?.nextTask?.status === TaskStatus.OPEN
+        ? {
+            id: primaryOpportunity.nextTask.id,
+            title: primaryOpportunity.nextTask.title,
+            dueAt: primaryOpportunity.nextTask.dueAt.toISOString(),
+          }
+        : null,
     counts: {
       contacts: record.contactLinks.length,
       opportunities: record.opportunities.length,
-      tasks: record.opportunities.reduce((sum, opportunity) =>
-        sum + opportunity.tasks.filter(({ status }) => status === TaskStatus.OPEN).length, 0),
+      tasks: record.opportunities.reduce(
+        (sum, opportunity) =>
+          sum + opportunity.tasks.filter(({ status }) => status === TaskStatus.OPEN).length,
+        0,
+      ),
       placements: record.placements.length,
       documents: 0,
     },
@@ -399,16 +425,21 @@ function mapPartner(record: PartnerOrganizationRecord, now: Date): PartnerRegist
 }
 
 function integrationStatus(record: PartnerOrganizationRecord): PartnerIntegrationStatus {
-  if (record.placements.some((placement) =>
-    placement.healthStatus === "failed" ||
-    placement.healthStatus === "degraded" ||
-    placement.alerts.length > 0,
-  )) return "issue";
+  if (
+    record.placements.some(
+      (placement) =>
+        placement.healthStatus === "failed" ||
+        placement.healthStatus === "degraded" ||
+        placement.alerts.length > 0,
+    )
+  )
+    return "issue";
   if (record.placements.some(({ businessStatus }) => businessStatus === "active")) return "active";
   if (
     record.placements.some(({ businessStatus }) => businessStatus === "planned") ||
     record.opportunities.some(({ stageCode }) => ["S7", "S8", "S9", "S10"].includes(stageCode))
-  ) return "planned";
+  )
+    return "planned";
   return "not_started";
 }
 
@@ -431,23 +462,23 @@ function mapContact(
     archivedAt: null,
     mergedIntoId: null,
     updatedAt: contact.updatedAt.toISOString(),
-    organizationLinks: [{
-      id: link.id,
-      organizationId: link.organizationId,
-      organizationName,
-      role: link.role,
-      department: link.department,
-      isPrimary: link.isPrimary,
-      validFrom: link.validFrom.toISOString(),
-      validTo: null,
-    }],
+    organizationLinks: [
+      {
+        id: link.id,
+        organizationId: link.organizationId,
+        organizationName,
+        role: link.role,
+        department: link.department,
+        isPrimary: link.isPrimary,
+        validFrom: link.validFrom.toISOString(),
+        validTo: null,
+      },
+    ],
     duplicateMatches: [],
   };
 }
 
-function mapPlacement(
-  record: PartnerOrganizationRecord["placements"][number],
-): PlacementView {
+function mapPlacement(record: PartnerOrganizationRecord["placements"][number]): PlacementView {
   const check = record.healthChecks[0];
   const alert = record.alerts[0];
   return {
@@ -470,29 +501,33 @@ function mapPlacement(
     lastCheckAt: record.lastCheckAt?.toISOString() ?? null,
     nextCheckAt: record.nextCheckAt?.toISOString() ?? null,
     version: record.version,
-    lastCheck: check ? {
-      id: check.id,
-      placementId: check.placementId,
-      checkedAt: check.checkedAt.toISOString(),
-      result: check.result as HealthCheckView["result"],
-      pageHttpStatus: check.pageHttpStatus,
-      embedHttpStatus: check.embedHttpStatus,
-      playerFound: check.playerFound,
-      embedUrl: check.embedUrl,
-      evidenceUri: check.evidenceUri,
-      errorCode: check.errorCode,
-      durationMs: check.durationMs,
-      source: check.source as HealthCheckView["source"],
-    } : null,
-    activeAlert: alert ? {
-      id: alert.id,
-      status: alert.status as PlacementAlertView["status"],
-      severity: alert.severity as PlacementAlertView["severity"],
-      firstFailureAt: alert.firstFailureAt.toISOString(),
-      openedAt: alert.openedAt.toISOString(),
-      closedAt: alert.closedAt?.toISOString() ?? null,
-      technicalTaskId: alert.technicalTaskId,
-    } : null,
+    lastCheck: check
+      ? {
+          id: check.id,
+          placementId: check.placementId,
+          checkedAt: check.checkedAt.toISOString(),
+          result: check.result as HealthCheckView["result"],
+          pageHttpStatus: check.pageHttpStatus,
+          embedHttpStatus: check.embedHttpStatus,
+          playerFound: check.playerFound,
+          embedUrl: check.embedUrl,
+          evidenceUri: check.evidenceUri,
+          errorCode: check.errorCode,
+          durationMs: check.durationMs,
+          source: check.source as HealthCheckView["source"],
+        }
+      : null,
+    activeAlert: alert
+      ? {
+          id: alert.id,
+          status: alert.status as PlacementAlertView["status"],
+          severity: alert.severity as PlacementAlertView["severity"],
+          firstFailureAt: alert.firstFailureAt.toISOString(),
+          openedAt: alert.openedAt.toISOString(),
+          closedAt: alert.closedAt?.toISOString() ?? null,
+          technicalTaskId: alert.technicalTaskId,
+        }
+      : null,
   };
 }
 
@@ -518,15 +553,18 @@ function mapAudit(record: {
 function registryFilters(partners: PartnerRegistryItem[]): PartnerRegistryPayload["filters"] {
   return {
     groups: uniqueBy(
-      partners.flatMap(({ organizationGroup }) => organizationGroup ? [organizationGroup] : []),
+      partners.flatMap(({ organizationGroup }) => (organizationGroup ? [organizationGroup] : [])),
       ({ id }) => id,
     ).sort((left, right) => left.name.localeCompare(right.name, "ru")),
-    segments: [...new Set(partners.flatMap(({ segment }) => segment ? [segment] : []))]
-      .sort((left, right) => left.localeCompare(right, "ru")),
-    owners: uniqueBy(partners.flatMap(({ owner }) => owner ? [owner] : []), ({ id }) => id)
-      .sort((left, right) => left.name.localeCompare(right.name, "ru")),
+    segments: [...new Set(partners.flatMap(({ segment }) => (segment ? [segment] : [])))].sort(
+      (left, right) => left.localeCompare(right, "ru"),
+    ),
+    owners: uniqueBy(
+      partners.flatMap(({ owner }) => (owner ? [owner] : [])),
+      ({ id }) => id,
+    ).sort((left, right) => left.name.localeCompare(right.name, "ru")),
     stages: uniqueBy(
-      partners.flatMap(({ currentStage }) => currentStage ? [currentStage] : []),
+      partners.flatMap(({ currentStage }) => (currentStage ? [currentStage] : [])),
       ({ code }) => code,
     ).sort((left, right) => left.code.localeCompare(right.code)),
     integrationStatuses: ["not_started", "planned", "active", "issue"],
@@ -537,7 +575,12 @@ function mapOrganizationGroup(
   group: PartnerOrganizationRecord["group"],
   actor: PersistenceActor,
 ): OrganizationGroupView | null {
-  if (!group || group.archivedAt !== null || actor.scopeMode === "own" || actor.scopeMode === "assigned") {
+  if (
+    !group ||
+    group.archivedAt !== null ||
+    actor.scopeMode === "own" ||
+    actor.scopeMode === "assigned"
+  ) {
     return null;
   }
   if (actor.scopeMode === "team" && group.teamId !== actor.teamId) return null;
@@ -575,7 +618,8 @@ function parseExportAudit(value: Prisma.JsonValue | null): PartnerExportAuditVie
     !audit.filters ||
     typeof audit.filters !== "object" ||
     Array.isArray(audit.filters)
-  ) return null;
+  )
+    return null;
   return {
     id: audit.id,
     actorSubject: audit.actorSubject,
@@ -591,17 +635,51 @@ function parseExportAudit(value: Prisma.JsonValue | null): PartnerExportAuditVie
 function partnerMetrics(organization: PartnerRegistryItem, now: Date): PartnerMetricView[] {
   const dataAsOf = now.toISOString();
   return [
-    { code: "partner_score", label: "Partner Score", value: organization.partnerScore ?? 0, dataAsOf, completeness: organization.partnerScore === null ? "unavailable" : "complete" },
-    { code: "contacts", label: "Контакты", value: organization.counts.contacts, dataAsOf, completeness: "complete" },
-    { code: "opportunities", label: "Возможности", value: organization.counts.opportunities, dataAsOf, completeness: "complete" },
-    { code: "active_tasks", label: "Активные задачи", value: organization.counts.tasks, dataAsOf, completeness: "complete" },
-    { code: "active_placements", label: "Размещения", value: organization.counts.placements, dataAsOf, completeness: "complete" },
+    {
+      code: "partner_score",
+      label: "Partner Score",
+      value: organization.partnerScore ?? 0,
+      dataAsOf,
+      completeness: organization.partnerScore === null ? "unavailable" : "complete",
+    },
+    {
+      code: "contacts",
+      label: "Контакты",
+      value: organization.counts.contacts,
+      dataAsOf,
+      completeness: "complete",
+    },
+    {
+      code: "opportunities",
+      label: "Возможности",
+      value: organization.counts.opportunities,
+      dataAsOf,
+      completeness: "complete",
+    },
+    {
+      code: "active_tasks",
+      label: "Активные задачи",
+      value: organization.counts.tasks,
+      dataAsOf,
+      completeness: "complete",
+    },
+    {
+      code: "active_placements",
+      label: "Размещения",
+      value: organization.counts.placements,
+      dataAsOf,
+      completeness: "complete",
+    },
   ];
 }
 
 function partnerSummary(partner: PartnerRegistryItem) {
-  const domain = partner.primaryDomain ? `Основной домен — ${partner.primaryDomain}.` : "Основной домен не указан.";
-  const stage = partner.currentStage ? `Текущая стадия — ${partner.currentStage.label}.` : "Активной возможности нет.";
+  const domain = partner.primaryDomain
+    ? `Основной домен — ${partner.primaryDomain}.`
+    : "Основной домен не указан.";
+  const stage = partner.currentStage
+    ? `Текущая стадия — ${partner.currentStage.label}.`
+    : "Активной возможности нет.";
   return `${partner.segment ?? "Сегмент не указан"}. ${domain} ${stage}`;
 }
 
@@ -621,12 +699,16 @@ function uniqueBy<T, K>(values: T[], key: (value: T) => K) {
 }
 
 function auditActionLabel(action: string) {
-  return ({
-    "contact.updated": "Обновлён контакт",
-    "contact.archived": "Контакт перемещён в архив",
-    "contact.restored": "Контакт восстановлен",
-    "placement.register": "Добавлено размещение",
-    "placement.update": "Обновлено размещение",
-    "opportunity.stage_transition": "Изменена стадия возможности",
-  } as Record<string, string>)[action] ?? action;
+  return (
+    (
+      {
+        "contact.updated": "Обновлён контакт",
+        "contact.archived": "Контакт перемещён в архив",
+        "contact.restored": "Контакт восстановлен",
+        "placement.register": "Добавлено размещение",
+        "placement.update": "Обновлено размещение",
+        "opportunity.stage_transition": "Изменена стадия возможности",
+      } as Record<string, string>
+    )[action] ?? action
+  );
 }

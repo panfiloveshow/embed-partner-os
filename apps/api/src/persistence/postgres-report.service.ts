@@ -1,10 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma, type ReportSnapshot } from "@prisma/client";
-import type {
-  WeeklyReportPayload,
-  WeeklyReportSnapshot,
-} from "@embed-os/contracts";
+import type { WeeklyReportPayload, WeeklyReportSnapshot } from "@embed-os/contracts";
 import { parseGenerateWeeklyReportCommand, weeklyReportPeriod } from "@embed-os/domain";
 import {
   IdempotencyConflictError,
@@ -18,10 +15,7 @@ import {
 } from "../application/weekly-report.js";
 import { buildWeeklyReportPublishedEventPayload } from "../reporting/report-digest.js";
 import type { ReportPort } from "../report.port.js";
-import {
-  PersistenceActorService,
-  requireActorTeam,
-} from "./persistence-actor.service.js";
+import { PersistenceActorService, requireActorTeam } from "./persistence-actor.service.js";
 import { PrismaService } from "./prisma.service.js";
 
 type SnapshotRecord = ReportSnapshot & {
@@ -115,12 +109,7 @@ export class PostgresReportService implements ReportPort {
           select: { revision: true },
         });
         const revision = (previousRevision?.revision ?? 0) + 1;
-        const source = await loadWeeklySource(
-          transaction,
-          teamId,
-          period.start,
-          dataAsOf,
-        );
+        const source = await loadWeeklySource(transaction, teamId, period.start, dataAsOf);
         const payload = buildWeeklyReportPayload(source, period, dataAsOf);
         const checksum = weeklyReportChecksum(payload);
         const snapshotId = randomUUID();
@@ -170,15 +159,17 @@ export class PostgresReportService implements ReportPort {
             aggregateId: snapshotId,
             aggregateVersion: revision,
             schemaVersion: 1,
-            payload: toJson(buildWeeklyReportPublishedEventPayload({
-              snapshotId,
-              teamId,
-              teamName,
-              periodStart: response.periodStart,
-              periodEnd: response.periodEnd,
-              revision,
-              payload,
-            })),
+            payload: toJson(
+              buildWeeklyReportPublishedEventPayload({
+                snapshotId,
+                teamId,
+                teamName,
+                periodStart: response.periodStart,
+                periodEnd: response.periodEnd,
+                revision,
+                payload,
+              }),
+            ),
             occurredAt: now,
           },
         });
@@ -240,10 +231,7 @@ async function loadWeeklySource(
       where: {
         createdAt: { lte: dataAsOf },
         opportunity: { archivedAt: null, owner: { teamId } },
-        OR: [
-          { status: "OPEN" },
-          { completedAt: { gte: periodStart, lte: dataAsOf } },
-        ],
+        OR: [{ status: "OPEN" }, { completedAt: { gte: periodStart, lte: dataAsOf } }],
       },
       include: {
         opportunity: {

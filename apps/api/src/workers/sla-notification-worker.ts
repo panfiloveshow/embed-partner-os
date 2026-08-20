@@ -19,7 +19,8 @@ async function bootstrap() {
     webhookSecret: requiredSetting("SLA_NOTIFICATION_WEBHOOK_SECRET"),
     timeoutMs: integerSetting("SLA_NOTIFICATION_TIMEOUT_MS", 10_000, 100, 60_000),
   });
-  const workerId = process.env.SLA_NOTIFICATION_WORKER_ID?.trim() ||
+  const workerId =
+    process.env.SLA_NOTIFICATION_WORKER_ID?.trim() ||
     `${hostname()}:${process.pid}:sla-notification`;
   const relay = new OutboxRelayService(
     new PrismaOutboxRelayStore(prisma),
@@ -57,7 +58,14 @@ function requiredSetting(name: string) {
 }
 
 function recipients(raw: string) {
-  const values = [...new Set(raw.split(",").map((value) => value.trim()).filter(Boolean))];
+  const values = [
+    ...new Set(
+      raw
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean),
+    ),
+  ];
   if (values.length === 0) throw new Error("SLA_ESCALATION_RECIPIENTS is empty");
   return values;
 }

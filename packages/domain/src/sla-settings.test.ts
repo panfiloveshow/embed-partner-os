@@ -21,12 +21,14 @@ describe("SLA settings", () => {
   });
 
   it("rejects a missing or out-of-range threshold", () => {
-    expect(() => parseUpdateSlaSettingsCommand({
-      version: 1,
-      escalationAfterDays: 3,
-      thresholds: { ...defaultSlaThresholds, S7: 0 },
-      reason: "Проверка валидации",
-    })).toThrow("Настройки SLA не сохранены");
+    expect(() =>
+      parseUpdateSlaSettingsCommand({
+        version: 1,
+        escalationAfterDays: 3,
+        thresholds: { ...defaultSlaThresholds, S7: 0 },
+        reason: "Проверка валидации",
+      }),
+    ).toThrow("Настройки SLA не сохранены");
   });
 
   it("reads historical definitions with safe defaults and preserves the rest of the schema", () => {

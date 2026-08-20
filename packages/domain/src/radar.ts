@@ -43,14 +43,31 @@ export function normalizeRadarTarget(value: string) {
       url: "Удалите логин и пароль из адреса",
     });
   }
-  const host = url.hostname.toLocaleLowerCase("en-US").replace(/^www\./, "").replace(/\.$/, "");
+  const host = url.hostname
+    .toLocaleLowerCase("en-US")
+    .replace(/^www\./, "")
+    .replace(/\.$/, "");
   if (!host.includes(".") || host === "localhost" || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)) {
     throw new DomainRuleError("RAD-001", "Укажите публичный домен", {
       url: "Локальные адреса и IP не принимаются",
     });
   }
   const firstLabel = host.split(".")[0] ?? "";
-  if (["admin", "api", "assets", "cdn", "dev", "internal", "preview", "stage", "staging", "static", "test"].includes(firstLabel)) {
+  if (
+    [
+      "admin",
+      "api",
+      "assets",
+      "cdn",
+      "dev",
+      "internal",
+      "preview",
+      "stage",
+      "staging",
+      "static",
+      "test",
+    ].includes(firstLabel)
+  ) {
     throw new DomainRuleError("RAD-002", "Технический поддомен исключён из Радара", {
       url: "Укажите публичную контентную страницу, а не технический хост",
     });
@@ -67,7 +84,10 @@ export function parseCreateRadarCandidateCommand(input: unknown): CreateRadarCan
   normalizeRadarTarget(url);
   const source = requiredText(input.source, "source", 200);
   const publicationFrequency = optionalText(input.publicationFrequency, "publicationFrequency", 20);
-  if (publicationFrequency && !["daily", "weekly", "monthly", "unknown"].includes(publicationFrequency)) {
+  if (
+    publicationFrequency &&
+    !["daily", "weekly", "monthly", "unknown"].includes(publicationFrequency)
+  ) {
     throw validation("Некорректная частота публикаций", {
       publicationFrequency: "Используйте daily, weekly, monthly или unknown",
     });
@@ -89,9 +109,8 @@ export function parseCreateRadarCandidateCommand(input: unknown): CreateRadarCan
       estimatedVideoPagesMax: "Максимум должен быть не меньше минимума",
     });
   }
-  const trafficEstimate = input.trafficEstimate === undefined
-    ? undefined
-    : parseTrafficEstimate(input.trafficEstimate);
+  const trafficEstimate =
+    input.trafficEstimate === undefined ? undefined : parseTrafficEstimate(input.trafficEstimate);
   if (input.contactsFound !== undefined && typeof input.contactsFound !== "boolean") {
     throw validation("Некорректный признак контакта", {
       contactsFound: "Ожидается true или false",
@@ -101,10 +120,21 @@ export function parseCreateRadarCandidateCommand(input: unknown): CreateRadarCan
     name,
     url,
     source,
-    ...(optionalText(input.topic, "topic", 200) ? { topic: optionalText(input.topic, "topic", 200) } : {}),
-    ...(optionalText(input.language, "language", 40) ? { language: optionalText(input.language, "language", 40) } : {}),
-    ...(optionalText(input.geography, "geography", 120) ? { geography: optionalText(input.geography, "geography", 120) } : {}),
-    ...(publicationFrequency ? { publicationFrequency: publicationFrequency as RadarCandidateFeatures["publicationFrequency"] } : {}),
+    ...(optionalText(input.topic, "topic", 200)
+      ? { topic: optionalText(input.topic, "topic", 200) }
+      : {}),
+    ...(optionalText(input.language, "language", 40)
+      ? { language: optionalText(input.language, "language", 40) }
+      : {}),
+    ...(optionalText(input.geography, "geography", 120)
+      ? { geography: optionalText(input.geography, "geography", 120) }
+      : {}),
+    ...(publicationFrequency
+      ? {
+          publicationFrequency:
+            publicationFrequency as RadarCandidateFeatures["publicationFrequency"],
+        }
+      : {}),
     ...(typeof input.contactsFound === "boolean" ? { contactsFound: input.contactsFound } : {}),
     ...(optionalText(input.cms, "cms", 120) ? { cms: optionalText(input.cms, "cms", 120) } : {}),
     ...(estimatedVideoPagesMin === undefined ? {} : { estimatedVideoPagesMin }),
@@ -117,7 +147,12 @@ export function parseRadarDecisionCommand(input: unknown): RadarCandidateDecisio
   if (!isRecord(input)) throw validation("Команда квалификации должна быть объектом");
   const version = positiveInteger(input.version, "version");
   const decision = input.decision;
-  if (decision !== "accept" && decision !== "defer" && decision !== "reject" && decision !== "merge") {
+  if (
+    decision !== "accept" &&
+    decision !== "defer" &&
+    decision !== "reject" &&
+    decision !== "merge"
+  ) {
     throw validation("Выберите допустимое решение", {
       decision: "Используйте accept, defer, reject или merge",
     });
@@ -149,7 +184,11 @@ export function parseRadarDecisionCommand(input: unknown): RadarCandidateDecisio
 export function parseRadarScoreAdjustmentCommand(input: unknown): RadarScoreAdjustmentCommand {
   if (!isRecord(input)) throw validation("Команда корректировки score должна быть объектом");
   const version = positiveInteger(input.version, "version");
-  if (!Number.isInteger(input.adjustment) || Number(input.adjustment) < -40 || Number(input.adjustment) > 40) {
+  if (
+    !Number.isInteger(input.adjustment) ||
+    Number(input.adjustment) < -40 ||
+    Number(input.adjustment) > 40
+  ) {
     throw validation("Ручная корректировка должна быть целым числом от -40 до 40", {
       adjustment: "Укажите целое число от -40 до 40",
     });
@@ -163,43 +202,138 @@ export function parseRadarScoreAdjustmentCommand(input: unknown): RadarScoreAdju
 
 export function calculatePartnerScore(input: RadarScoreInput): RadarScore {
   const factors: RadarScoreFactor[] = [
-    factor("traffic", "Оценка охвата", "business", trafficPoints(input.features.trafficEstimate), 24,
-      trafficExplanation(input.features.trafficEstimate)),
-    factor("geography", "Целевая география", "business", geographyPoints(input.features.geography), 8,
-      input.features.geography ? `Указана география: ${input.features.geography}` : "География не указана"),
-    factor("publishing", "Устойчивость публикаций", "business", publicationPoints(input.features.publicationFrequency), 8,
-      publicationExplanation(input.features.publicationFrequency)),
-    factor("topic", "Контентная тематика", "content", input.features.topic ? 10 : 0, 10,
-      input.features.topic ? `Тематика: ${input.features.topic}` : "Тематика не определена"),
-    factor("video-volume", "Страницы с видео", "content", videoVolumePoints(input.features.estimatedVideoPagesMax), 15,
-      videoVolumeExplanation(input.features.estimatedVideoPagesMin, input.features.estimatedVideoPagesMax)),
-    factor("player", "Видеоплеер", "technical", input.latestEvidence?.playerFound ? 14 : 0, 14,
+    factor(
+      "traffic",
+      "Оценка охвата",
+      "business",
+      trafficPoints(input.features.trafficEstimate),
+      24,
+      trafficExplanation(input.features.trafficEstimate),
+    ),
+    factor(
+      "geography",
+      "Целевая география",
+      "business",
+      geographyPoints(input.features.geography),
+      8,
+      input.features.geography
+        ? `Указана география: ${input.features.geography}`
+        : "География не указана",
+    ),
+    factor(
+      "publishing",
+      "Устойчивость публикаций",
+      "business",
+      publicationPoints(input.features.publicationFrequency),
+      8,
+      publicationExplanation(input.features.publicationFrequency),
+    ),
+    factor(
+      "topic",
+      "Контентная тематика",
+      "content",
+      input.features.topic ? 10 : 0,
+      10,
+      input.features.topic ? `Тематика: ${input.features.topic}` : "Тематика не определена",
+    ),
+    factor(
+      "video-volume",
+      "Страницы с видео",
+      "content",
+      videoVolumePoints(input.features.estimatedVideoPagesMax),
+      15,
+      videoVolumeExplanation(
+        input.features.estimatedVideoPagesMin,
+        input.features.estimatedVideoPagesMax,
+      ),
+    ),
+    factor(
+      "player",
+      "Видеоплеер",
+      "technical",
+      input.latestEvidence?.playerFound ? 14 : 0,
+      14,
       input.latestEvidence?.playerFound
         ? `Обнаружен ${input.latestEvidence.playerType ?? "видеоплеер"}`
-        : "Плеер не подтверждён"),
-    factor("page-access", "Доступность страницы", "technical", evidenceAccessPoints(input.latestEvidence), 3,
-      evidenceExplanation(input.latestEvidence)),
-    factor("cms", "CMS / технология", "technical", input.features.cms ? 3 : 0, 3,
-      input.features.cms ? `Определено: ${input.features.cms}` : "Технология не определена"),
-    factor("contacts", "Контактность", "contact", input.features.contactsFound ? 15 : 0, 15,
-      input.features.contactsFound ? "Найден релевантный контакт" : "Контакт не найден"),
+        : "Плеер не подтверждён",
+    ),
+    factor(
+      "page-access",
+      "Доступность страницы",
+      "technical",
+      evidenceAccessPoints(input.latestEvidence),
+      3,
+      evidenceExplanation(input.latestEvidence),
+    ),
+    factor(
+      "cms",
+      "CMS / технология",
+      "technical",
+      input.features.cms ? 3 : 0,
+      3,
+      input.features.cms ? `Определено: ${input.features.cms}` : "Технология не определена",
+    ),
+    factor(
+      "contacts",
+      "Контактность",
+      "contact",
+      input.features.contactsFound ? 15 : 0,
+      15,
+      input.features.contactsFound ? "Найден релевантный контакт" : "Контакт не найден",
+    ),
   ];
   if (input.duplicateOrganization) {
-    factors.push(factor("duplicate-partner", "Действующий партнёр", "risk", -40, -40,
-      "Домен уже есть в реестре организаций"));
+    factors.push(
+      factor(
+        "duplicate-partner",
+        "Действующий партнёр",
+        "risk",
+        -40,
+        -40,
+        "Домен уже есть в реестре организаций",
+      ),
+    );
   } else if (input.duplicateCandidate) {
-    factors.push(factor("duplicate-candidate", "Дубль кандидата", "risk", -25, -25,
-      "Домен уже находится в очереди Радара"));
+    factors.push(
+      factor(
+        "duplicate-candidate",
+        "Дубль кандидата",
+        "risk",
+        -25,
+        -25,
+        "Домен уже находится в очереди Радара",
+      ),
+    );
   }
   if (input.latestEvidence?.status === "blocked" || input.latestEvidence?.status === "unknown") {
-    factors.push(factor("unverified-page", "Недостоверность проверки", "risk", -10, -10,
-      "Автоматическая проверка ограничена или не завершилась"));
+    factors.push(
+      factor(
+        "unverified-page",
+        "Недостоверность проверки",
+        "risk",
+        -10,
+        -10,
+        "Автоматическая проверка ограничена или не завершилась",
+      ),
+    );
   }
   if (input.features.trafficEstimate?.confidence === "low") {
-    factors.push(factor("traffic-confidence", "Низкая уверенность трафика", "risk", -5, -5,
-      `Оценка ${input.features.trafficEstimate.provider} имеет низкий confidence`));
+    factors.push(
+      factor(
+        "traffic-confidence",
+        "Низкая уверенность трафика",
+        "risk",
+        -5,
+        -5,
+        `Оценка ${input.features.trafficEstimate.provider} имеет низкий confidence`,
+      ),
+    );
   }
-  const automaticTotal = clamp(factors.reduce((sum, item) => sum + item.value, 0), 0, 100);
+  const automaticTotal = clamp(
+    factors.reduce((sum, item) => sum + item.value, 0),
+    0,
+    100,
+  );
   const manualAdjustment = input.manualAdjustment ?? 0;
   const total = clamp(automaticTotal + manualAdjustment, 0, 100);
   return {
@@ -232,12 +366,23 @@ function parseTrafficEstimate(input: unknown): RadarTrafficEstimate {
   if (!isRecord(input)) throw validation("Оценка трафика должна быть объектом");
   const provider = requiredText(input.provider, "trafficEstimate.provider", 120);
   const measuredAt = optionalDate(input.measuredAt, "trafficEstimate.measuredAt");
-  if (!measuredAt) throw validation("Укажите дату оценки трафика", {
-    "trafficEstimate.measuredAt": "Ожидается дата ISO",
-  });
-  const minMonthlyVisits = optionalNonNegativeInteger(input.minMonthlyVisits, "trafficEstimate.minMonthlyVisits");
-  const maxMonthlyVisits = optionalNonNegativeInteger(input.maxMonthlyVisits, "trafficEstimate.maxMonthlyVisits");
-  if (minMonthlyVisits === undefined || maxMonthlyVisits === undefined || minMonthlyVisits > maxMonthlyVisits) {
+  if (!measuredAt)
+    throw validation("Укажите дату оценки трафика", {
+      "trafficEstimate.measuredAt": "Ожидается дата ISO",
+    });
+  const minMonthlyVisits = optionalNonNegativeInteger(
+    input.minMonthlyVisits,
+    "trafficEstimate.minMonthlyVisits",
+  );
+  const maxMonthlyVisits = optionalNonNegativeInteger(
+    input.maxMonthlyVisits,
+    "trafficEstimate.maxMonthlyVisits",
+  );
+  if (
+    minMonthlyVisits === undefined ||
+    maxMonthlyVisits === undefined ||
+    minMonthlyVisits > maxMonthlyVisits
+  ) {
     throw validation("Некорректный диапазон трафика", {
       "trafficEstimate.maxMonthlyVisits": "Укажите максимум не меньше минимума",
     });
@@ -248,11 +393,19 @@ function parseTrafficEstimate(input: unknown): RadarTrafficEstimate {
       "trafficEstimate.confidence": "Используйте high, medium или low",
     });
   }
-  const minDailyVisits = optionalNonNegativeInteger(input.minDailyVisits, "trafficEstimate.minDailyVisits");
-  const maxDailyVisits = optionalNonNegativeInteger(input.maxDailyVisits, "trafficEstimate.maxDailyVisits");
+  const minDailyVisits = optionalNonNegativeInteger(
+    input.minDailyVisits,
+    "trafficEstimate.minDailyVisits",
+  );
+  const maxDailyVisits = optionalNonNegativeInteger(
+    input.maxDailyVisits,
+    "trafficEstimate.maxDailyVisits",
+  );
   if (
     (minDailyVisits === undefined) !== (maxDailyVisits === undefined) ||
-    (minDailyVisits !== undefined && maxDailyVisits !== undefined && minDailyVisits > maxDailyVisits)
+    (minDailyVisits !== undefined &&
+      maxDailyVisits !== undefined &&
+      minDailyVisits > maxDailyVisits)
   ) {
     throw validation("Некорректный дневной диапазон трафика", {
       "trafficEstimate.maxDailyVisits": "Укажите оба значения, максимум не меньше минимума",
@@ -310,7 +463,12 @@ function publicationPoints(value: RadarCandidateFeatures["publicationFrequency"]
 }
 
 function publicationExplanation(value: RadarCandidateFeatures["publicationFrequency"]) {
-  const labels = { daily: "ежедневно", weekly: "еженедельно", monthly: "ежемесячно", unknown: "не определена" };
+  const labels = {
+    daily: "ежедневно",
+    weekly: "еженедельно",
+    monthly: "ежемесячно",
+    unknown: "не определена",
+  };
   return `Частота публикаций: ${labels[value]}`;
 }
 
@@ -347,7 +505,9 @@ function positiveInteger(value: unknown, field: string) {
 function optionalNonNegativeInteger(value: unknown, field: string) {
   if (value === undefined || value === null || value === "") return undefined;
   if (!Number.isInteger(value) || Number(value) < 0) {
-    throw validation("Некорректное числовое значение", { [field]: "Ожидается целое число не меньше нуля" });
+    throw validation("Некорректное числовое значение", {
+      [field]: "Ожидается целое число не меньше нуля",
+    });
   }
   return Number(value);
 }
@@ -364,7 +524,8 @@ function requiredText(value: unknown, field: string, maxLength: number) {
 
 function optionalText(value: unknown, field: string, maxLength: number) {
   if (value === undefined || value === null || value === "") return undefined;
-  if (typeof value !== "string") throw validation("Ожидается строка", { [field]: "Ожидается строка" });
+  if (typeof value !== "string")
+    throw validation("Ожидается строка", { [field]: "Ожидается строка" });
   if (value.trim().length > maxLength) {
     throw validation("Значение слишком длинное", { [field]: `Максимум ${maxLength} символов` });
   }

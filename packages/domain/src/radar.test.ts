@@ -50,8 +50,15 @@ describe("radar domain", () => {
     });
 
     expect(score).toMatchObject({ total: 100, automaticTotal: 100, priority: "high" });
-    expect(score.factors.filter(({ group }) => group === "business").reduce((sum, factor) => sum + factor.value, 0)).toBe(40);
-    expect(score.factors.find(({ code }) => code === "player")).toMatchObject({ value: 14, maxValue: 14 });
+    expect(
+      score.factors
+        .filter(({ group }) => group === "business")
+        .reduce((sum, factor) => sum + factor.value, 0),
+    ).toBe(40);
+    expect(score.factors.find(({ code }) => code === "player")).toMatchObject({
+      value: 14,
+      maxValue: 14,
+    });
   });
 
   it("separates duplicate and confidence risks from the positive score", () => {
@@ -71,7 +78,9 @@ describe("radar domain", () => {
     // 83 positive - 55 automatic risks - 5 documented manual adjustment.
     expect(score.total).toBe(23);
     expect(score.priority).toBe("low");
-    expect(score.factors.filter(({ group }) => group === "risk").map(({ value }) => value)).toEqual([-40, -10, -5]);
+    expect(score.factors.filter(({ group }) => group === "risk").map(({ value }) => value)).toEqual(
+      [-40, -10, -5],
+    );
   });
 
   it("normalizes a URL and validates decision-specific fields", () => {
@@ -79,12 +88,17 @@ describe("radar domain", () => {
       pageUrl: "https://example.ru/video",
       hostNormalized: "example.ru",
     });
-    expect(() => parseRadarDecisionCommand({ version: 1, decision: "defer", reason: "Позже" })).toThrow();
-    expect(() => parseRadarScoreAdjustmentCommand({ version: 1, adjustment: 5, comment: "" })).toThrow();
+    expect(() =>
+      parseRadarDecisionCommand({ version: 1, decision: "defer", reason: "Позже" }),
+    ).toThrow();
+    expect(() =>
+      parseRadarScoreAdjustmentCommand({ version: 1, adjustment: 5, comment: "" }),
+    ).toThrow();
   });
 
   it("отсеивает технические поддомены", () => {
-    expect(() => normalizeRadarTarget("https://staging.media.example/story"))
-      .toThrow("Технический поддомен исключён из Радара");
+    expect(() => normalizeRadarTarget("https://staging.media.example/story")).toThrow(
+      "Технический поддомен исключён из Радара",
+    );
   });
 });

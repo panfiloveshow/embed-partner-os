@@ -49,9 +49,15 @@ describe("session", () => {
   });
 
   it("attaches an in-memory Bearer token without persisting it in browser storage", async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-      subject: "corp:user-1",
-    }), { status: 200, headers: { "content-type": "application/json" } }));
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            subject: "corp:user-1",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
     vi.stubGlobal("fetch", fetchMock);
     configureApiAccessToken("signed.jwt.value");
 
@@ -64,16 +70,22 @@ describe("session", () => {
   });
 
   it("loads the server-verified role and permissions", async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-      subject: "bootstrap:anna.sokolova",
-      userId: "user-1",
-      displayName: "Анна Соколова",
-      initials: "АС",
-      email: null,
-      role: "admin",
-      permissions: ["system.admin"],
-      scope: { mode: "all", teamId: null, teamName: "Команда внедрения" },
-    }), { status: 200, headers: { "content-type": "application/json" } }));
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            subject: "bootstrap:anna.sokolova",
+            userId: "user-1",
+            displayName: "Анна Соколова",
+            initials: "АС",
+            email: null,
+            role: "admin",
+            permissions: ["system.admin"],
+            scope: { mode: "all", teamId: null, teamName: "Команда внедрения" },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     const session = await fetchSession();
@@ -83,18 +95,30 @@ describe("session", () => {
   });
 
   it("refreshes an external token once after 401 and retries the request", async () => {
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        status: 401,
-        code: "AUTHENTICATION_REQUIRED",
-        detail: "Token expired",
-      }), { status: 401, headers: { "content-type": "application/problem+json" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        subject: "corp:user-1",
-        role: "observer",
-      }), { status: 200, headers: { "content-type": "application/json" } }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            status: 401,
+            code: "AUTHENTICATION_REQUIRED",
+            detail: "Token expired",
+          }),
+          { status: 401, headers: { "content-type": "application/problem+json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            subject: "corp:user-1",
+            role: "observer",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
     const getAccessToken = vi.fn(async ({ forceRefresh }: { forceRefresh: boolean }) =>
-      forceRefresh ? "renewed.jwt.value" : "expired.jwt.value");
+      forceRefresh ? "renewed.jwt.value" : "expired.jwt.value",
+    );
     vi.stubGlobal("fetch", fetchMock);
     configureApiAccessTokenProvider({ getAccessToken });
 
@@ -113,9 +137,15 @@ describe("session", () => {
   });
 
   it("deduplicates token acquisition for parallel startup requests", async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-      subject: "corp:user-1",
-    }), { status: 200, headers: { "content-type": "application/json" } }));
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            subject: "corp:user-1",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
     const getAccessToken = vi.fn(async () => "shared.jwt.value");
     vi.stubGlobal("fetch", fetchMock);
     configureApiAccessTokenProvider({ getAccessToken });
@@ -133,18 +163,33 @@ describe("SLA settings", () => {
   });
 
   it("loads and publishes a versioned configuration", async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-      processDefinitionId: "process-2",
-      version: 2,
-      stages: [],
-    }), { status: 200, headers: { "content-type": "application/json" } }));
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            processDefinitionId: "process-2",
+            version: 2,
+            stages: [],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
     vi.stubGlobal("fetch", fetchMock);
     const command = {
       version: 1,
       escalationAfterDays: 3,
       thresholds: {
-        S0: 2, S1: 2, S2: 3, S3: 3, S4: 5, S5: 5,
-        S6: 5, S7: 7, S8: 7, S9: 14, S10: 14,
+        S0: 2,
+        S1: 2,
+        S2: 3,
+        S3: 3,
+        S4: 5,
+        S5: 5,
+        S6: 5,
+        S7: 7,
+        S8: 7,
+        S9: 14,
+        S10: 14,
       },
       reason: "Настройка пилотной команды",
     } as const;
@@ -153,11 +198,15 @@ describe("SLA settings", () => {
     await updateSlaSettings(command, "sla-settings-key-1");
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/v1/settings/sla", { signal: undefined });
-    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/v1/settings/sla", expect.objectContaining({
-      method: "PATCH",
-      headers: expect.objectContaining({ "idempotency-key": "sla-settings-key-1" }),
-      body: JSON.stringify(command),
-    }));
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/settings/sla",
+      expect.objectContaining({
+        method: "PATCH",
+        headers: expect.objectContaining({ "idempotency-key": "sla-settings-key-1" }),
+        body: JSON.stringify(command),
+      }),
+    );
   });
 });
 
@@ -167,13 +216,19 @@ describe("access administration", () => {
   });
 
   it("loads the role matrix and updates a user with optimistic locking", async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-      users: [],
-      teams: [],
-      roles: ["admin", "observer"],
-      permissions: ["today.read", "system.admin"],
-      roleDefaults: { admin: ["system.admin"], observer: ["today.read"] },
-    }), { status: 200, headers: { "content-type": "application/json" } }));
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            users: [],
+            teams: [],
+            roles: ["admin", "observer"],
+            permissions: ["today.read", "system.admin"],
+            roleDefaults: { admin: ["system.admin"], observer: ["today.read"] },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
     vi.stubGlobal("fetch", fetchMock);
     const command: Parameters<typeof updateAccessUser>[1] = {
       version: 2,
@@ -184,22 +239,23 @@ describe("access administration", () => {
     };
 
     await fetchAccessAdministration();
-    await createAccessUser({
-      subject: "oidc:new-user",
-      displayName: "Новый Пользователь",
-      email: "new.user@example.test",
-      teamId: null,
-      role: "observer",
-      permissions: ["today.read"],
-      reason: "Регистрация для пилота",
-    }, "access-user-create-key-1");
+    await createAccessUser(
+      {
+        subject: "oidc:new-user",
+        displayName: "Новый Пользователь",
+        email: "new.user@example.test",
+        teamId: null,
+        role: "observer",
+        permissions: ["today.read"],
+        reason: "Регистрация для пилота",
+      },
+      "access-user-create-key-1",
+    );
     await updateAccessUser("user/1", command, "access-user-update-key-1");
 
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      1,
-      "/api/v1/settings/access/users",
-      { signal: undefined },
-    );
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/v1/settings/access/users", {
+      signal: undefined,
+    });
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       "/api/v1/settings/access/users",
@@ -226,11 +282,17 @@ describe("contact registry", () => {
   });
 
   it("loads filtered contacts and sends versioned lifecycle mutations", async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-      id: "contact-1",
-      version: 2,
-      contacts: [],
-    }), { status: 200, headers: { "content-type": "application/json" } }));
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            id: "contact-1",
+            version: 2,
+            contacts: [],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     await fetchContactRegistry({
@@ -239,38 +301,62 @@ describe("contact registry", () => {
       organizationId: "org/1",
       duplicatesOnly: true,
     });
-    await updateContactRecord("contact/1", {
-      version: 2,
-      fullName: "Иван Петров",
-      email: "ivan@example.ru",
-      source: "Встреча",
-    }, "contact-update-key");
-    await archiveContactRecord("contact/1", {
-      version: 3,
-      reason: "Контакт устарел",
-    }, "contact-archive-key");
-    await restoreContactRecord("contact/1", {
-      version: 4,
-      reason: "Контакт подтверждён",
-    }, "contact-restore-key");
+    await updateContactRecord(
+      "contact/1",
+      {
+        version: 2,
+        fullName: "Иван Петров",
+        email: "ivan@example.ru",
+        source: "Встреча",
+      },
+      "contact-update-key",
+    );
+    await archiveContactRecord(
+      "contact/1",
+      {
+        version: 3,
+        reason: "Контакт устарел",
+      },
+      "contact-archive-key",
+    );
+    await restoreContactRecord(
+      "contact/1",
+      {
+        version: 4,
+        reason: "Контакт подтверждён",
+      },
+      "contact-restore-key",
+    );
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       "/api/v1/contacts?search=%D0%98%D0%B2%D0%B0%D0%BD+%D0%9F%D0%B5%D1%82%D1%80%D0%BE%D0%B2&status=archived&organizationId=org%2F1&duplicatesOnly=true",
       { signal: undefined },
     );
-    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/v1/contacts/contact%2F1", expect.objectContaining({
-      method: "PATCH",
-      headers: expect.objectContaining({ "idempotency-key": "contact-update-key" }),
-      body: expect.stringContaining('"version":2'),
-    }));
-    expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/v1/contacts/contact%2F1/archive", expect.objectContaining({
-      method: "POST",
-      body: JSON.stringify({ version: 3, reason: "Контакт устарел" }),
-    }));
-    expect(fetchMock).toHaveBeenNthCalledWith(4, "/api/v1/contacts/contact%2F1/restore", expect.objectContaining({
-      headers: expect.objectContaining({ "idempotency-key": "contact-restore-key" }),
-    }));
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/contacts/contact%2F1",
+      expect.objectContaining({
+        method: "PATCH",
+        headers: expect.objectContaining({ "idempotency-key": "contact-update-key" }),
+        body: expect.stringContaining('"version":2'),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/api/v1/contacts/contact%2F1/archive",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ version: 3, reason: "Контакт устарел" }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "/api/v1/contacts/contact%2F1/restore",
+      expect.objectContaining({
+        headers: expect.objectContaining({ "idempotency-key": "contact-restore-key" }),
+      }),
+    );
   });
 });
 
@@ -281,9 +367,15 @@ describe("partner registry", () => {
   });
 
   it("loads the organization filters and unified partner card", async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-      partners: [],
-    }), { status: 200, headers: { "content-type": "application/json" } }));
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            partners: [],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     await fetchPartnerRegistry({
@@ -304,22 +396,21 @@ describe("partner registry", () => {
       "/api/v1/partners?search=%D0%9C%D0%B5%D0%B4%D0%B8%D0%B0&groupId=group%2F1&segment=%D0%9D%D0%BE%D0%B2%D0%BE%D1%81%D1%82%D0%B8&ownerId=user%2F1&stageCode=S7&scoreMin=60&scoreMax=90&integrationStatus=planned&activeAfter=2026-08-01T00%3A00%3A00.000Z",
       { signal: undefined },
     );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      "/api/v1/partners/org%2F1",
-      { signal: undefined },
-    );
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/v1/partners/org%2F1", { signal: undefined });
   });
 
   it("exports the current filter set with the trusted actor and returns audit metadata", async () => {
-    const fetchMock = vi.fn(async () => new Response("\ufeffpartner csv", {
-      status: 200,
-      headers: {
-        "content-type": "text/csv; charset=utf-8",
-        "content-disposition": "attachment; filename=\"rutube-partners-2026-08-19.csv\"",
-        "x-export-audit-id": "audit/export-1",
-      },
-    }));
+    const fetchMock = vi.fn(
+      async () =>
+        new Response("\ufeffpartner csv", {
+          status: 200,
+          headers: {
+            "content-type": "text/csv; charset=utf-8",
+            "content-disposition": 'attachment; filename="rutube-partners-2026-08-19.csv"',
+            "x-export-audit-id": "audit/export-1",
+          },
+        }),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     const result = await exportPartnerRegistry({
@@ -337,7 +428,9 @@ describe("partner registry", () => {
     });
     expect(result.fileName).toBe("rutube-partners-2026-08-19.csv");
     expect(result.auditId).toBe("audit/export-1");
-    expect(Array.from(new Uint8Array(await result.blob.arrayBuffer()).slice(0, 3))).toEqual([239, 187, 191]);
+    expect(Array.from(new Uint8Array(await result.blob.arrayBuffer()).slice(0, 3))).toEqual([
+      239, 187, 191,
+    ]);
   });
 });
 
@@ -347,46 +440,86 @@ describe("radar", () => {
   });
 
   it("использует версии и caller-owned idempotency keys во всех мутациях", async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-      id: "radar/1",
-      version: 2,
-    }), { status: 200, headers: { "content-type": "application/json" } }));
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            id: "radar/1",
+            version: 2,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     await fetchRadar();
-    await createRadarCandidate({ name: "Медиа", url: "media.example", source: "Радар" }, "radar-create-key");
+    await createRadarCandidate(
+      { name: "Медиа", url: "media.example", source: "Радар" },
+      "radar-create-key",
+    );
     await inspectRadarCandidate("radar/1", "radar-check-key");
-    await decideRadarCandidate("radar/1", {
-      version: 2,
-      decision: "reject",
-      reason: "Не соответствует профилю",
-    }, "radar-decision-key");
-    await adjustRadarCandidateScore("radar/1", {
-      version: 2,
-      adjustment: -5,
-      comment: "Подтверждённый риск",
-    }, "radar-score-key");
-    await importRadarCandidates(new File(["organization_name,domain,source"], "radar.csv"), "radar-import-key");
+    await decideRadarCandidate(
+      "radar/1",
+      {
+        version: 2,
+        decision: "reject",
+        reason: "Не соответствует профилю",
+      },
+      "radar-decision-key",
+    );
+    await adjustRadarCandidateScore(
+      "radar/1",
+      {
+        version: 2,
+        adjustment: -5,
+        comment: "Подтверждённый риск",
+      },
+      "radar-score-key",
+    );
+    await importRadarCandidates(
+      new File(["organization_name,domain,source"], "radar.csv"),
+      "radar-import-key",
+    );
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/v1/radar/candidates", { signal: undefined });
-    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/v1/radar/candidates", expect.objectContaining({
-      method: "POST",
-      headers: expect.objectContaining({ "idempotency-key": "radar-create-key" }),
-    }));
-    expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/v1/radar/candidates/radar%2F1/checks", expect.objectContaining({
-      headers: { "idempotency-key": "radar-check-key" },
-    }));
-    expect(fetchMock).toHaveBeenNthCalledWith(4, "/api/v1/radar/candidates/radar%2F1/decisions", expect.objectContaining({
-      body: expect.stringContaining('"version":2'),
-    }));
-    expect(fetchMock).toHaveBeenNthCalledWith(5, "/api/v1/radar/candidates/radar%2F1/score-adjustments", expect.objectContaining({
-      headers: expect.objectContaining({ "idempotency-key": "radar-score-key" }),
-    }));
-    expect(fetchMock).toHaveBeenNthCalledWith(6, "/api/v1/radar/candidates/import", expect.objectContaining({
-      method: "POST",
-      headers: { "idempotency-key": "radar-import-key" },
-      body: expect.any(FormData),
-    }));
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/radar/candidates",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "idempotency-key": "radar-create-key" }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/api/v1/radar/candidates/radar%2F1/checks",
+      expect.objectContaining({
+        headers: { "idempotency-key": "radar-check-key" },
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "/api/v1/radar/candidates/radar%2F1/decisions",
+      expect.objectContaining({
+        body: expect.stringContaining('"version":2'),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      5,
+      "/api/v1/radar/candidates/radar%2F1/score-adjustments",
+      expect.objectContaining({
+        headers: expect.objectContaining({ "idempotency-key": "radar-score-key" }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      6,
+      "/api/v1/radar/candidates/import",
+      expect.objectContaining({
+        method: "POST",
+        headers: { "idempotency-key": "radar-import-key" },
+        body: expect.any(FormData),
+      }),
+    );
   });
 });
 
@@ -396,10 +529,13 @@ describe("organization import", () => {
   });
 
   it("uploads the selected file as multipart data", async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: "import-1" }), {
-      status: 201,
-      headers: { "content-type": "application/json" },
-    }));
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ id: "import-1" }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        }),
+    );
     vi.stubGlobal("fetch", fetchMock);
     const file = new File(["organization_name,domain,source"], "partners.csv", {
       type: "text/csv",
@@ -415,10 +551,13 @@ describe("organization import", () => {
   });
 
   it("commits resolutions and cancels previews with caller-owned idempotency keys", async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: "import-1" }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    }));
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ id: "import-1" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     await commitOrganizationImport(
@@ -457,25 +596,26 @@ describe("completeTask", () => {
   });
 
   it("sends the caller-owned idempotency key with the mutation", async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          generatedAt: "2026-08-17T13:00:00.000Z",
-          teamName: "Команда внедрения",
-          currentUser: { id: "user-1", name: "Анна", initials: "А" },
-          summary: {
-            critical: 0,
-            today: 0,
-            waiting: 0,
-            completed: 1,
-            rescheduled: 0,
-            stageChanges: 0,
-            launches: 0,
-          },
-          actions: [],
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      ),
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            generatedAt: "2026-08-17T13:00:00.000Z",
+            teamName: "Команда внедрения",
+            currentUser: { id: "user-1", name: "Анна", initials: "А" },
+            summary: {
+              critical: 0,
+              today: 0,
+              waiting: 0,
+              completed: 1,
+              rescheduled: 0,
+              stageChanges: 0,
+              launches: 0,
+            },
+            actions: [],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
     );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -516,16 +656,23 @@ describe("rescheduleTask", () => {
   });
 
   it("sends the new deadline, mandatory reason and idempotency key", async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ actions: [] }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    }));
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ actions: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
-    await rescheduleTask("task/1", {
-      dueAt: "2026-08-25T09:00:00.000Z",
-      reason: "Партнёр перенёс встречу",
-    }, "task-reschedule-web-0001");
+    await rescheduleTask(
+      "task/1",
+      {
+        dueAt: "2026-08-25T09:00:00.000Z",
+        reason: "Партнёр перенёс встречу",
+      },
+      "task-reschedule-web-0001",
+    );
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/tasks/task%2F1/reschedule",
@@ -550,11 +697,12 @@ describe("funnel", () => {
   });
 
   it("loads the shared opportunity collection", async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(JSON.stringify({ total: 0, opportunities: [] }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ total: 0, opportunities: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
     );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -570,20 +718,21 @@ describe("createContact", () => {
   });
 
   it("posts the contact to the organization with an idempotency key", async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          id: "contact-2",
-          fullName: "Мария Орлова",
-          role: "Редактор",
-          department: null,
-          email: "maria@example.ru",
-          phone: null,
-          messenger: null,
-          isPrimary: false,
-        }),
-        { status: 201, headers: { "content-type": "application/json" } },
-      ),
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            id: "contact-2",
+            fullName: "Мария Орлова",
+            role: "Редактор",
+            department: null,
+            email: "maria@example.ru",
+            phone: null,
+            messenger: null,
+            isPrimary: false,
+          }),
+          { status: 201, headers: { "content-type": "application/json" } },
+        ),
     );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -613,20 +762,21 @@ describe("linkContact", () => {
   });
 
   it("posts an organization-specific role for an existing contact", async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          id: "contact-2",
-          fullName: "Мария Орлова",
-          role: "Технический эксперт",
-          department: "ИТ",
-          email: "maria@example.ru",
-          phone: null,
-          messenger: null,
-          isPrimary: false,
-        }),
-        { status: 201, headers: { "content-type": "application/json" } },
-      ),
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            id: "contact-2",
+            fullName: "Мария Орлова",
+            role: "Технический эксперт",
+            department: "ИТ",
+            email: "maria@example.ru",
+            phone: null,
+            messenger: null,
+            isPrimary: false,
+          }),
+          { status: 201, headers: { "content-type": "application/json" } },
+        ),
     );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -657,18 +807,19 @@ describe("mergeContact", () => {
   });
 
   it("posts the canonical contact and explicit reason with an idempotency key", async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          sourceContactId: "contact-source",
-          targetContactId: "contact-target",
-          movedOrganizationLinks: 1,
-          closedConflictingLinks: 0,
-          movedInteractions: 2,
-          outboxEventId: "event-1",
-        }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      ),
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            sourceContactId: "contact-source",
+            targetContactId: "contact-target",
+            movedOrganizationLinks: 1,
+            closedConflictingLinks: 0,
+            movedInteractions: 2,
+            outboxEventId: "event-1",
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
     );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -701,28 +852,29 @@ describe("weekly reports", () => {
   });
 
   it("loads the latest immutable snapshot", async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(JSON.stringify({ id: "report-1", revision: 2 }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ id: "report-1", revision: 2 }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
     );
     vi.stubGlobal("fetch", fetchMock);
 
     await fetchLatestWeeklyReport();
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/v1/reports/weekly/snapshots/latest",
-      { signal: undefined },
-    );
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/reports/weekly/snapshots/latest", {
+      signal: undefined,
+    });
   });
 
   it("publishes a snapshot with an idempotency key", async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(JSON.stringify({ id: "report-1", revision: 1 }), {
-        status: 201,
-        headers: { "content-type": "application/json" },
-      }),
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ id: "report-1", revision: 1 }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        }),
     );
     vi.stubGlobal("fetch", fetchMock);
     const command = {
@@ -733,17 +885,14 @@ describe("weekly reports", () => {
 
     await generateWeeklyReport(command, "test-key-weekly-web-0001");
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/v1/reports/weekly/snapshots",
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "idempotency-key": "test-key-weekly-web-0001",
-        },
-        body: JSON.stringify(command),
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/reports/weekly/snapshots", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": "test-key-weekly-web-0001",
       },
-    );
+      body: JSON.stringify(command),
+    });
   });
 });
 
@@ -753,11 +902,12 @@ describe("placements", () => {
   });
 
   it("loads the registry and a placement history", async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(JSON.stringify([]), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
     );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -765,39 +915,36 @@ describe("placements", () => {
     await fetchPlacementChecks("placement/1");
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/v1/placements", { signal: undefined });
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      "/api/v1/placements/placement%2F1/checks",
-      { signal: undefined },
-    );
+    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/v1/placements/placement%2F1/checks", {
+      signal: undefined,
+    });
   });
 
   it("runs a manual L0 check with the caller-owned idempotency key", async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(JSON.stringify({ alertChange: "none" }), {
-        status: 201,
-        headers: { "content-type": "application/json" },
-      }),
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ alertChange: "none" }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        }),
     );
     vi.stubGlobal("fetch", fetchMock);
 
     await runPlacementL0Check("placement-1", "placement-check-web-0001");
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/v1/placements/placement-1/l0-checks",
-      {
-        method: "POST",
-        headers: { "idempotency-key": "placement-check-web-0001" },
-      },
-    );
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/placements/placement-1/l0-checks", {
+      method: "POST",
+      headers: { "idempotency-key": "placement-check-web-0001" },
+    });
   });
 
   it("registers a placement with an idempotency key", async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(JSON.stringify({ id: "placement-1" }), {
-        status: 201,
-        headers: { "content-type": "application/json" },
-      }),
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ id: "placement-1" }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        }),
     );
     vi.stubGlobal("fetch", fetchMock);
     const command = {
@@ -812,25 +959,23 @@ describe("placements", () => {
 
     await registerPlacement(command, "placement-register-web-0001");
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/v1/placements",
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "idempotency-key": "placement-register-web-0001",
-        },
-        body: JSON.stringify(command),
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/placements", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": "placement-register-web-0001",
       },
-    );
+      body: JSON.stringify(command),
+    });
   });
 
   it("updates and archives a placement with versioned commands", async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(JSON.stringify({ id: "placement-1", version: 2 }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ id: "placement-1", version: 2 }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
     );
     vi.stubGlobal("fetch", fetchMock);
     const update = { version: 1, businessStatus: "paused" as const, reason: "Пауза партнёра" };
@@ -864,11 +1009,12 @@ describe("opportunity stages", () => {
   });
 
   it("posts a versioned stage transition with an idempotency key", async () => {
-    const fetchMock = vi.fn(async () =>
-      new Response(JSON.stringify({ opportunityId: "opp-1", version: 2 }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      }),
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ opportunityId: "opp-1", version: 2 }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
     );
     vi.stubGlobal("fetch", fetchMock);
     const command = {
@@ -886,16 +1032,13 @@ describe("opportunity stages", () => {
 
     await transitionOpportunityStage("opp/1", command, "stage-transition-web-0001");
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "/api/v1/opportunities/opp%2F1/stage-transitions",
-      {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "idempotency-key": "stage-transition-web-0001",
-        },
-        body: JSON.stringify(command),
+    expect(fetchMock).toHaveBeenCalledWith("/api/v1/opportunities/opp%2F1/stage-transitions", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": "stage-transition-web-0001",
       },
-    );
+      body: JSON.stringify(command),
+    });
   });
 });

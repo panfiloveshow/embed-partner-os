@@ -3,9 +3,7 @@ import type { ApiAccessTokenProvider } from "./api";
 export type WebAuthenticationMode = "development" | "external";
 
 export interface EmbedPartnerAuthBridge {
-  getAccessToken(options?: {
-    forceRefresh?: boolean;
-  }): Promise<string | null> | string | null;
+  getAccessToken(options?: { forceRefresh?: boolean }): Promise<string | null> | string | null;
   login?(): Promise<void> | void;
   logout?(): Promise<void> | void;
   subscribe?(listener: () => void): (() => void) | void;

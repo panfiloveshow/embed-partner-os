@@ -88,15 +88,17 @@ describe("weekly report payload", () => {
     expect(digestItems).toEqual(
       expect.arrayContaining([expect.objectContaining({ kind: "risk", owner: "Анна" })]),
     );
-    expect(buildWeeklyReportPublishedEventPayload({
-      snapshotId: "snapshot-1",
-      teamId: "team-1",
-      teamName: "Команда внедрения",
-      periodStart: "2026-08-09T21:00:00.000Z",
-      periodEnd: "2026-08-16T20:59:59.999Z",
-      revision: 1,
-      payload,
-    })).toMatchObject({
+    expect(
+      buildWeeklyReportPublishedEventPayload({
+        snapshotId: "snapshot-1",
+        teamId: "team-1",
+        teamName: "Команда внедрения",
+        periodStart: "2026-08-09T21:00:00.000Z",
+        periodEnd: "2026-08-16T20:59:59.999Z",
+        revision: 1,
+        payload,
+      }),
+    ).toMatchObject({
       snapshotId: "snapshot-1",
       exceptionCount: payload.exceptions.length,
       digestItems,

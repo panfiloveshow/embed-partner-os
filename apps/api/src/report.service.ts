@@ -2,10 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import type { WeeklyReportSnapshot } from "@embed-os/contracts";
 import { parseGenerateWeeklyReportCommand, weeklyReportPeriod } from "@embed-os/domain";
-import {
-  IdempotencyConflictError,
-  weeklyReportRequestHash,
-} from "./application/idempotency.js";
+import { IdempotencyConflictError, weeklyReportRequestHash } from "./application/idempotency.js";
 import {
   buildWeeklyReportPayload,
   weeklyReportChecksum,
@@ -100,10 +97,8 @@ function memorySource(
     nextTaskId: action.id,
     createdAt: new Date(periodStart.getTime() - (index % 5) * 7 * 24 * 60 * 60 * 1_000),
     stageEnteredAt: new Date(
-      Math.min(
-        dataAsOf.getTime(),
-        new Date(action.dueAt ?? dataAsOf).getTime(),
-      ) - (7 + (index % 9)) * 24 * 60 * 60 * 1_000,
+      Math.min(dataAsOf.getTime(), new Date(action.dueAt ?? dataAsOf).getTime()) -
+        (7 + (index % 9)) * 24 * 60 * 60 * 1_000,
     ),
   }));
   const stageEvents = opportunities.slice(0, 5).map((opportunity, index) => ({

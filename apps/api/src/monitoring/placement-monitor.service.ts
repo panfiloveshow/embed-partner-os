@@ -14,10 +14,7 @@ export interface PlacementMonitorStore {
     leaseExpiredBefore: Date;
     batchSize: number;
   }): Promise<PlacementMonitorJob[]>;
-  markCompleted(input: {
-    placementId: string;
-    workerId: string;
-  }): Promise<void>;
+  markCompleted(input: { placementId: string; workerId: string }): Promise<void>;
   markFailed(input: {
     placementId: string;
     workerId: string;
@@ -101,10 +98,7 @@ export class PlacementMonitorService {
   }
 
   private retryDelay(attempts: number) {
-    return Math.min(
-      this.baseRetryMs * 2 ** Math.max(0, attempts - 1),
-      this.maxRetryMs,
-    );
+    return Math.min(this.baseRetryMs * 2 ** Math.max(0, attempts - 1), this.maxRetryMs);
   }
 }
 

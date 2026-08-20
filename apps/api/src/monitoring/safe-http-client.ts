@@ -56,8 +56,18 @@ export class SafeHttpClient {
     input: string,
     options: { timeoutMs?: number; maxBytes?: number; maxRedirects?: number } = {},
   ): Promise<SafeHttpResponse> {
-    const timeoutMs = boundedInteger(options.timeoutMs ?? DEFAULT_TIMEOUT_MS, 100, 15_000, "timeoutMs");
-    const maxBytes = boundedInteger(options.maxBytes ?? DEFAULT_MAX_BYTES, 1, DEFAULT_MAX_BYTES, "maxBytes");
+    const timeoutMs = boundedInteger(
+      options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      100,
+      15_000,
+      "timeoutMs",
+    );
+    const maxBytes = boundedInteger(
+      options.maxBytes ?? DEFAULT_MAX_BYTES,
+      1,
+      DEFAULT_MAX_BYTES,
+      "maxBytes",
+    );
     const maxRedirects = boundedInteger(
       options.maxRedirects ?? DEFAULT_MAX_REDIRECTS,
       0,
@@ -110,7 +120,10 @@ export function isPublicIpAddress(address: string): boolean {
 
 function isPublicIpv4(address: string): boolean {
   const parts = address.split(".").map(Number);
-  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+  if (
+    parts.length !== 4 ||
+    parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)
+  ) {
     return false;
   }
   const [a = 0, b = 0, c = 0] = parts;
@@ -118,7 +131,7 @@ function isPublicIpv4(address: string): boolean {
   if (a === 100 && b >= 64 && b <= 127) return false;
   if (a === 169 && b === 254) return false;
   if (a === 172 && b >= 16 && b <= 31) return false;
-  if (a === 192 && (b === 0 || (b === 168) || (b === 0 && c === 2))) return false;
+  if (a === 192 && (b === 0 || b === 168 || (b === 0 && c === 2))) return false;
   if (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) return false;
   if (a === 203 && b === 0 && c === 113) return false;
   return true;
@@ -130,10 +143,13 @@ function parseIpv6(address: string): number[] | null {
     const lastColon = normalized.lastIndexOf(":");
     const ipv4 = normalized.slice(lastColon + 1);
     const parts = ipv4.split(".").map(Number);
-    if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    if (
+      parts.length !== 4 ||
+      parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)
+    ) {
       return null;
     }
-    normalized = `${normalized.slice(0, lastColon)}:${((parts[0] ?? 0) << 8 | (parts[1] ?? 0)).toString(16)}:${((parts[2] ?? 0) << 8 | (parts[3] ?? 0)).toString(16)}`;
+    normalized = `${normalized.slice(0, lastColon)}:${(((parts[0] ?? 0) << 8) | (parts[1] ?? 0)).toString(16)}:${(((parts[2] ?? 0) << 8) | (parts[3] ?? 0)).toString(16)}`;
   }
   const halves = normalized.split("::");
   if (halves.length > 2) return null;
@@ -141,9 +157,13 @@ function parseIpv6(address: string): number[] | null {
   const right = halves[1] ? halves[1].split(":") : [];
   const missing = 8 - left.length - right.length;
   if ((halves.length === 1 && missing !== 0) || missing < 0) return null;
-  const values = [...left, ...Array.from({ length: missing }, () => "0"), ...right]
-    .map((part) => Number.parseInt(part, 16));
-  if (values.length !== 8 || values.some((part) => !Number.isInteger(part) || part < 0 || part > 0xffff)) {
+  const values = [...left, ...Array.from({ length: missing }, () => "0"), ...right].map((part) =>
+    Number.parseInt(part, 16),
+  );
+  if (
+    values.length !== 8 ||
+    values.some((part) => !Number.isInteger(part) || part < 0 || part > 0xffff)
+  ) {
     return null;
   }
   return values;
@@ -163,7 +183,11 @@ function parseAllowedUrl(input: string): URL {
     .toLowerCase()
     .replace(/^\[|\]$/g, "")
     .replace(/\.$/, "");
-  if (hostname === "localhost" || hostname.endsWith(".localhost") || isIP(hostname) > 0 && !isPublicIpAddress(hostname)) {
+  if (
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    (isIP(hostname) > 0 && !isPublicIpAddress(hostname))
+  ) {
     throw new BlockedNetworkTargetError(hostname);
   }
   url.hash = "";
@@ -177,37 +201,43 @@ async function resolveHost(hostname: string): Promise<string[]> {
 
 const nodeRequest: SafeHttpRequester = ({ url, address, family, signal, maxBytes }) =>
   new Promise((resolve, reject) => {
-    const request = (url.protocol === "https:" ? httpsRequest : httpRequest)(url, {
-      method: "GET",
-      signal,
-      headers: {
-        Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1",
-        "User-Agent": "EmbedPartnerOS-L0/0.1",
+    const request = (url.protocol === "https:" ? httpsRequest : httpRequest)(
+      url,
+      {
+        method: "GET",
+        signal,
+        headers: {
+          Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1",
+          "User-Agent": "EmbedPartnerOS-L0/0.1",
+        },
+        lookup: createPinnedLookup(address, family),
       },
-      lookup: createPinnedLookup(address, family),
-    }, (response) => {
-      const declaredLength = Number(response.headers["content-length"] ?? 0);
-      if (declaredLength > maxBytes) {
-        request.destroy(new ResponseTooLargeError(maxBytes));
-        return;
-      }
-      const chunks: Buffer[] = [];
-      let size = 0;
-      response.on("data", (chunk: Buffer | string) => {
-        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-        size += buffer.length;
-        if (size > maxBytes) {
+      (response) => {
+        const declaredLength = Number(response.headers["content-length"] ?? 0);
+        if (declaredLength > maxBytes) {
           request.destroy(new ResponseTooLargeError(maxBytes));
           return;
         }
-        chunks.push(buffer);
-      });
-      response.on("end", () => resolve({
-        status: response.statusCode ?? 0,
-        headers: normalizeHeaders(response.headers),
-        body: Buffer.concat(chunks),
-      }));
-    });
+        const chunks: Buffer[] = [];
+        let size = 0;
+        response.on("data", (chunk: Buffer | string) => {
+          const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          size += buffer.length;
+          if (size > maxBytes) {
+            request.destroy(new ResponseTooLargeError(maxBytes));
+            return;
+          }
+          chunks.push(buffer);
+        });
+        response.on("end", () =>
+          resolve({
+            status: response.statusCode ?? 0,
+            headers: normalizeHeaders(response.headers),
+            body: Buffer.concat(chunks),
+          }),
+        );
+      },
+    );
     request.on("error", reject);
     request.end();
   });

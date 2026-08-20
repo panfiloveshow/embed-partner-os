@@ -24,8 +24,11 @@ describe("Radar page feature extraction", () => {
         <a href="https://partner.example.com/about">О партнёре</a>
       </body></html>`;
 
-    const result = extractRadarPageFeatures(html, new URL("https://sport.example.ru/"),
-      new Date("2026-08-19T12:30:00.000Z"));
+    const result = extractRadarPageFeatures(
+      html,
+      new URL("https://sport.example.ru/"),
+      new Date("2026-08-19T12:30:00.000Z"),
+    );
 
     expect(result.features).toMatchObject({
       topic: "Спорт",
@@ -37,34 +40,45 @@ describe("Radar page feature extraction", () => {
       estimatedVideoPagesMin: 1,
       estimatedVideoPagesMax: 1,
     });
-    expect(result.research.signals.map(({ field }) => field)).toEqual(expect.arrayContaining([
-      "topic",
-      "language",
-      "geography",
-      "publicationFrequency",
-      "contactsFound",
-      "cms",
-      "estimatedVideoPages",
-    ]));
-    expect(result.research.contacts).toEqual(expect.arrayContaining([
+    expect(result.research.signals.map(({ field }) => field)).toEqual(
+      expect.arrayContaining([
+        "topic",
+        "language",
+        "geography",
+        "publicationFrequency",
+        "contactsFound",
+        "cms",
+        "estimatedVideoPages",
+      ]),
+    );
+    expect(result.research.contacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "email",
+          value: "editor@example.ru",
+          href: "mailto:editor@example.ru",
+          sourceUrl: "https://sport.example.ru/",
+          confidence: "high",
+        }),
+        expect.objectContaining({ type: "phone", value: "+74951234567" }),
+        expect.objectContaining({
+          type: "contact_page",
+          href: "https://sport.example.ru/contacts",
+        }),
+      ]),
+    );
+    expect(result.research.contacts).not.toContainEqual(
       expect.objectContaining({
-        type: "email",
-        value: "editor@example.ru",
-        href: "mailto:editor@example.ru",
-        sourceUrl: "https://sport.example.ru/",
-        confidence: "high",
+        href: "https://partner.example.com/about",
       }),
-      expect.objectContaining({ type: "phone", value: "+74951234567" }),
-      expect.objectContaining({ type: "contact_page", href: "https://sport.example.ru/contacts" }),
-    ]));
-    expect(result.research.contacts).not.toContainEqual(expect.objectContaining({
-      href: "https://partner.example.com/about",
-    }));
+    );
     expect(result.research.decisionMakers).toEqual([]);
-    expect(result.research.videoPages).toContainEqual(expect.objectContaining({
-      pageUrl: "https://sport.example.ru/video/match-review",
-      label: "Видео матча",
-    }));
+    expect(result.research.videoPages).toContainEqual(
+      expect.objectContaining({
+        pageUrl: "https://sport.example.ru/video/match-review",
+        label: "Видео матча",
+      }),
+    );
     expect(result.research.brief).toMatchObject({
       readiness: "ready_for_outreach",
       siteSummary: expect.stringContaining("Спорт"),
@@ -107,25 +121,30 @@ describe("Radar page feature extraction", () => {
         }</script>
       </body></html>`;
 
-    const result = extractRadarPageFeatures(html, new URL("https://media.example.ru/team"),
-      new Date("2026-08-19T12:30:00.000Z"));
+    const result = extractRadarPageFeatures(
+      html,
+      new URL("https://media.example.ru/team"),
+      new Date("2026-08-19T12:30:00.000Z"),
+    );
 
-    expect(result.research.decisionMakers).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        fullName: "Мария Иванова",
-        role: "Коммерческий директор",
-        email: "m.ivanova@example.ru",
-        phone: "+74952223344",
-        sourceUrl: "https://media.example.ru/team",
-        confidence: "high",
-      }),
-      expect.objectContaining({
-        fullName: "Алексей Петров",
-        role: "Главный редактор",
-        email: "editor@example.ru",
-        profileUrl: "https://media.example.ru/team/alexey-petrov",
-      }),
-    ]));
+    expect(result.research.decisionMakers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          fullName: "Мария Иванова",
+          role: "Коммерческий директор",
+          email: "m.ivanova@example.ru",
+          phone: "+74952223344",
+          sourceUrl: "https://media.example.ru/team",
+          confidence: "high",
+        }),
+        expect.objectContaining({
+          fullName: "Алексей Петров",
+          role: "Главный редактор",
+          email: "editor@example.ru",
+          profileUrl: "https://media.example.ru/team/alexey-petrov",
+        }),
+      ]),
+    );
     expect(result.research.brief.nextAction).toContain("Мария Иванова");
   });
 
@@ -136,13 +155,15 @@ describe("Radar page feature extraction", () => {
       new Date("2026-08-19T12:30:00.000Z"),
     );
 
-    expect(result.research.decisionMakers).toContainEqual(expect.objectContaining({
-      fullName: null,
-      role: "Ответственный за сотрудничество",
-      department: "Развитие бизнеса",
-      email: "ivan@example.ru",
-      confidence: "medium",
-    }));
+    expect(result.research.decisionMakers).toContainEqual(
+      expect.objectContaining({
+        fullName: null,
+        role: "Ответственный за сотрудничество",
+        department: "Развитие бизнеса",
+        email: "ivan@example.ru",
+        confidence: "medium",
+      }),
+    );
     expect(result.research.brief.nextAction).toContain("Ответственный за сотрудничество");
     expect(result.research.brief.nextAction).toContain("ivan@example.ru");
   });
@@ -186,11 +207,13 @@ describe("Radar page feature extraction", () => {
 
     const enriched = enrichRadarResearchWithChanges(previous, current);
 
-    expect(enriched.changeSignals).toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: "new_lpr" }),
-      expect.objectContaining({ code: "new_contact" }),
-      expect.objectContaining({ code: "video_growth" }),
-    ]));
+    expect(enriched.changeSignals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "new_lpr" }),
+        expect.objectContaining({ code: "new_contact" }),
+        expect.objectContaining({ code: "video_growth" }),
+      ]),
+    );
     expect(enriched.brief.priorityInsights?.[0]).toMatchObject({ code: "timing" });
     expect(enriched.brief.whyNow).toContain("Найдены новые целевые контакты");
   });

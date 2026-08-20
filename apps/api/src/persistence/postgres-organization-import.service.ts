@@ -79,7 +79,8 @@ export class PostgresOrganizationImportService implements OrganizationImportPort
         name: organization.name,
         domain: hostNormalized,
         segment: organization.segment,
-      })));
+      })),
+    );
     const rows = classifyOrganizationImportRows(parsed.rows, existing);
     const jobId = randomUUID();
     const created = await this.prisma.importJob.create({
@@ -123,94 +124,216 @@ export class PostgresOrganizationImportService implements OrganizationImportPort
     const requestHash = hashCommand(command);
     const reservationId = randomUUID();
     const now = new Date();
-    return this.prisma.$transaction(async (transaction) => {
-      const actor = await this.actors.current(transaction);
-      const teamId = requireActorTeam(actor);
-      const replay = await reserveIdempotency(transaction, {
-        id: reservationId,
-        actorId: actor.id,
-        operation: `organization-import.commit:${jobId}`,
-        idempotencyKey,
-        requestHash,
-        now,
-      });
-      if (replay !== null) return parseJobReplay(replay, idempotencyKey);
-      await transaction.$queryRaw(Prisma.sql`
+    return this.prisma.$transaction(
+      async (transaction) => {
+        const actor = await this.actors.current(transaction);
+        const teamId = requireActorTeam(actor);
+        const replay = await reserveIdempotency(transaction, {
+          id: reservationId,
+          actorId: actor.id,
+          operation: `organization-import.commit:${jobId}`,
+          idempotencyKey,
+          requestHash,
+          now,
+        });
+        if (replay !== null) return parseJobReplay(replay, idempotencyKey);
+        await transaction.$queryRaw(Prisma.sql`
         SELECT pg_advisory_xact_lock(hashtextextended(${`organization-import:${jobId}`}, 0))
       `);
-      const current = await transaction.importJob.findFirst({
-        where: { id: jobId, ...importJobScope(actor) },
-        include: { rows: { orderBy: { rowNo: "asc" } } },
-      });
-      if (!current) throw new OrganizationImportNotFoundError(jobId);
-      if (current.status !== "PREVIEW") {
-        throw new OrganizationImportStateError(jobStatus(current.status));
-      }
-      const rows = mapRows(current.rows);
-      const resolutions = new Map(
-        (command.resolutions ?? []).map(({ rowNo, decision }) => [rowNo, decision]),
-      );
-      assertResolutions(rows, resolutions);
-      const needsCreate = rows.some((row) =>
-        row.decision === "create" || resolutions.get(row.rowNo) === "create");
-      const process = needsCreate
-        ? await transaction.processDefinition.findFirst({
-            where: { status: "PUBLISHED" },
-            orderBy: { version: "desc" },
-            select: { version: true },
-          })
-        : null;
-      if (needsCreate && !process) {
-        throw new ServiceUnavailableException("Нет опубликованной версии воронки");
-      }
-      const users = await transaction.user.findMany({
-        where: { teamId, status: "ACTIVE" },
-        select: { id: true, email: true },
-      });
-      const userByEmail = new Map(users.map((user) => [user.email.toLocaleLowerCase("en-US"), user.id]));
-      const appliedRows: OrganizationImportRow[] = [];
-
-      for (const row of rows) {
-        const effective = row.decision === "conflict"
-          ? resolutions.get(row.rowNo)
-          : row.decision;
-        if (effective === "skip") {
-          const skipped = { ...row, resolvedDecision: "skip" as const };
-          await updateRowProtocol(transaction, current.id, skipped);
-          appliedRows.push(skipped);
-          continue;
+        const current = await transaction.importJob.findFirst({
+          where: { id: jobId, ...importJobScope(actor) },
+          include: { rows: { orderBy: { rowNo: "asc" } } },
+        });
+        if (!current) throw new OrganizationImportNotFoundError(jobId);
+        if (current.status !== "PREVIEW") {
+          throw new OrganizationImportStateError(jobStatus(current.status));
         }
-        if (effective === "update" && row.matchedOrganization) {
-          const existing = await transaction.organization.findFirst({
-            where: {
-              id: row.matchedOrganization.id,
-              archivedAt: null,
-              ...organizationScope(actor),
-            },
-          });
-          if (!existing) throw new OrganizationImportNotFoundError(jobId);
-          const updated = await transaction.organization.update({
-            where: { id: existing.id },
+        const rows = mapRows(current.rows);
+        const resolutions = new Map(
+          (command.resolutions ?? []).map(({ rowNo, decision }) => [rowNo, decision]),
+        );
+        assertResolutions(rows, resolutions);
+        const needsCreate = rows.some(
+          (row) => row.decision === "create" || resolutions.get(row.rowNo) === "create",
+        );
+        const process = needsCreate
+          ? await transaction.processDefinition.findFirst({
+              where: { status: "PUBLISHED" },
+              orderBy: { version: "desc" },
+              select: { version: true },
+            })
+          : null;
+        if (needsCreate && !process) {
+          throw new ServiceUnavailableException("Нет опубликованной версии воронки");
+        }
+        const users = await transaction.user.findMany({
+          where: { teamId, status: "ACTIVE" },
+          select: { id: true, email: true },
+        });
+        const userByEmail = new Map(
+          users.map((user) => [user.email.toLocaleLowerCase("en-US"), user.id]),
+        );
+        const appliedRows: OrganizationImportRow[] = [];
+
+        for (const row of rows) {
+          const effective = row.decision === "conflict" ? resolutions.get(row.rowNo) : row.decision;
+          if (effective === "skip") {
+            const skipped = { ...row, resolvedDecision: "skip" as const };
+            await updateRowProtocol(transaction, current.id, skipped);
+            appliedRows.push(skipped);
+            continue;
+          }
+          if (effective === "update" && row.matchedOrganization) {
+            const existing = await transaction.organization.findFirst({
+              where: {
+                id: row.matchedOrganization.id,
+                archivedAt: null,
+                ...organizationScope(actor),
+              },
+            });
+            if (!existing) throw new OrganizationImportNotFoundError(jobId);
+            const updated = await transaction.organization.update({
+              where: { id: existing.id },
+              data: {
+                name: row.values.organization_name,
+                segment: row.values.segment || existing.segment,
+                version: { increment: 1 },
+              },
+            });
+            await transaction.auditLog.create({
+              data: {
+                id: randomUUID(),
+                actorId: actor.id,
+                action: "organization.import-update",
+                entityType: "Organization",
+                entityId: updated.id,
+                beforeJson: toJson({
+                  name: existing.name,
+                  segment: existing.segment,
+                  version: existing.version,
+                }),
+                afterJson: toJson({
+                  name: updated.name,
+                  segment: updated.segment,
+                  version: updated.version,
+                  importJobId: current.id,
+                  rowNo: row.rowNo,
+                }),
+                occurredAt: now,
+              },
+            });
+            await transaction.outboxEvent.create({
+              data: {
+                id: randomUUID(),
+                eventType: "organization.imported-update",
+                aggregateType: "Organization",
+                aggregateId: updated.id,
+                aggregateVersion: updated.version,
+                payload: toJson({
+                  organizationId: updated.id,
+                  importJobId: current.id,
+                  rowNo: row.rowNo,
+                }),
+                occurredAt: now,
+              },
+            });
+            const applied = {
+              ...row,
+              resolvedDecision: "update" as const,
+              entityId: updated.id,
+              appliedAt: now.toISOString(),
+            };
+            await updateRowProtocol(transaction, current.id, applied);
+            appliedRows.push(applied);
+            continue;
+          }
+
+          const ownerId =
+            userByEmail.get(row.values.owner_email.toLocaleLowerCase("en-US")) ?? actor.id;
+          const organizationId = randomUUID();
+          const opportunityId = randomUUID();
+          const stageCode = row.values.stage || "S0";
+          await transaction.organization.create({
             data: {
+              id: organizationId,
               name: row.values.organization_name,
-              segment: row.values.segment || existing.segment,
-              version: { increment: 1 },
+              segment: row.values.segment || null,
+              ownerId,
+              domains: {
+                create: {
+                  id: randomUUID(),
+                  hostNormalized: row.normalizedDomain ?? row.values.domain,
+                  isPrimary: true,
+                  source: `import:${current.id}`,
+                },
+              },
             },
           });
+          await transaction.opportunity.create({
+            data: {
+              id: opportunityId,
+              organizationId,
+              processVersion: process?.version ?? 1,
+              ownerId,
+              type: "initial-embed",
+              stageCode,
+              stageLabel: opportunityStageLabel(
+                stageCode as Parameters<typeof opportunityStageLabel>[0],
+              ),
+              status: statusForStage(stageCode),
+              score: 0,
+              stageData: {},
+            },
+          });
+          if (row.values.contact_name) {
+            await createImportedContact(transaction, row, organizationId, current.id);
+          }
+          if (row.values.last_interaction_at) {
+            await transaction.interaction.create({
+              data: {
+                id: randomUUID(),
+                opportunityId,
+                authorId: ownerId,
+                type: "Импорт",
+                occurredAt: new Date(row.values.last_interaction_at),
+                summary: row.values.notes || "Импортировано из исходной таблицы",
+                outcome: "Импортировано",
+                source: `import:${current.id}`,
+              },
+            });
+          }
+          if (row.values.next_action && row.values.next_action_due_at) {
+            const task = await transaction.task.create({
+              data: {
+                id: randomUUID(),
+                opportunityId,
+                ownerId,
+                type: "follow-up",
+                title: truncate(row.values.next_action, 200),
+                dueAt: new Date(row.values.next_action_due_at),
+                priorityScore: 0,
+                priorityReasons: [],
+                source: `import:${current.id}`,
+              },
+            });
+            await transaction.opportunity.update({
+              where: { id: opportunityId },
+              data: { nextTaskId: task.id },
+            });
+          }
           await transaction.auditLog.create({
             data: {
               id: randomUUID(),
               actorId: actor.id,
-              action: "organization.import-update",
+              action: "organization.import-create",
               entityType: "Organization",
-              entityId: updated.id,
-              beforeJson: toJson({ name: existing.name, segment: existing.segment, version: existing.version }),
+              entityId: organizationId,
               afterJson: toJson({
-                name: updated.name,
-                segment: updated.segment,
-                version: updated.version,
                 importJobId: current.id,
                 rowNo: row.rowNo,
+                organizationName: row.values.organization_name,
+                domain: row.normalizedDomain,
+                opportunityId,
               }),
               occurredAt: now,
             },
@@ -218,201 +341,104 @@ export class PostgresOrganizationImportService implements OrganizationImportPort
           await transaction.outboxEvent.create({
             data: {
               id: randomUUID(),
-              eventType: "organization.imported-update",
+              eventType: "organization.imported",
               aggregateType: "Organization",
-              aggregateId: updated.id,
-              aggregateVersion: updated.version,
-              payload: toJson({ organizationId: updated.id, importJobId: current.id, rowNo: row.rowNo }),
+              aggregateId: organizationId,
+              aggregateVersion: 1,
+              payload: toJson({
+                organizationId,
+                opportunityId,
+                importJobId: current.id,
+                rowNo: row.rowNo,
+              }),
               occurredAt: now,
             },
           });
           const applied = {
             ...row,
-            resolvedDecision: "update" as const,
-            entityId: updated.id,
+            resolvedDecision: "create" as const,
+            entityId: organizationId,
             appliedAt: now.toISOString(),
           };
           await updateRowProtocol(transaction, current.id, applied);
           appliedRows.push(applied);
-          continue;
         }
 
-        const ownerId = userByEmail.get(row.values.owner_email.toLocaleLowerCase("en-US")) ?? actor.id;
-        const organizationId = randomUUID();
-        const opportunityId = randomUUID();
-        const stageCode = row.values.stage || "S0";
-        await transaction.organization.create({
-          data: {
-            id: organizationId,
-            name: row.values.organization_name,
-            segment: row.values.segment || null,
-            ownerId,
-            domains: {
-              create: {
-                id: randomUUID(),
-                hostNormalized: row.normalizedDomain ?? row.values.domain,
-                isPrimary: true,
-                source: `import:${current.id}`,
-              },
-            },
-          },
+        const summary = summarizeImportRows(appliedRows);
+        await transaction.importJob.update({
+          where: { id: current.id },
+          data: { status: "COMMITTED", summaryJson: toJson(summary), completedAt: now },
         });
-        await transaction.opportunity.create({
-          data: {
-            id: opportunityId,
-            organizationId,
-            processVersion: process?.version ?? 1,
-            ownerId,
-            type: "initial-embed",
-            stageCode,
-            stageLabel: opportunityStageLabel(stageCode as Parameters<typeof opportunityStageLabel>[0]),
-            status: statusForStage(stageCode),
-            score: 0,
-            stageData: {},
-          },
+        await recordJobEvent(transaction, {
+          actorId: actor.id,
+          jobId: current.id,
+          action: "organization-import.commit",
+          eventType: "organization-import.committed",
+          payload: { summary },
+          occurredAt: now,
         });
-        if (row.values.contact_name) {
-          await createImportedContact(transaction, row, organizationId, current.id);
-        }
-        if (row.values.last_interaction_at) {
-          await transaction.interaction.create({
-            data: {
-              id: randomUUID(),
-              opportunityId,
-              authorId: ownerId,
-              type: "Импорт",
-              occurredAt: new Date(row.values.last_interaction_at),
-              summary: row.values.notes || "Импортировано из исходной таблицы",
-              outcome: "Импортировано",
-              source: `import:${current.id}`,
-            },
-          });
-        }
-        if (row.values.next_action && row.values.next_action_due_at) {
-          const task = await transaction.task.create({
-            data: {
-              id: randomUUID(),
-              opportunityId,
-              ownerId,
-              type: "follow-up",
-              title: truncate(row.values.next_action, 200),
-              dueAt: new Date(row.values.next_action_due_at),
-              priorityScore: 0,
-              priorityReasons: [],
-              source: `import:${current.id}`,
-            },
-          });
-          await transaction.opportunity.update({
-            where: { id: opportunityId },
-            data: { nextTaskId: task.id },
-          });
-        }
-        await transaction.auditLog.create({
-          data: {
-            id: randomUUID(),
-            actorId: actor.id,
-            action: "organization.import-create",
-            entityType: "Organization",
-            entityId: organizationId,
-            afterJson: toJson({
-              importJobId: current.id,
-              rowNo: row.rowNo,
-              organizationName: row.values.organization_name,
-              domain: row.normalizedDomain,
-              opportunityId,
-            }),
-            occurredAt: now,
+        const response = mapJob(
+          {
+            ...current,
+            status: "COMMITTED",
+            completedAt: now,
+            rows: current.rows,
           },
-        });
-        await transaction.outboxEvent.create({
-          data: {
-            id: randomUUID(),
-            eventType: "organization.imported",
-            aggregateType: "Organization",
-            aggregateId: organizationId,
-            aggregateVersion: 1,
-            payload: toJson({ organizationId, opportunityId, importJobId: current.id, rowNo: row.rowNo }),
-            occurredAt: now,
-          },
-        });
-        const applied = {
-          ...row,
-          resolvedDecision: "create" as const,
-          entityId: organizationId,
-          appliedAt: now.toISOString(),
-        };
-        await updateRowProtocol(transaction, current.id, applied);
-        appliedRows.push(applied);
-      }
-
-      const summary = summarizeImportRows(appliedRows);
-      await transaction.importJob.update({
-        where: { id: current.id },
-        data: { status: "COMMITTED", summaryJson: toJson(summary), completedAt: now },
-      });
-      await recordJobEvent(transaction, {
-        actorId: actor.id,
-        jobId: current.id,
-        action: "organization-import.commit",
-        eventType: "organization-import.committed",
-        payload: { summary },
-        occurredAt: now,
-      });
-      const response = mapJob({
-        ...current,
-        status: "COMMITTED",
-        completedAt: now,
-        rows: current.rows,
-      }, appliedRows);
-      await completeIdempotency(transaction, reservationId, response, now);
-      return response;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+          appliedRows,
+        );
+        await completeIdempotency(transaction, reservationId, response, now);
+        return response;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 
   async cancel(jobId: string, idempotencyKey: string): Promise<OrganizationImportJob> {
     const now = new Date();
     const reservationId = randomUUID();
-    return this.prisma.$transaction(async (transaction) => {
-      const actor = await this.actors.current(transaction);
-      const replay = await reserveIdempotency(transaction, {
-        id: reservationId,
-        actorId: actor.id,
-        operation: `organization-import.cancel:${jobId}`,
-        idempotencyKey,
-        requestHash: hashCommand({ action: "cancel" }),
-        now,
-      });
-      if (replay !== null) return parseJobReplay(replay, idempotencyKey);
-      await transaction.$queryRaw(Prisma.sql`
+    return this.prisma.$transaction(
+      async (transaction) => {
+        const actor = await this.actors.current(transaction);
+        const replay = await reserveIdempotency(transaction, {
+          id: reservationId,
+          actorId: actor.id,
+          operation: `organization-import.cancel:${jobId}`,
+          idempotencyKey,
+          requestHash: hashCommand({ action: "cancel" }),
+          now,
+        });
+        if (replay !== null) return parseJobReplay(replay, idempotencyKey);
+        await transaction.$queryRaw(Prisma.sql`
         SELECT pg_advisory_xact_lock(hashtextextended(${`organization-import:${jobId}`}, 0))
       `);
-      const current = await transaction.importJob.findFirst({
-        where: { id: jobId, ...importJobScope(actor) },
-        include: { rows: { orderBy: { rowNo: "asc" } } },
-      });
-      if (!current) throw new OrganizationImportNotFoundError(jobId);
-      if (current.status !== "PREVIEW") {
-        throw new OrganizationImportStateError(jobStatus(current.status));
-      }
-      const updated = await transaction.importJob.update({
-        where: { id: current.id },
-        data: { status: "CANCELLED", completedAt: now },
-        include: { rows: { orderBy: { rowNo: "asc" } } },
-      });
-      await recordJobEvent(transaction, {
-        actorId: actor.id,
-        jobId: current.id,
-        action: "organization-import.cancel",
-        eventType: "organization-import.cancelled",
-        payload: { sourceHash: current.sourceHash },
-        occurredAt: now,
-      });
-      const response = mapJob(updated);
-      await completeIdempotency(transaction, reservationId, response, now);
-      return response;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+        const current = await transaction.importJob.findFirst({
+          where: { id: jobId, ...importJobScope(actor) },
+          include: { rows: { orderBy: { rowNo: "asc" } } },
+        });
+        if (!current) throw new OrganizationImportNotFoundError(jobId);
+        if (current.status !== "PREVIEW") {
+          throw new OrganizationImportStateError(jobStatus(current.status));
+        }
+        const updated = await transaction.importJob.update({
+          where: { id: current.id },
+          data: { status: "CANCELLED", completedAt: now },
+          include: { rows: { orderBy: { rowNo: "asc" } } },
+        });
+        await recordJobEvent(transaction, {
+          actorId: actor.id,
+          jobId: current.id,
+          action: "organization-import.cancel",
+          eventType: "organization-import.cancelled",
+          payload: { sourceHash: current.sourceHash },
+          occurredAt: now,
+        });
+        const response = mapJob(updated);
+        await completeIdempotency(transaction, reservationId, response, now);
+        return response;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
-
 }
 
 async function createImportedContact(
@@ -496,9 +522,10 @@ function mapRows(rows: DbImportRow[]): OrganizationImportRow[] {
     allowedDecisions: stringArray(row.allowedDecisionsJson).filter(
       (value): value is "create" | "skip" => value === "create" || value === "skip",
     ),
-    matchedOrganization: row.matchedOrganizationId && row.matchedOrganizationName
-      ? { id: row.matchedOrganizationId, name: row.matchedOrganizationName }
-      : null,
+    matchedOrganization:
+      row.matchedOrganizationId && row.matchedOrganizationName
+        ? { id: row.matchedOrganizationId, name: row.matchedOrganizationName }
+        : null,
     fieldErrors: stringRecord(row.fieldErrorsJson),
     warnings: stringArray(row.warningsJson),
     errorCode: row.errorCode,
@@ -511,12 +538,16 @@ function assertResolutions(
   rows: OrganizationImportRow[],
   resolutions: Map<number, "create" | "skip">,
 ) {
-  const unresolved = rows.filter((row) => row.decision === "conflict" && !resolutions.has(row.rowNo));
+  const unresolved = rows.filter(
+    (row) => row.decision === "conflict" && !resolutions.has(row.rowNo),
+  );
   if (unresolved.length > 0) throw new OrganizationImportResolutionError(unresolved);
   for (const [rowNo, resolution] of resolutions) {
     const row = rows.find((candidate) => candidate.rowNo === rowNo);
     if (!row || row.decision !== "conflict" || !row.allowedDecisions.includes(resolution)) {
-      throw new OrganizationImportResolutionError(row ? [row] : [{ rowNo } as OrganizationImportRow]);
+      throw new OrganizationImportResolutionError(
+        row ? [row] : [{ rowNo } as OrganizationImportRow],
+      );
     }
   }
 }
@@ -593,7 +624,8 @@ async function reserveIdempotency(
     },
   });
   if (!existing) throw new IdempotencyInProgressError(input.idempotencyKey);
-  if (existing.requestHash !== input.requestHash) throw new IdempotencyConflictError(input.idempotencyKey);
+  if (existing.requestHash !== input.requestHash)
+    throw new IdempotencyConflictError(input.idempotencyKey);
   if (existing.responseJson === null) throw new IdempotencyInProgressError(input.idempotencyKey);
   return existing.responseJson;
 }
@@ -619,16 +651,20 @@ function parseJobReplay(value: Prisma.JsonValue, key: string): OrganizationImpor
 
 function importValues(value: Prisma.JsonValue): OrganizationImportValues {
   const record = isRecord(value) ? value : {};
-  return Object.fromEntries(organizationImportFields.map((field) => [
-    field,
-    typeof record[field] === "string" ? record[field] : "",
-  ])) as OrganizationImportValues;
+  return Object.fromEntries(
+    organizationImportFields.map((field) => [
+      field,
+      typeof record[field] === "string" ? record[field] : "",
+    ]),
+  ) as OrganizationImportValues;
 }
 
 function importDecision(value: string): OrganizationImportDecision {
   const normalized = value.toLocaleLowerCase("en-US");
-  return normalized === "create" || normalized === "update" ||
-    normalized === "skip" || normalized === "conflict"
+  return normalized === "create" ||
+    normalized === "update" ||
+    normalized === "skip" ||
+    normalized === "conflict"
     ? normalized
     : "conflict";
 }
@@ -653,18 +689,23 @@ function statusForStage(stageCode: string): OpportunityStatus {
 }
 
 function stringArray(value: Prisma.JsonValue): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
 }
 
 function stringRecord(value: Prisma.JsonValue): Record<string, string> {
   if (!isRecord(value)) return {};
   return Object.fromEntries(
-    Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+    Object.entries(value).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
   );
 }
 
 function uuidOrNull(value: string | undefined | null) {
-  return value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  return value &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
     ? value
     : null;
 }

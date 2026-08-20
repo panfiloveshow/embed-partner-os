@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { L0CheckResult } from "@embed-os/contracts";
 import type { L0CheckObservation } from "./monitoring/l0-embed-checker.js";
-import {
-  PlacementService,
-  PlacementVersionConflictError,
-} from "./placement.service.js";
+import { PlacementService, PlacementVersionConflictError } from "./placement.service.js";
 import { TodayService } from "./today.service.js";
 
 describe("PlacementService", () => {
@@ -65,8 +62,11 @@ describe("PlacementService", () => {
       alertChange: "closed",
       placement: { healthStatus: "healthy", consecutiveFailures: 0, activeAlert: null },
     });
-    expect(today.getToday().actions.some(({ id }) => id === second.placement.activeAlert?.technicalTaskId))
-      .toBe(false);
+    expect(
+      today
+        .getToday()
+        .actions.some(({ id }) => id === second.placement.activeAlert?.technicalTaskId),
+    ).toBe(false);
     expect(service.listChecks(placement.id)).toHaveLength(3);
   });
 
@@ -74,30 +74,48 @@ describe("PlacementService", () => {
     const service = new PlacementService(new TodayService(), new SequenceChecker([]));
     const placement = service.register(activePlacement(), "placement-register-0003");
 
-    const paused = service.update(placement.id, {
-      version: placement.version,
-      businessStatus: "paused",
-      reason: "Пауза по запросу партнёра",
-    }, "placement-update-0001");
-    const replay = service.update(placement.id, {
-      version: placement.version,
-      businessStatus: "paused",
-      reason: "Пауза по запросу партнёра",
-    }, "placement-update-0001");
+    const paused = service.update(
+      placement.id,
+      {
+        version: placement.version,
+        businessStatus: "paused",
+        reason: "Пауза по запросу партнёра",
+      },
+      "placement-update-0001",
+    );
+    const replay = service.update(
+      placement.id,
+      {
+        version: placement.version,
+        businessStatus: "paused",
+        reason: "Пауза по запросу партнёра",
+      },
+      "placement-update-0001",
+    );
 
     expect(replay).toEqual(paused);
     expect(paused).toMatchObject({ businessStatus: "paused", nextCheckAt: null, version: 2 });
-    expect(() => service.update(placement.id, {
-      version: 1,
-      businessStatus: "active",
-      reason: "Повторный запуск",
-    }, "placement-update-0002")).toThrowError(PlacementVersionConflictError);
+    expect(() =>
+      service.update(
+        placement.id,
+        {
+          version: 1,
+          businessStatus: "active",
+          reason: "Повторный запуск",
+        },
+        "placement-update-0002",
+      ),
+    ).toThrowError(PlacementVersionConflictError);
 
-    const resumed = service.update(placement.id, {
-      version: paused.version,
-      businessStatus: "active",
-      reason: "Повторный запуск",
-    }, "placement-update-0003");
+    const resumed = service.update(
+      placement.id,
+      {
+        version: paused.version,
+        businessStatus: "active",
+        reason: "Повторный запуск",
+      },
+      "placement-update-0003",
+    );
     expect(resumed.businessStatus).toBe("active");
     expect(resumed.nextCheckAt).not.toBeNull();
     expect(resumed.version).toBe(3);

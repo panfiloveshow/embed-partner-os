@@ -3,13 +3,7 @@ export const actionGroups = ["critical", "today", "later", "waiting"] as const;
 export type ActionGroup = (typeof actionGroups)[number];
 
 export interface PriorityReason {
-  code:
-    | "inbound"
-    | "overdue"
-    | "partner-potential"
-    | "technical-risk"
-    | "inactivity"
-    | "waiting";
+  code: "inbound" | "overdue" | "partner-potential" | "technical-risk" | "inactivity" | "waiting";
   label: string;
 }
 
@@ -389,7 +383,17 @@ export interface OpportunityStageTransitionResult {
 }
 
 export const slaWorkingStageCodes = [
-  "S0", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "S10",
+  "S0",
+  "S1",
+  "S2",
+  "S3",
+  "S4",
+  "S5",
+  "S6",
+  "S7",
+  "S8",
+  "S9",
+  "S10",
 ] as const;
 
 export type SlaWorkingStageCode = (typeof slaWorkingStageCodes)[number];
@@ -946,13 +950,7 @@ export interface WeeklyReportSnapshot {
 
 export type PlacementBusinessStatus = "planned" | "active" | "paused" | "ended";
 export type PlacementHealthStatus =
-  | "unchecked"
-  | "healthy"
-  | "degraded"
-  | "failed"
-  | "awaiting_fix"
-  | "disabled"
-  | "exception";
+  "unchecked" | "healthy" | "degraded" | "failed" | "awaiting_fix" | "disabled" | "exception";
 export type L0CheckResult = "healthy" | "degraded" | "failed" | "blocked" | "unknown";
 
 export interface RegisterPlacementCommand {
@@ -1058,13 +1056,7 @@ export interface TaskCloseState {
   neverReturn?: boolean;
 }
 
-export const manualInteractionTypes = [
-  "email",
-  "call",
-  "meeting",
-  "messenger",
-  "note",
-] as const;
+export const manualInteractionTypes = ["email", "call", "meeting", "messenger", "note"] as const;
 
 export type ManualInteractionType = (typeof manualInteractionTypes)[number];
 

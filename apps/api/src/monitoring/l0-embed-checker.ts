@@ -32,7 +32,15 @@ export class L0EmbedChecker {
     try {
       const page = await this.http.get(pageUrl);
       if (page.status === 403 || page.status === 429) {
-        return this.result(startedAt, "blocked", page.status, null, false, null, "PAGE_HTTP_BLOCKED");
+        return this.result(
+          startedAt,
+          "blocked",
+          page.status,
+          null,
+          false,
+          null,
+          "PAGE_HTTP_BLOCKED",
+        );
       }
       if (!isSuccessful(page.status)) {
         return this.result(startedAt, "failed", page.status, null, false, null, "PAGE_HTTP_ERROR");
@@ -80,9 +88,10 @@ export class L0EmbedChecker {
       if (error instanceof ResponseTooLargeError) {
         return this.result(startedAt, "unknown", null, null, false, null, "RESPONSE_TOO_LARGE");
       }
-      const code = error instanceof Error && error.name === "TimeoutError"
-        ? "NETWORK_TIMEOUT"
-        : "NETWORK_ERROR";
+      const code =
+        error instanceof Error && error.name === "TimeoutError"
+          ? "NETWORK_TIMEOUT"
+          : "NETWORK_ERROR";
       return this.result(startedAt, "unknown", null, null, false, null, code);
     }
   }

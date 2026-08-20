@@ -11,12 +11,16 @@ describe("SimilarwebTrafficProvider", () => {
           url: new URL(url),
           status: 200,
           headers: { "content-type": "application/json" },
-          body: Buffer.from(JSON.stringify({ visits: [
-            { date: "2026-07-01", visits: 1_000 },
-            { date: "2026-07-02", visits: 1_200 },
-            { date: "2026-07-03", visits: 800 },
-            { date: "2026-07-04", visits: 1_100 },
-          ] })),
+          body: Buffer.from(
+            JSON.stringify({
+              visits: [
+                { date: "2026-07-01", visits: 1_000 },
+                { date: "2026-07-02", visits: 1_200 },
+                { date: "2026-07-03", visits: 800 },
+                { date: "2026-07-04", visits: 1_100 },
+              ],
+            }),
+          ),
         };
       },
     };
@@ -42,7 +46,9 @@ describe("SimilarwebTrafficProvider", () => {
     const provider = new SimilarwebTrafficProvider("secret-key", {
       async get(url) {
         return {
-          url: new URL(url), status: 200, headers: { "content-type": "application/json" },
+          url: new URL(url),
+          status: 200,
+          headers: { "content-type": "application/json" },
           body: Buffer.from('{"visits":[]}'),
         };
       },

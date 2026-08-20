@@ -30,11 +30,7 @@ export class AccessAdministrationController {
     @Body() body: unknown,
     @Headers("idempotency-key") rawIdempotencyKey: string | undefined,
   ): Promise<AccessUserView> {
-    return this.access.create(
-      request.actor!.userId,
-      body,
-      parseIdempotencyKey(rawIdempotencyKey),
-    );
+    return this.access.create(request.actor!.userId, body, parseIdempotencyKey(rawIdempotencyKey));
   }
 
   @Patch("users/:userId")

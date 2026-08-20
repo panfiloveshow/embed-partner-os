@@ -14,7 +14,9 @@ export interface PartnerRegistryQuery extends PartnerExportCommand {
 }
 
 export interface PartnerPort {
-  listPartners(query?: PartnerRegistryQuery): PartnerRegistryPayload | Promise<PartnerRegistryPayload>;
+  listPartners(
+    query?: PartnerRegistryQuery,
+  ): PartnerRegistryPayload | Promise<PartnerRegistryPayload>;
   getPartner(organizationId: string): PartnerCardPayload | Promise<PartnerCardPayload>;
   exportPartners(query: PartnerRegistryQuery, actorSubject: string): Promise<PartnerExportResult>;
   listPartnerExportAudit(actorSubject: string): Promise<PartnerExportAuditView[]>;

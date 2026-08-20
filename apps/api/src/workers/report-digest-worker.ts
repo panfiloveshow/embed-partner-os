@@ -20,8 +20,8 @@ async function bootstrap() {
     webhookSecret: requiredSetting("REPORT_DIGEST_WEBHOOK_SECRET"),
     timeoutMs: integerSetting("REPORT_DIGEST_TIMEOUT_MS", 10_000, 100, 60_000),
   });
-  const workerId = process.env.OUTBOX_WORKER_ID?.trim() ||
-    `${hostname()}:${process.pid}:report-digest`;
+  const workerId =
+    process.env.OUTBOX_WORKER_ID?.trim() || `${hostname()}:${process.pid}:report-digest`;
   const relay = new OutboxRelayService(
     new PrismaOutboxRelayStore(prisma),
     publisher,
@@ -56,7 +56,14 @@ function requiredSetting(name: string): string {
 }
 
 function recipients(raw: string): string[] {
-  const values = [...new Set(raw.split(",").map((value) => value.trim()).filter(Boolean))];
+  const values = [
+    ...new Set(
+      raw
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean),
+    ),
+  ];
   if (values.length === 0) throw new Error("REPORT_DIGEST_RECIPIENTS is empty");
   return values;
 }

@@ -8,14 +8,16 @@ import {
 
 describe("placement registration", () => {
   it("normalizes a public page URL and defaults the URL pattern", () => {
-    expect(parseRegisterPlacementCommand({
-      organizationId: " org-1 ",
-      opportunityId: " opp-1 ",
-      pageUrl: " HTTPS://Partner.Example:443/articles/video#player ",
-      embedType: "video",
-      environment: "production",
-      businessStatus: "planned",
-    })).toEqual({
+    expect(
+      parseRegisterPlacementCommand({
+        organizationId: " org-1 ",
+        opportunityId: " opp-1 ",
+        pageUrl: " HTTPS://Partner.Example:443/articles/video#player ",
+        embedType: "video",
+        environment: "production",
+        businessStatus: "planned",
+      }),
+    ).toEqual({
       organizationId: "org-1",
       opportunityId: "opp-1",
       pageUrl: "https://partner.example/articles/video",
@@ -27,42 +29,48 @@ describe("placement registration", () => {
   });
 
   it("requires a timezone-aware launch date for an active placement", () => {
-    expect(() => parseRegisterPlacementCommand({
-      organizationId: "org-1",
-      opportunityId: "opp-1",
-      pageUrl: "https://partner.example/video",
-      embedType: "video",
-      environment: "production",
-      businessStatus: "active",
-    })).toThrowError(DomainRuleError);
+    expect(() =>
+      parseRegisterPlacementCommand({
+        organizationId: "org-1",
+        opportunityId: "opp-1",
+        pageUrl: "https://partner.example/video",
+        embedType: "video",
+        environment: "production",
+        businessStatus: "active",
+      }),
+    ).toThrowError(DomainRuleError);
   });
 
   it("rejects credentials and non-HTTP placement URLs", () => {
     for (const pageUrl of ["file:///etc/passwd", "https://user:secret@partner.example/video"]) {
-      expect(() => parseRegisterPlacementCommand({
-        organizationId: "org-1",
-        opportunityId: "opp-1",
-        pageUrl,
-        embedType: "video",
-        environment: "production",
-        businessStatus: "planned",
-      })).toThrowError(DomainRuleError);
+      expect(() =>
+        parseRegisterPlacementCommand({
+          organizationId: "org-1",
+          opportunityId: "opp-1",
+          pageUrl,
+          embedType: "video",
+          environment: "production",
+          businessStatus: "planned",
+        }),
+      ).toThrowError(DomainRuleError);
     }
   });
 });
 
 describe("placement lifecycle commands", () => {
   it("normalizes mutable placement fields and preserves an explicit launch-date reset", () => {
-    expect(parseUpdatePlacementCommand({
-      version: 7,
-      pageUrl: " HTTPS://Partner.Example:443/new#player ",
-      urlPattern: " /new/* ",
-      embedType: "live",
-      environment: "staging",
-      businessStatus: "paused",
-      launchedAt: null,
-      reason: " Временная остановка партнёром ",
-    })).toEqual({
+    expect(
+      parseUpdatePlacementCommand({
+        version: 7,
+        pageUrl: " HTTPS://Partner.Example:443/new#player ",
+        urlPattern: " /new/* ",
+        embedType: "live",
+        environment: "staging",
+        businessStatus: "paused",
+        launchedAt: null,
+        reason: " Временная остановка партнёром ",
+      }),
+    ).toEqual({
       version: 7,
       pageUrl: "https://partner.example/new",
       urlPattern: "/new/*",

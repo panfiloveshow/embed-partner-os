@@ -27,10 +27,7 @@ import {
   OpportunityNotFoundError,
   OpportunityVersionConflictError,
 } from "../opportunity.service.js";
-import {
-  opportunityScope,
-  PersistenceActorService,
-} from "./persistence-actor.service.js";
+import { opportunityScope, PersistenceActorService } from "./persistence-actor.service.js";
 import { PrismaService } from "./prisma.service.js";
 
 @Injectable()
@@ -89,9 +86,8 @@ export class PostgresOpportunityService implements OpportunityPort {
       .slice(0, FUNNEL_PAGE_LIMIT)
       .map((opportunity) => {
         const stageCode = knownStage(opportunity.stageCode);
-        const nextTask = opportunity.nextTask?.status === TaskStatus.OPEN
-          ? opportunity.nextTask
-          : null;
+        const nextTask =
+          opportunity.nextTask?.status === TaskStatus.OPEN ? opportunity.nextTask : null;
         return {
           id: opportunity.id,
           version: opportunity.version,
@@ -119,15 +115,17 @@ export class PostgresOpportunityService implements OpportunityPort {
 
     return {
       generatedAt: now.toISOString(),
-      teamName: actor.scopeMode === "all"
-        ? "Все команды"
-        : actor.scopeMode === "team"
-          ? actor.teamName ?? "Моя команда"
-          : actor.displayName,
+      teamName:
+        actor.scopeMode === "all"
+          ? "Все команды"
+          : actor.scopeMode === "team"
+            ? (actor.teamName ?? "Моя команда")
+            : actor.displayName,
       total,
       truncated: records.length > FUNNEL_PAGE_LIMIT,
-      processVersions: [...new Set(opportunities.map(({ processVersion }) => processVersion))]
-        .sort((left, right) => left - right),
+      processVersions: [...new Set(opportunities.map(({ processVersion }) => processVersion))].sort(
+        (left, right) => left - right,
+      ),
       stageCounts: grouped
         .map(({ stageCode, _count }) => {
           const code = knownStage(stageCode);
@@ -148,237 +146,244 @@ export class PostgresOpportunityService implements OpportunityPort {
     const reservationId = randomUUID();
     const now = new Date();
 
-    return this.prisma.$transaction(async (transaction) => {
-      const actor = await this.actors.current(transaction);
-      const replay = await reserveIdempotency(transaction, {
-        reservationId,
-        actorId: actor.id,
-        operation: `opportunity.stage-transition:${opportunityId}`,
-        idempotencyKey,
-        requestHash,
-        now,
-      });
-      if (replay !== null) return parseTransitionReplay(replay, idempotencyKey);
-      await transaction.$queryRaw(Prisma.sql`
+    return this.prisma.$transaction(
+      async (transaction) => {
+        const actor = await this.actors.current(transaction);
+        const replay = await reserveIdempotency(transaction, {
+          reservationId,
+          actorId: actor.id,
+          operation: `opportunity.stage-transition:${opportunityId}`,
+          idempotencyKey,
+          requestHash,
+          now,
+        });
+        if (replay !== null) return parseTransitionReplay(replay, idempotencyKey);
+        await transaction.$queryRaw(Prisma.sql`
         SELECT pg_advisory_xact_lock(hashtextextended(${`opportunity:${opportunityId}`}, 0))
       `);
-      const current = await transaction.opportunity.findFirst({
-        where: { id: opportunityId, archivedAt: null, ...opportunityScope(actor) },
-        include: {
-          processDefinition: true,
-          organization: {
-            select: {
-              segment: true,
-              domains: {
-                where: { archivedAt: null },
-                orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
-                select: { hostNormalized: true },
-                take: 1,
-              },
-              contactLinks: {
-                where: {
-                  validTo: null,
-                  contact: { archivedAt: null, mergedIntoId: null },
+        const current = await transaction.opportunity.findFirst({
+          where: { id: opportunityId, archivedAt: null, ...opportunityScope(actor) },
+          include: {
+            processDefinition: true,
+            organization: {
+              select: {
+                segment: true,
+                domains: {
+                  where: { archivedAt: null },
+                  orderBy: [{ isPrimary: "desc" }, { createdAt: "asc" }],
+                  select: { hostNormalized: true },
+                  take: 1,
                 },
-                select: { id: true },
-                take: 1,
+                contactLinks: {
+                  where: {
+                    validTo: null,
+                    contact: { archivedAt: null, mergedIntoId: null },
+                  },
+                  select: { id: true },
+                  take: 1,
+                },
               },
             },
-          },
-          interactions: {
-            orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
-            select: { occurredAt: true, type: true, outcome: true, contactId: true },
-            take: 1,
-          },
-          placements: {
-            where: {
-              archivedAt: null,
-              businessStatus: "active",
+            interactions: {
+              orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+              select: { occurredAt: true, type: true, outcome: true, contactId: true },
+              take: 1,
             },
-            select: {
-              id: true,
-              ownerId: true,
-              healthStatus: true,
-              launchedAt: true,
-              lastCheckAt: true,
+            placements: {
+              where: {
+                archivedAt: null,
+                businessStatus: "active",
+              },
+              select: {
+                id: true,
+                ownerId: true,
+                healthStatus: true,
+                launchedAt: true,
+                lastCheckAt: true,
+              },
+            },
+            stageHistory: {
+              where: { toStage: "SX" },
+              orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+              take: 1,
             },
           },
-          stageHistory: {
-            where: { toStage: "SX" },
-            orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
-            take: 1,
-          },
-        },
-      });
-      if (!current) throw new OpportunityNotFoundError(opportunityId);
-      if (current.version !== command.version) {
-        throw new OpportunityVersionConflictError(current.version);
-      }
-      const fromStageCode = knownStage(current.stageCode);
-      const publishedStages = processStages(current.processDefinition.schemaJson);
-      if (
-        current.processDefinition.status !== "PUBLISHED" ||
-        !publishedStages.has(fromStageCode) ||
-        !publishedStages.has(command.toStageCode)
-      ) {
-        throw new DomainRuleError("BR-017", "Переход отсутствует в опубликованной версии воронки", {
-          toStageCode: `Проверьте ProcessDefinition v${current.processVersion}`,
         });
-      }
-      const resumeStageCode = current.stageCode === "SX"
-        ? knownStageOrNull(current.stageHistory[0]?.fromStage)
-        : null;
-      assertOpportunityTransitionAllowed(fromStageCode, command.toStageCode, resumeStageCode);
-      assertLifecycleDates(command, now);
-      const stageData = {
-        ...parseOpportunityStageData(current.stageData),
-        ...(command.stageData ?? {}),
-      };
-      const latestInteraction = current.interactions[0] ?? null;
-      assertOpportunityStageReady(command.toStageCode, stageData, {
-        primaryDomain: current.organization.domains[0]?.hostNormalized ?? null,
-        topic: current.organization.segment,
-        score: current.score,
-        ownerId: current.ownerId,
-        hasNextAction: current.nextTaskId !== null,
-        hasContactOrChannel:
-          current.organization.contactLinks.length > 0 || latestInteraction !== null,
-        latestInteraction: latestInteraction
-          ? {
-              occurredAt: latestInteraction.occurredAt.toISOString(),
-              type: latestInteraction.type,
-              outcome: latestInteraction.outcome,
-            }
-          : null,
-        hasActivePlacement: current.placements.length > 0,
-        hasLaunchedPlacement: current.placements.some(({ launchedAt }) => launchedAt !== null),
-        hasHealthyMonitoredPlacement: current.placements.some((placement) =>
-          placement.healthStatus === "healthy" &&
-          placement.launchedAt !== null &&
-          placement.lastCheckAt !== null,
-        ),
-        hasPlacementOwner: current.placements.some(({ ownerId }) => ownerId.length > 0),
-      });
+        if (!current) throw new OpportunityNotFoundError(opportunityId);
+        if (current.version !== command.version) {
+          throw new OpportunityVersionConflictError(current.version);
+        }
+        const fromStageCode = knownStage(current.stageCode);
+        const publishedStages = processStages(current.processDefinition.schemaJson);
+        if (
+          current.processDefinition.status !== "PUBLISHED" ||
+          !publishedStages.has(fromStageCode) ||
+          !publishedStages.has(command.toStageCode)
+        ) {
+          throw new DomainRuleError(
+            "BR-017",
+            "Переход отсутствует в опубликованной версии воронки",
+            {
+              toStageCode: `Проверьте ProcessDefinition v${current.processVersion}`,
+            },
+          );
+        }
+        const resumeStageCode =
+          current.stageCode === "SX" ? knownStageOrNull(current.stageHistory[0]?.fromStage) : null;
+        assertOpportunityTransitionAllowed(fromStageCode, command.toStageCode, resumeStageCode);
+        assertLifecycleDates(command, now);
+        const stageData = {
+          ...parseOpportunityStageData(current.stageData),
+          ...(command.stageData ?? {}),
+        };
+        const latestInteraction = current.interactions[0] ?? null;
+        assertOpportunityStageReady(command.toStageCode, stageData, {
+          primaryDomain: current.organization.domains[0]?.hostNormalized ?? null,
+          topic: current.organization.segment,
+          score: current.score,
+          ownerId: current.ownerId,
+          hasNextAction: current.nextTaskId !== null,
+          hasContactOrChannel:
+            current.organization.contactLinks.length > 0 || latestInteraction !== null,
+          latestInteraction: latestInteraction
+            ? {
+                occurredAt: latestInteraction.occurredAt.toISOString(),
+                type: latestInteraction.type,
+                outcome: latestInteraction.outcome,
+              }
+            : null,
+          hasActivePlacement: current.placements.length > 0,
+          hasLaunchedPlacement: current.placements.some(({ launchedAt }) => launchedAt !== null),
+          hasHealthyMonitoredPlacement: current.placements.some(
+            (placement) =>
+              placement.healthStatus === "healthy" &&
+              placement.launchedAt !== null &&
+              placement.lastCheckAt !== null,
+          ),
+          hasPlacementOwner: current.placements.some(({ ownerId }) => ownerId.length > 0),
+        });
 
-      if (command.toStageCode === "SX" && current.nextTaskId && command.reviewAt) {
-        await transaction.task.updateMany({
-          where: { id: current.nextTaskId, status: TaskStatus.OPEN },
+        if (command.toStageCode === "SX" && current.nextTaskId && command.reviewAt) {
+          await transaction.task.updateMany({
+            where: { id: current.nextTaskId, status: TaskStatus.OPEN },
+            data: {
+              type: "review",
+              title: truncate(`Вернуться к паузе: ${command.pauseReason ?? command.reason}`, 200),
+              dueAt: new Date(command.reviewAt),
+              version: { increment: 1 },
+            },
+          });
+        }
+        if (command.toStageCode === "SL") {
+          await transaction.task.updateMany({
+            where: { opportunityId, status: TaskStatus.OPEN },
+            data: {
+              status: TaskStatus.CANCELLED,
+              outcome: `Возможность закрыта: ${command.closeReason ?? command.reason}`,
+              completedAt: now,
+              version: { increment: 1 },
+            },
+          });
+        }
+
+        const nextStatus = statusFor(command.toStageCode);
+        const updated = await transaction.opportunity.updateMany({
+          where: { id: opportunityId, version: current.version, archivedAt: null },
           data: {
-            type: "review",
-            title: truncate(`Вернуться к паузе: ${command.pauseReason ?? command.reason}`, 200),
-            dueAt: new Date(command.reviewAt),
+            stageCode: command.toStageCode,
+            stageLabel: opportunityStageLabel(command.toStageCode),
+            stageData: toJson(stageData),
+            status: nextStatus,
+            nextTaskId: command.toStageCode === "SL" ? null : current.nextTaskId,
+            waitingReason: command.toStageCode === "SX" ? command.pauseReason : null,
+            waitingFor: command.toStageCode === "SX" ? "Владелец возможности" : null,
+            reviewAt: command.reviewAt ? new Date(command.reviewAt) : null,
+            closeReason: command.toStageCode === "SL" ? command.closeReason : null,
+            closeComment: command.toStageCode === "SL" ? command.closeComment : null,
+            returnAt: command.returnAt ? new Date(command.returnAt) : null,
             version: { increment: 1 },
           },
         });
-      }
-      if (command.toStageCode === "SL") {
-        await transaction.task.updateMany({
-          where: { opportunityId, status: TaskStatus.OPEN },
-          data: {
-            status: TaskStatus.CANCELLED,
-            outcome: `Возможность закрыта: ${command.closeReason ?? command.reason}`,
-            completedAt: now,
-            version: { increment: 1 },
-          },
-        });
-      }
+        if (updated.count !== 1) throw new OpportunityVersionConflictError(current.version + 1);
 
-      const nextStatus = statusFor(command.toStageCode);
-      const updated = await transaction.opportunity.updateMany({
-        where: { id: opportunityId, version: current.version, archivedAt: null },
-        data: {
-          stageCode: command.toStageCode,
-          stageLabel: opportunityStageLabel(command.toStageCode),
-          stageData: toJson(stageData),
-          status: nextStatus,
-          nextTaskId: command.toStageCode === "SL" ? null : current.nextTaskId,
-          waitingReason: command.toStageCode === "SX" ? command.pauseReason : null,
-          waitingFor: command.toStageCode === "SX" ? "Владелец возможности" : null,
-          reviewAt: command.reviewAt ? new Date(command.reviewAt) : null,
-          closeReason: command.toStageCode === "SL" ? command.closeReason : null,
-          closeComment: command.toStageCode === "SL" ? command.closeComment : null,
-          returnAt: command.returnAt ? new Date(command.returnAt) : null,
-          version: { increment: 1 },
-        },
-      });
-      if (updated.count !== 1) throw new OpportunityVersionConflictError(current.version + 1);
-
-      const response: OpportunityStageTransitionResult = {
-        opportunityId,
-        processVersion: current.processVersion,
-        fromStageCode,
-        toStageCode: command.toStageCode,
-        stageLabel: opportunityStageLabel(command.toStageCode),
-        status: nextStatus,
-        stageData,
-        version: current.version + 1,
-        occurredAt: now.toISOString(),
-      };
-      await transaction.stageHistory.create({
-        data: {
-          id: randomUUID(),
+        const response: OpportunityStageTransitionResult = {
           opportunityId,
-          actorId: actor.id,
-          fromStage: fromStageCode,
-          toStage: command.toStageCode,
-          reason: command.reason,
-          occurredAt: now,
-        },
-      });
-      await transaction.auditLog.create({
-        data: {
-          id: randomUUID(),
-          actorId: actor.id,
-          action: "opportunity.stage-transition",
-          entityType: "Opportunity",
-          entityId: opportunityId,
-          beforeJson: toJson({
-            stageCode: fromStageCode,
-            stageLabel: current.stageLabel,
-            status: current.status,
-            stageData: current.stageData,
-            version: current.version,
-          }),
-          afterJson: toJson({
-            stageCode: response.toStageCode,
-            stageLabel: response.stageLabel,
-            status: response.status,
-            version: response.version,
-            reason: command.reason,
-            pauseReason: command.pauseReason ?? null,
-            reviewAt: command.reviewAt ?? null,
-            closeReason: command.closeReason ?? null,
-            closeComment: command.closeComment ?? null,
-            returnAt: command.returnAt ?? null,
-            neverReturn: command.neverReturn ?? false,
-            stageData,
-          }),
-          occurredAt: now,
-        },
-      });
-      await transaction.outboxEvent.create({
-        data: {
-          id: randomUUID(),
-          eventType: "opportunity.stage_changed",
-          aggregateType: "Opportunity",
-          aggregateId: opportunityId,
-          aggregateVersion: response.version,
-          schemaVersion: 1,
-          payload: toJson({
+          processVersion: current.processVersion,
+          fromStageCode,
+          toStageCode: command.toStageCode,
+          stageLabel: opportunityStageLabel(command.toStageCode),
+          status: nextStatus,
+          stageData,
+          version: current.version + 1,
+          occurredAt: now.toISOString(),
+        };
+        await transaction.stageHistory.create({
+          data: {
+            id: randomUUID(),
             opportunityId,
-            processVersion: current.processVersion,
-            fromStageCode,
-            toStageCode: command.toStageCode,
             actorId: actor.id,
+            fromStage: fromStageCode,
+            toStage: command.toStageCode,
             reason: command.reason,
-            stageData,
-          }),
-          occurredAt: now,
-        },
-      });
-      await completeIdempotency(transaction, reservationId, response, now);
-      return response;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+            occurredAt: now,
+          },
+        });
+        await transaction.auditLog.create({
+          data: {
+            id: randomUUID(),
+            actorId: actor.id,
+            action: "opportunity.stage-transition",
+            entityType: "Opportunity",
+            entityId: opportunityId,
+            beforeJson: toJson({
+              stageCode: fromStageCode,
+              stageLabel: current.stageLabel,
+              status: current.status,
+              stageData: current.stageData,
+              version: current.version,
+            }),
+            afterJson: toJson({
+              stageCode: response.toStageCode,
+              stageLabel: response.stageLabel,
+              status: response.status,
+              version: response.version,
+              reason: command.reason,
+              pauseReason: command.pauseReason ?? null,
+              reviewAt: command.reviewAt ?? null,
+              closeReason: command.closeReason ?? null,
+              closeComment: command.closeComment ?? null,
+              returnAt: command.returnAt ?? null,
+              neverReturn: command.neverReturn ?? false,
+              stageData,
+            }),
+            occurredAt: now,
+          },
+        });
+        await transaction.outboxEvent.create({
+          data: {
+            id: randomUUID(),
+            eventType: "opportunity.stage_changed",
+            aggregateType: "Opportunity",
+            aggregateId: opportunityId,
+            aggregateVersion: response.version,
+            schemaVersion: 1,
+            payload: toJson({
+              opportunityId,
+              processVersion: current.processVersion,
+              fromStageCode,
+              toStageCode: command.toStageCode,
+              actorId: actor.id,
+              reason: command.reason,
+              stageData,
+            }),
+            occurredAt: now,
+          },
+        });
+        await completeIdempotency(transaction, reservationId, response, now);
+        return response;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 }
 
@@ -437,24 +442,24 @@ function knownStage(value: string): OpportunityStageCode {
 }
 
 function knownStageOrNull(value: string | undefined): OpportunityStageCode | null {
-  return value && /^(?:S(?:[0-9]|10|X|L))$/.test(value)
-    ? value as OpportunityStageCode
-    : null;
+  return value && /^(?:S(?:[0-9]|10|X|L))$/.test(value) ? (value as OpportunityStageCode) : null;
 }
 
 function processStages(value: Prisma.JsonValue) {
   if (!isRecord(value) || !Array.isArray(value.stages)) return new Set<OpportunityStageCode>();
-  return new Set(value.stages.flatMap((stage) => {
-    if (typeof stage === "string") {
-      const known = knownStageOrNull(stage);
-      return known ? [known] : [];
-    }
-    if (isRecord(stage) && typeof stage.code === "string") {
-      const known = knownStageOrNull(stage.code);
-      return known ? [known] : [];
-    }
-    return [];
-  }));
+  return new Set(
+    value.stages.flatMap((stage) => {
+      if (typeof stage === "string") {
+        const known = knownStageOrNull(stage);
+        return known ? [known] : [];
+      }
+      if (isRecord(stage) && typeof stage.code === "string") {
+        const known = knownStageOrNull(stage.code);
+        return known ? [known] : [];
+      }
+      return [];
+    }),
+  );
 }
 
 function statusFor(stage: OpportunityStageCode): OpportunityStatus {
@@ -500,7 +505,8 @@ async function reserveIdempotency(
     },
   });
   if (!existing) throw new IdempotencyInProgressError(input.idempotencyKey);
-  if (existing.requestHash !== input.requestHash) throw new IdempotencyConflictError(input.idempotencyKey);
+  if (existing.requestHash !== input.requestHash)
+    throw new IdempotencyConflictError(input.idempotencyKey);
   if (existing.responseJson === null) throw new IdempotencyInProgressError(input.idempotencyKey);
   return existing.responseJson;
 }

@@ -1,10 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { X } from "lucide-react";
-import type {
-  CompleteTaskCommand,
-  ManualInteractionType,
-  TodayAction,
-} from "@embed-os/contracts";
+import type { CompleteTaskCommand, ManualInteractionType, TodayAction } from "@embed-os/contracts";
 
 interface CompletionDialogProps {
   task: TodayAction;
@@ -49,14 +45,25 @@ export function CompletionDialog({ task, busy, error, onCancel, onSubmit }: Comp
 
   return (
     <div className="dialog-backdrop" role="presentation">
-      <section className="completion-dialog" role="dialog" aria-modal="true" aria-labelledby="completion-title">
+      <section
+        className="completion-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="completion-title"
+      >
         <div className="dialog-header">
           <div>
             <span>Фиксация взаимодействия</span>
             <h2 id="completion-title">{task.organizationName}</h2>
             <p>{task.title}</p>
           </div>
-          <button className="icon-button" type="button" onClick={onCancel} disabled={busy} aria-label="Закрыть">
+          <button
+            className="icon-button"
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            aria-label="Закрыть"
+          >
             <X size={19} aria-hidden="true" />
           </button>
         </div>
@@ -72,20 +79,20 @@ export function CompletionDialog({ task, busy, error, onCancel, onSubmit }: Comp
             >
               {task.contacts.length === 0 ? (
                 <option value="">Нет действующих контактов</option>
-              ) : task.contacts.map((contact) => (
-                <option key={contact.id} value={contact.id}>
-                  {contact.fullName} · {contact.role}
-                </option>
-              ))}
+              ) : (
+                task.contacts.map((contact) => (
+                  <option key={contact.id} value={contact.id}>
+                    {contact.fullName} · {contact.role}
+                  </option>
+                ))
+              )}
             </select>
           </label>
           <label>
             Тип взаимодействия
             <select
               value={interactionType}
-              onChange={(event) =>
-                setInteractionType(event.target.value as ManualInteractionType)
-              }
+              onChange={(event) => setInteractionType(event.target.value as ManualInteractionType)}
             >
               <option value="email">Письмо</option>
               <option value="call">Звонок</option>
@@ -128,12 +135,28 @@ export function CompletionDialog({ task, busy, error, onCancel, onSubmit }: Comp
             </label>
             <label>
               Срок
-              <input type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} required />
+              <input
+                type="datetime-local"
+                value={dueAt}
+                onChange={(event) => setDueAt(event.target.value)}
+                required
+              />
             </label>
           </div>
-          {error ? <div className="form-error" role="alert">{error}</div> : null}
+          {error ? (
+            <div className="form-error" role="alert">
+              {error}
+            </div>
+          ) : null}
           <div className="dialog-actions">
-            <button className="button button-secondary" type="button" onClick={onCancel} disabled={busy}>Отмена</button>
+            <button
+              className="button button-secondary"
+              type="button"
+              onClick={onCancel}
+              disabled={busy}
+            >
+              Отмена
+            </button>
             <button className="button button-primary" type="submit" disabled={busy || !contactId}>
               {busy ? "Сохраняем…" : "Сохранить результат и шаг"}
             </button>

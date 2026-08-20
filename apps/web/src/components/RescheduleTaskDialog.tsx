@@ -40,23 +40,37 @@ export function RescheduleTaskDialog({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const normalizedReason = reason === "Другая причина"
-      ? comment.trim()
-      : comment.trim() ? `${reason}: ${comment.trim()}` : reason;
+    const normalizedReason =
+      reason === "Другая причина"
+        ? comment.trim()
+        : comment.trim()
+          ? `${reason}: ${comment.trim()}`
+          : reason;
     await onSubmit({ dueAt: new Date(dueAt).toISOString(), reason: normalizedReason });
   }
 
   const invalidOther = reason === "Другая причина" && !comment.trim();
   return (
     <div className="dialog-backdrop" role="presentation">
-      <section className="completion-dialog reschedule-dialog" role="dialog" aria-modal="true" aria-labelledby="reschedule-title">
+      <section
+        className="completion-dialog reschedule-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="reschedule-title"
+      >
         <div className="dialog-header">
           <div>
             <span>Перенос задачи</span>
             <h2 id="reschedule-title">{task.organizationName}</h2>
             <p>{task.title}</p>
           </div>
-          <button className="icon-button" type="button" onClick={onCancel} disabled={busy} aria-label="Закрыть">
+          <button
+            className="icon-button"
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            aria-label="Закрыть"
+          >
             <X size={19} aria-hidden="true" />
           </button>
         </div>
@@ -66,22 +80,56 @@ export function RescheduleTaskDialog({
             <span>Текущий срок</span>
             <strong>{formatDeadline(task.dueAt)}</strong>
           </div>
-          <label>Новый срок
-            <input type="datetime-local" min={minimumDueAt(task.dueAt)} value={dueAt} onChange={(event) => setDueAt(event.target.value)} required autoFocus />
+          <label>
+            Новый срок
+            <input
+              type="datetime-local"
+              min={minimumDueAt(task.dueAt)}
+              value={dueAt}
+              onChange={(event) => setDueAt(event.target.value)}
+              required
+              autoFocus
+            />
           </label>
-          <label>Причина переноса
+          <label>
+            Причина переноса
             <select value={reason} onChange={(event) => setReason(event.target.value)} required>
               <option value="">Выберите причину</option>
-              {reasons.map((item) => <option key={item} value={item}>{item}</option>)}
+              {reasons.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
             </select>
           </label>
-          <label>Комментарий{reason === "Другая причина" ? " (обязательно)" : " (необязательно)"}
-            <textarea maxLength={1_000} value={comment} onChange={(event) => setComment(event.target.value)} placeholder="Контекст для руководителя и отчёта" />
+          <label>
+            Комментарий{reason === "Другая причина" ? " (обязательно)" : " (необязательно)"}
+            <textarea
+              maxLength={1_000}
+              value={comment}
+              onChange={(event) => setComment(event.target.value)}
+              placeholder="Контекст для руководителя и отчёта"
+            />
           </label>
-          {error ? <div className="form-error" role="alert">{error}</div> : null}
+          {error ? (
+            <div className="form-error" role="alert">
+              {error}
+            </div>
+          ) : null}
           <div className="dialog-actions">
-            <button className="button button-secondary" type="button" onClick={onCancel} disabled={busy}>Отмена</button>
-            <button className="button button-primary" type="submit" disabled={busy || !dueAt || !reason || invalidOther}>
+            <button
+              className="button button-secondary"
+              type="button"
+              onClick={onCancel}
+              disabled={busy}
+            >
+              Отмена
+            </button>
+            <button
+              className="button button-primary"
+              type="submit"
+              disabled={busy || !dueAt || !reason || invalidOther}
+            >
               {busy ? "Переносим…" : "Перенести задачу"}
             </button>
           </div>
@@ -109,6 +157,8 @@ function localDateTime(value: Date) {
 
 function formatDeadline(value: string | null) {
   return value
-    ? new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value))
+    ? new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium", timeStyle: "short" }).format(
+        new Date(value),
+      )
     : "Не задан";
 }

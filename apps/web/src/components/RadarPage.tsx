@@ -64,9 +64,11 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
     try {
       const payload = await fetchRadar(signal);
       setCandidates(payload.candidates);
-      setSelectedId((current) => current && payload.candidates.some(({ id }) => id === current)
-        ? current
-        : payload.candidates[0]?.id ?? null);
+      setSelectedId((current) =>
+        current && payload.candidates.some(({ id }) => id === current)
+          ? current
+          : (payload.candidates[0]?.id ?? null),
+      );
     } catch (loadError) {
       if (loadError instanceof DOMException && loadError.name === "AbortError") return;
       setError(messageFor(loadError));
@@ -83,18 +85,23 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
 
   const visible = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("ru-RU");
-    return candidates.filter((candidate) =>
-      (status === "all" || candidate.status === status) &&
-      (!needle || `${candidate.name} ${candidate.hostNormalized} ${candidate.source}`
-        .toLocaleLowerCase("ru-RU").includes(needle))
+    return candidates.filter(
+      (candidate) =>
+        (status === "all" || candidate.status === status) &&
+        (!needle ||
+          `${candidate.name} ${candidate.hostNormalized} ${candidate.source}`
+            .toLocaleLowerCase("ru-RU")
+            .includes(needle)),
     );
   }, [candidates, query, status]);
   const selected = candidates.find(({ id }) => id === selectedId) ?? null;
 
   function updateCandidate(updated: RadarCandidate) {
-    setCandidates((current) => current.some(({ id }) => id === updated.id)
-      ? current.map((candidate) => candidate.id === updated.id ? updated : candidate)
-      : [updated, ...current]);
+    setCandidates((current) =>
+      current.some(({ id }) => id === updated.id)
+        ? current.map((candidate) => (candidate.id === updated.id ? updated : candidate))
+        : [updated, ...current],
+    );
     setSelectedId(updated.id);
   }
 
@@ -147,9 +154,14 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
       updateCandidate(updated);
       mutationKeys.current.delete(scope);
       const evidence = updated.evidence.at(-1);
-      setNotice(evidence
-        ? { text: inspectionPresentation(evidence).notice, tone: inspectionPresentation(evidence).noticeTone }
-        : { text: "Проверка завершилась без результата. Повторите позже.", tone: "warning" });
+      setNotice(
+        evidence
+          ? {
+              text: inspectionPresentation(evidence).notice,
+              tone: inspectionPresentation(evidence).noticeTone,
+            }
+          : { text: "Проверка завершилась без результата. Повторите позже.", tone: "warning" },
+      );
     } catch (inspectError) {
       setError(messageFor(inspectError));
     } finally {
@@ -171,8 +183,10 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
       mutationKeys.current.delete(scope);
       setNotice({ text: decisionNotice(updated), tone: "success" });
     } catch (decisionError) {
-      if (decisionError instanceof ApiError &&
-        decisionError.problem.code === "RADAR_CANDIDATE_VERSION_CONFLICT") {
+      if (
+        decisionError instanceof ApiError &&
+        decisionError.problem.code === "RADAR_CANDIDATE_VERSION_CONFLICT"
+      ) {
         setNotice({ text: "Кандидат уже изменился. Очередь обновлена.", tone: "warning" });
         await load();
       } else {
@@ -198,7 +212,10 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
       );
       updateCandidate(updated);
       mutationKeys.current.delete(scope);
-      setNotice({ text: "Ручная корректировка score сохранена отдельно от расчёта.", tone: "success" });
+      setNotice({
+        text: "Ручная корректировка score сохранена отдельно от расчёта.",
+        tone: "success",
+      });
     } catch (scoreError) {
       setError(messageFor(scoreError));
     } finally {
@@ -217,18 +234,48 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
           <label className="team-select">
             <UsersRound size={17} aria-hidden="true" />
             <span className="sr-only">Команда</span>
-            <select value={teamName} onChange={() => undefined}><option>{teamName}</option></select>
+            <select value={teamName} onChange={() => undefined}>
+              <option>{teamName}</option>
+            </select>
           </label>
-          <input ref={importInput} className="sr-only" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => void importFile(event.target.files?.[0])} aria-label="Импорт кандидатов CSV или XLSX" />
-          <button className="button button-secondary" type="button" onClick={() => importInput.current?.click()} disabled={busyAction === "import"}>{busyAction === "import" ? <LoaderCircle className="spin" size={15} /> : <Upload size={15} />}Импорт CSV / XLSX</button>
+          <input
+            ref={importInput}
+            className="sr-only"
+            type="file"
+            accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            onChange={(event) => void importFile(event.target.files?.[0])}
+            aria-label="Импорт кандидатов CSV или XLSX"
+          />
+          <button
+            className="button button-secondary"
+            type="button"
+            onClick={() => importInput.current?.click()}
+            disabled={busyAction === "import"}
+          >
+            {busyAction === "import" ? (
+              <LoaderCircle className="spin" size={15} />
+            ) : (
+              <Upload size={15} />
+            )}
+            Импорт CSV / XLSX
+          </button>
           <button className="button button-primary" type="button" onClick={() => setFormOpen(true)}>
-            <Plus size={16} aria-hidden="true" />Добавить URL
+            <Plus size={16} aria-hidden="true" />
+            Добавить URL
           </button>
         </div>
       </header>
 
-      {error ? <Message tone="error" onClose={() => setError(null)}>{error}</Message> : null}
-      {notice ? <Message tone={notice.tone} onClose={() => setNotice(null)}>{notice.text}</Message> : null}
+      {error ? (
+        <Message tone="error" onClose={() => setError(null)}>
+          {error}
+        </Message>
+      ) : null}
+      {notice ? (
+        <Message tone={notice.tone} onClose={() => setNotice(null)}>
+          {notice.text}
+        </Message>
+      ) : null}
 
       <section className="radar-workspace" aria-label="Очередь кандидатов">
         <div className="radar-queue-pane">
@@ -243,11 +290,18 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
             <label className="radar-search">
               <Search size={15} aria-hidden="true" />
               <span className="sr-only">Поиск кандидатов</span>
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Поиск по сайту или домену" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Поиск по сайту или домену"
+              />
             </label>
             <label className="radar-status-filter">
               <span className="sr-only">Статус</span>
-              <select value={status} onChange={(event) => setStatus(event.target.value as typeof status)}>
+              <select
+                value={status}
+                onChange={(event) => setStatus(event.target.value as typeof status)}
+              >
                 <option value="all">Все статусы</option>
                 <option value="new">Новые</option>
                 <option value="ready">После проверки</option>
@@ -261,32 +315,52 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
           </div>
 
           {loading ? (
-            <div className="radar-empty" aria-live="polite"><span className="loader" /><p>Загружаем кандидатов…</p></div>
+            <div className="radar-empty" aria-live="polite">
+              <span className="loader" />
+              <p>Загружаем кандидатов…</p>
+            </div>
           ) : visible.length === 0 ? (
             <div className="radar-empty">
               <Radar size={30} aria-hidden="true" />
               <strong>{candidates.length ? "Ничего не найдено" : "Очередь пуста"}</strong>
-              <p>{candidates.length ? "Измените поиск или фильтр." : "Добавьте первую публичную страницу."}</p>
+              <p>
+                {candidates.length
+                  ? "Измените поиск или фильтр."
+                  : "Добавьте первую публичную страницу."}
+              </p>
             </div>
           ) : (
             <div className="radar-candidate-list" role="listbox" aria-label="Кандидаты">
               {visible.map((candidate) => {
                 const latestEvidence = candidate.evidence.at(-1);
-                const visualStatus = candidate.status === "ready" && latestEvidence
-                  ? `inspection-${inspectionPresentation(latestEvidence).tone}`
-                  : candidate.status;
+                const visualStatus =
+                  candidate.status === "ready" && latestEvidence
+                    ? `inspection-${inspectionPresentation(latestEvidence).tone}`
+                    : candidate.status;
                 return (
                   <button
                     key={candidate.id}
                     type="button"
-                    className={candidate.id === selectedId ? "radar-candidate-row radar-candidate-row-selected" : "radar-candidate-row"}
+                    className={
+                      candidate.id === selectedId
+                        ? "radar-candidate-row radar-candidate-row-selected"
+                        : "radar-candidate-row"
+                    }
                     onClick={() => setSelectedId(candidate.id)}
                     role="option"
                     aria-selected={candidate.id === selectedId}
                   >
-                    <span className={`radar-status-dot radar-status-dot-${visualStatus}`} aria-hidden="true" />
-                    <span className="radar-candidate-identity"><strong>{candidate.name}</strong><small>{candidate.hostNormalized}</small></span>
-                    <span className={`radar-score radar-score-${candidate.score.priority}`}>{candidate.score.total}</span>
+                    <span
+                      className={`radar-status-dot radar-status-dot-${visualStatus}`}
+                      aria-hidden="true"
+                    />
+                    <span className="radar-candidate-identity">
+                      <strong>{candidate.name}</strong>
+                      <small>{candidate.hostNormalized}</small>
+                    </span>
+                    <span className={`radar-score radar-score-${candidate.score.priority}`}>
+                      {candidate.score.total}
+                    </span>
                     <span className="radar-candidate-source">{candidate.source}</span>
                   </button>
                 );
@@ -332,7 +406,8 @@ function CandidateForm({
   const [topic, setTopic] = useState("");
   const [language, setLanguage] = useState("");
   const [geography, setGeography] = useState("");
-  const [frequency, setFrequency] = useState<CreateRadarCandidateCommand["publicationFrequency"]>("unknown");
+  const [frequency, setFrequency] =
+    useState<CreateRadarCandidateCommand["publicationFrequency"]>("unknown");
   const [cms, setCms] = useState("");
   const [contactsFound, setContactsFound] = useState(false);
   const [videoMin, setVideoMin] = useState("");
@@ -357,41 +432,190 @@ function CandidateForm({
       ...(cms.trim() ? { cms: cms.trim() } : {}),
       ...(videoMin ? { estimatedVideoPagesMin: Number(videoMin) } : {}),
       ...(videoMax ? { estimatedVideoPagesMax: Number(videoMax) } : {}),
-      ...(trafficProvider.trim() && trafficMin && trafficMax && trafficDate ? {
-        trafficEstimate: {
-          provider: trafficProvider.trim(),
-          measuredAt: new Date(`${trafficDate}T00:00:00`).toISOString(),
-          minMonthlyVisits: Number(trafficMin),
-          maxMonthlyVisits: Number(trafficMax),
-          confidence: trafficConfidence,
-        },
-      } : {}),
+      ...(trafficProvider.trim() && trafficMin && trafficMax && trafficDate
+        ? {
+            trafficEstimate: {
+              provider: trafficProvider.trim(),
+              measuredAt: new Date(`${trafficDate}T00:00:00`).toISOString(),
+              minMonthlyVisits: Number(trafficMin),
+              maxMonthlyVisits: Number(trafficMax),
+              confidence: trafficConfidence,
+            },
+          }
+        : {}),
     });
   }
 
   return (
     <form className="radar-add-form" onSubmit={submit}>
-      <div className="radar-form-heading"><strong>Добавить кандидата</strong><button type="button" className="icon-button" onClick={onClose} aria-label="Скрыть форму"><X size={15} /></button></div>
-      <label><span>Название сайта</span><input required maxLength={200} value={name} onChange={(event) => setName(event.target.value)} placeholder="Например, Городской медиацентр" /></label>
-      <label><span>URL или домен</span><input required type="text" inputMode="url" maxLength={2_000} value={url} onChange={(event) => setUrl(event.target.value)} placeholder="example.ru/article" /></label>
-      <label><span>Источник</span><select value={source} onChange={(event) => setSource(event.target.value)}><option>Ручной поиск</option><option>Рекомендация</option><option>Публичный каталог</option></select></label>
-      <button className="button button-primary" type="submit" disabled={busy}>{busy ? <LoaderCircle className="spin" size={15} /> : <Plus size={15} />}Добавить</button>
+      <div className="radar-form-heading">
+        <strong>Добавить кандидата</strong>
+        <button type="button" className="icon-button" onClick={onClose} aria-label="Скрыть форму">
+          <X size={15} />
+        </button>
+      </div>
+      <label>
+        <span>Название сайта</span>
+        <input
+          required
+          maxLength={200}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="Например, Городской медиацентр"
+        />
+      </label>
+      <label>
+        <span>URL или домен</span>
+        <input
+          required
+          type="text"
+          inputMode="url"
+          maxLength={2_000}
+          value={url}
+          onChange={(event) => setUrl(event.target.value)}
+          placeholder="example.ru/article"
+        />
+      </label>
+      <label>
+        <span>Источник</span>
+        <select value={source} onChange={(event) => setSource(event.target.value)}>
+          <option>Ручной поиск</option>
+          <option>Рекомендация</option>
+          <option>Публичный каталог</option>
+        </select>
+      </label>
+      <button className="button button-primary" type="submit" disabled={busy}>
+        {busy ? <LoaderCircle className="spin" size={15} /> : <Plus size={15} />}Добавить
+      </button>
       <details className="radar-advanced-fields">
         <summary>Данные для Partner Score</summary>
         <div>
-          <label><span>Тематика</span><input maxLength={200} value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="Новости, спорт…" /></label>
-          <label><span>Язык</span><input maxLength={40} value={language} onChange={(event) => setLanguage(event.target.value)} placeholder="ru" /></label>
-          <label><span>География</span><input maxLength={120} value={geography} onChange={(event) => setGeography(event.target.value)} placeholder="Россия" /></label>
-          <label><span>Публикации</span><select value={frequency} onChange={(event) => setFrequency(event.target.value as typeof frequency)}><option value="unknown">Неизвестно</option><option value="daily">Ежедневно</option><option value="weekly">Еженедельно</option><option value="monthly">Ежемесячно</option></select></label>
-          <label><span>CMS / технология</span><input maxLength={120} value={cms} onChange={(event) => setCms(event.target.value)} placeholder="WordPress" /></label>
-          <label className="radar-checkbox"><input type="checkbox" checked={contactsFound} onChange={(event) => setContactsFound(event.target.checked)} /><span>Релевантный контакт найден</span></label>
-          <label><span>Видеостраницы, от</span><input type="number" min={0} step={1} value={videoMin} onChange={(event) => setVideoMin(event.target.value)} /></label>
-          <label><span>Видеостраницы, до</span><input type="number" min={Number(videoMin) || 0} step={1} value={videoMax} onChange={(event) => setVideoMax(event.target.value)} /></label>
-          <label><span>Провайдер трафика</span><input maxLength={120} value={trafficProvider} onChange={(event) => setTrafficProvider(event.target.value)} placeholder="Оценка аналитика" /></label>
-          <label><span>Визиты / мес., от</span><input type="number" min={0} step={1} value={trafficMin} onChange={(event) => setTrafficMin(event.target.value)} /></label>
-          <label><span>Визиты / мес., до</span><input type="number" min={Number(trafficMin) || 0} step={1} value={trafficMax} onChange={(event) => setTrafficMax(event.target.value)} /></label>
-          <label><span>Дата оценки</span><input type="date" value={trafficDate} onChange={(event) => setTrafficDate(event.target.value)} /></label>
-          <label><span>Confidence трафика</span><select value={trafficConfidence} onChange={(event) => setTrafficConfidence(event.target.value as typeof trafficConfidence)}><option value="high">high</option><option value="medium">medium</option><option value="low">low</option></select></label>
+          <label>
+            <span>Тематика</span>
+            <input
+              maxLength={200}
+              value={topic}
+              onChange={(event) => setTopic(event.target.value)}
+              placeholder="Новости, спорт…"
+            />
+          </label>
+          <label>
+            <span>Язык</span>
+            <input
+              maxLength={40}
+              value={language}
+              onChange={(event) => setLanguage(event.target.value)}
+              placeholder="ru"
+            />
+          </label>
+          <label>
+            <span>География</span>
+            <input
+              maxLength={120}
+              value={geography}
+              onChange={(event) => setGeography(event.target.value)}
+              placeholder="Россия"
+            />
+          </label>
+          <label>
+            <span>Публикации</span>
+            <select
+              value={frequency}
+              onChange={(event) => setFrequency(event.target.value as typeof frequency)}
+            >
+              <option value="unknown">Неизвестно</option>
+              <option value="daily">Ежедневно</option>
+              <option value="weekly">Еженедельно</option>
+              <option value="monthly">Ежемесячно</option>
+            </select>
+          </label>
+          <label>
+            <span>CMS / технология</span>
+            <input
+              maxLength={120}
+              value={cms}
+              onChange={(event) => setCms(event.target.value)}
+              placeholder="WordPress"
+            />
+          </label>
+          <label className="radar-checkbox">
+            <input
+              type="checkbox"
+              checked={contactsFound}
+              onChange={(event) => setContactsFound(event.target.checked)}
+            />
+            <span>Релевантный контакт найден</span>
+          </label>
+          <label>
+            <span>Видеостраницы, от</span>
+            <input
+              type="number"
+              min={0}
+              step={1}
+              value={videoMin}
+              onChange={(event) => setVideoMin(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>Видеостраницы, до</span>
+            <input
+              type="number"
+              min={Number(videoMin) || 0}
+              step={1}
+              value={videoMax}
+              onChange={(event) => setVideoMax(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>Провайдер трафика</span>
+            <input
+              maxLength={120}
+              value={trafficProvider}
+              onChange={(event) => setTrafficProvider(event.target.value)}
+              placeholder="Оценка аналитика"
+            />
+          </label>
+          <label>
+            <span>Визиты / мес., от</span>
+            <input
+              type="number"
+              min={0}
+              step={1}
+              value={trafficMin}
+              onChange={(event) => setTrafficMin(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>Визиты / мес., до</span>
+            <input
+              type="number"
+              min={Number(trafficMin) || 0}
+              step={1}
+              value={trafficMax}
+              onChange={(event) => setTrafficMax(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>Дата оценки</span>
+            <input
+              type="date"
+              value={trafficDate}
+              onChange={(event) => setTrafficDate(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>Confidence трафика</span>
+            <select
+              value={trafficConfidence}
+              onChange={(event) =>
+                setTrafficConfidence(event.target.value as typeof trafficConfidence)
+              }
+            >
+              <option value="high">high</option>
+              <option value="medium">medium</option>
+              <option value="low">low</option>
+            </select>
+          </label>
         </div>
         <small>Трафик хранится как оценка: провайдер, дата, диапазон и confidence.</small>
       </details>
@@ -420,11 +644,16 @@ function CandidateDetail({
   const [deferUntil, setDeferUntil] = useState("");
   const [mergeTargetId, setMergeTargetId] = useState("");
   const [adjustment, setAdjustment] = useState(String(candidate.score.manualAdjustment));
-  const [adjustmentComment, setAdjustmentComment] = useState(candidate.score.manualAdjustmentComment ?? "");
+  const [adjustmentComment, setAdjustmentComment] = useState(
+    candidate.score.manualAdjustmentComment ?? "",
+  );
   const latestEvidence = candidate.evidence.at(-1) ?? null;
   const latestPresentation = latestEvidence ? inspectionPresentation(latestEvidence) : null;
-  const researchSignals = new Map(candidate.research?.signals.map((signal) => [signal.field, signal]) ?? []);
-  const researchProgress = new Set(candidate.research?.signals.map(({ field }) => field) ?? []).size;
+  const researchSignals = new Map(
+    candidate.research?.signals.map((signal) => [signal.field, signal]) ?? [],
+  );
+  const researchProgress = new Set(candidate.research?.signals.map(({ field }) => field) ?? [])
+    .size;
   const terminal = terminalStatuses.has(candidate.status);
   const busy = busyAction?.endsWith(candidate.id) ?? false;
 
@@ -434,7 +663,12 @@ function CandidateDetail({
     setMergeTargetId("");
     setAdjustment(String(candidate.score.manualAdjustment));
     setAdjustmentComment(candidate.score.manualAdjustmentComment ?? "");
-  }, [candidate.id, candidate.version, candidate.score.manualAdjustment, candidate.score.manualAdjustmentComment]);
+  }, [
+    candidate.id,
+    candidate.version,
+    candidate.score.manualAdjustment,
+    candidate.score.manualAdjustmentComment,
+  ]);
 
   function command(decision: RadarCandidateDecisionCommand["decision"]) {
     if (!reason.trim()) return;
@@ -442,7 +676,9 @@ function CandidateDetail({
       version: candidate.version,
       decision,
       reason: reason.trim(),
-      ...(decision === "defer" && deferUntil ? { deferUntil: new Date(deferUntil).toISOString() } : {}),
+      ...(decision === "defer" && deferUntil
+        ? { deferUntil: new Date(deferUntil).toISOString() }
+        : {}),
       ...(decision === "merge" && mergeTargetId ? { mergeTargetId } : {}),
     });
   }
@@ -453,7 +689,11 @@ function CandidateDetail({
     onDecide({
       version: candidate.version,
       decision: "accept",
-      reason: `Квалифицировано по публичным данным. ${brief.siteSummary} Кейс: ${brief.rutubeUseCase}`.slice(0, 1_000),
+      reason:
+        `Квалифицировано по публичным данным. ${brief.siteSummary} Кейс: ${brief.rutubeUseCase}`.slice(
+          0,
+          1_000,
+        ),
       comment: `Следующее действие: ${brief.nextAction}`.slice(0, 1_000),
     });
   }
@@ -462,34 +702,95 @@ function CandidateDetail({
   return (
     <article className="radar-detail">
       <div className="radar-detail-header">
-        <div><h2>{candidate.name}</h2><a href={candidate.pageUrl} target="_blank" rel="noreferrer">{candidate.hostNormalized}<ExternalLink size={13} /></a></div>
+        <div>
+          <h2>{candidate.name}</h2>
+          <a href={candidate.pageUrl} target="_blank" rel="noreferrer">
+            {candidate.hostNormalized}
+            <ExternalLink size={13} />
+          </a>
+        </div>
         <RadarStatus candidate={candidate} />
       </div>
 
       <div className="radar-score-summary">
-        <div><strong>{candidate.score.total}</strong><span>из 100</span></div>
-        <dl><div><dt>Приоритет</dt><dd className={`radar-priority-${candidate.score.priority}`}>{priorityLabel(candidate.score.priority)}</dd></div><div><dt>Авторасчёт</dt><dd>{candidate.score.automaticTotal}</dd></div><div><dt>Корректировка</dt><dd>{signed(candidate.score.manualAdjustment)}</dd></div></dl>
+        <div>
+          <strong>{candidate.score.total}</strong>
+          <span>из 100</span>
+        </div>
+        <dl>
+          <div>
+            <dt>Приоритет</dt>
+            <dd className={`radar-priority-${candidate.score.priority}`}>
+              {priorityLabel(candidate.score.priority)}
+            </dd>
+          </div>
+          <div>
+            <dt>Авторасчёт</dt>
+            <dd>{candidate.score.automaticTotal}</dd>
+          </div>
+          <div>
+            <dt>Корректировка</dt>
+            <dd>{signed(candidate.score.manualAdjustment)}</dd>
+          </div>
+        </dl>
       </div>
 
       <div className={`radar-evidence radar-evidence-${latestEvidence?.status ?? "empty"}`}>
         {latestEvidence?.playerFound ? <ShieldCheck size={19} /> : <AlertTriangle size={19} />}
-        <div><strong>{evidenceLabel(latestEvidence)}</strong><span>{latestEvidence ? `Метод ${latestEvidence.method} · confidence ${latestEvidence.confidence} · ${latestPresentation?.detail}` : "Запустите L0-проверку публичной страницы"}</span></div>
+        <div>
+          <strong>{evidenceLabel(latestEvidence)}</strong>
+          <span>
+            {latestEvidence
+              ? `Метод ${latestEvidence.method} · confidence ${latestEvidence.confidence} · ${latestPresentation?.detail}`
+              : "Запустите L0-проверку публичной страницы"}
+          </span>
+        </div>
         {latestEvidence ? <time>{formatDate(latestEvidence.detectedAt)}</time> : null}
-        {!terminal ? <button className="button button-secondary" type="button" onClick={onInspect} disabled={busyAction === `check:${candidate.id}`}><RefreshCw className={busyAction === `check:${candidate.id}` ? "spin" : ""} size={14} />{latestEvidence ? "Повторить" : "Проверить"}</button> : null}
+        {!terminal ? (
+          <button
+            className="button button-secondary"
+            type="button"
+            onClick={onInspect}
+            disabled={busyAction === `check:${candidate.id}`}
+          >
+            <RefreshCw className={busyAction === `check:${candidate.id}` ? "spin" : ""} size={14} />
+            {latestEvidence ? "Повторить" : "Проверить"}
+          </button>
+        ) : null}
       </div>
 
       {candidate.duplicateOrganization || candidate.duplicateCandidate ? (
-        <div className="radar-duplicate" role="status"><AlertTriangle size={16} /><span>{candidate.duplicateOrganization ? `Домен уже у партнёра «${candidate.duplicateOrganization.name}».` : `Найден дубль кандидата «${candidate.duplicateCandidate?.name}».`}</span></div>
+        <div className="radar-duplicate" role="status">
+          <AlertTriangle size={16} />
+          <span>
+            {candidate.duplicateOrganization
+              ? `Домен уже у партнёра «${candidate.duplicateOrganization.name}».`
+              : `Найден дубль кандидата «${candidate.duplicateCandidate?.name}».`}
+          </span>
+        </div>
       ) : null}
 
       {candidate.research ? (
         <div className="radar-research-summary" role="status">
           <div>
             <strong>Автоматически собрано {researchProgress} из 7 признаков</strong>
-            <span>{candidate.research.method === "site-intelligence-v2" ? "Карта сайта + RSS + HTML" : "HTML-сигналы"} · {formatDate(candidate.research.collectedAt)}</span>
+            <span>
+              {candidate.research.method === "site-intelligence-v2"
+                ? "Карта сайта + RSS + HTML"
+                : "HTML-сигналы"}{" "}
+              · {formatDate(candidate.research.collectedAt)}
+            </span>
           </div>
-          <div className="radar-research-progress" aria-label={`Собрано ${researchProgress} из 7 признаков`}><span style={{ width: `${researchProgress / 7 * 100}%` }} /></div>
-          <small>Ручные данные менеджера не перезаписываются. Трафик добавляется только из внешнего источника с датой и confidence.</small>
+          <div
+            className="radar-research-progress"
+            aria-label={`Собрано ${researchProgress} из 7 признаков`}
+          >
+            <span style={{ width: `${(researchProgress / 7) * 100}%` }} />
+          </div>
+          <small>
+            Ручные данные менеджера не перезаписываются. Трафик добавляется только из внешнего
+            источника с датой и confidence.
+          </small>
         </div>
       ) : null}
 
@@ -506,24 +807,69 @@ function CandidateDetail({
       <section className="radar-detail-section">
         <h3>Характеристики сайта</h3>
         <dl className="radar-feature-grid">
-          <Feature label="Тематика" value={candidate.features.topic} signal={researchSignals.get("topic")} />
-          <Feature label="Язык" value={candidate.features.language} signal={researchSignals.get("language")} />
-          <Feature label="География" value={candidate.features.geography} signal={researchSignals.get("geography")} />
-          <Feature label="Публикации" value={frequencyLabel(candidate.features.publicationFrequency)} signal={researchSignals.get("publicationFrequency")} />
-          <Feature label="CMS / технология" value={candidate.features.cms} signal={researchSignals.get("cms")} />
-          <Feature label="Страницы с видео" value={rangeLabel(candidate)} signal={researchSignals.get("estimatedVideoPages")} />
-          <Feature label="Контакт" value={candidate.features.contactsFound ? "Найден" : "Не найден"} signal={researchSignals.get("contactsFound")} />
-          <Feature label="Посещаемость" value={trafficLabel(candidate)} hint={trafficHint(candidate)} />
+          <Feature
+            label="Тематика"
+            value={candidate.features.topic}
+            signal={researchSignals.get("topic")}
+          />
+          <Feature
+            label="Язык"
+            value={candidate.features.language}
+            signal={researchSignals.get("language")}
+          />
+          <Feature
+            label="География"
+            value={candidate.features.geography}
+            signal={researchSignals.get("geography")}
+          />
+          <Feature
+            label="Публикации"
+            value={frequencyLabel(candidate.features.publicationFrequency)}
+            signal={researchSignals.get("publicationFrequency")}
+          />
+          <Feature
+            label="CMS / технология"
+            value={candidate.features.cms}
+            signal={researchSignals.get("cms")}
+          />
+          <Feature
+            label="Страницы с видео"
+            value={rangeLabel(candidate)}
+            signal={researchSignals.get("estimatedVideoPages")}
+          />
+          <Feature
+            label="Контакт"
+            value={candidate.features.contactsFound ? "Найден" : "Не найден"}
+            signal={researchSignals.get("contactsFound")}
+          />
+          <Feature
+            label="Посещаемость"
+            value={trafficLabel(candidate)}
+            hint={trafficHint(candidate)}
+          />
         </dl>
       </section>
 
       <section className="radar-detail-section">
-        <div className="radar-section-heading"><h3>Факторы оценки</h3><span>{candidate.score.modelVersion}</span></div>
+        <div className="radar-section-heading">
+          <h3>Факторы оценки</h3>
+          <span>{candidate.score.modelVersion}</span>
+        </div>
         <div className="radar-factor-groups">
           {groups.map(({ key, label, factors }) => (
             <div key={key} className={`radar-factor-group radar-factor-group-${key}`}>
-              <strong>{label}<span>{factorTotal(factors)}</span></strong>
-              {factors.map((factor) => <div key={factor.code} title={factor.explanation}><span>{factor.label}</span><b>{signed(factor.value)} / {Math.abs(factor.maxValue)}</b></div>)}
+              <strong>
+                {label}
+                <span>{factorTotal(factors)}</span>
+              </strong>
+              {factors.map((factor) => (
+                <div key={factor.code} title={factor.explanation}>
+                  <span>{factor.label}</span>
+                  <b>
+                    {signed(factor.value)} / {Math.abs(factor.maxValue)}
+                  </b>
+                </div>
+              ))}
             </div>
           ))}
         </div>
@@ -531,25 +877,135 @@ function CandidateDetail({
 
       {!terminal ? (
         <section className="radar-operator-panel">
-          <label className="radar-reason"><span>Причина решения</span><textarea required maxLength={1_000} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Кратко зафиксируйте обоснование" /></label>
+          <label className="radar-reason">
+            <span>Причина решения</span>
+            <textarea
+              required
+              maxLength={1_000}
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              placeholder="Кратко зафиксируйте обоснование"
+            />
+          </label>
           <div className="radar-decision-options">
-            <label><span>Пересмотреть</span><input type="datetime-local" value={deferUntil} onChange={(event) => setDeferUntil(event.target.value)} /></label>
-            <label><span>Объединить с</span><select value={mergeTargetId} onChange={(event) => setMergeTargetId(event.target.value)}><option value="">Выберите кандидата</option>{candidates.filter(({ id, status }) => id !== candidate.id && status !== "merged").map((target) => <option key={target.id} value={target.id}>{target.name}</option>)}</select></label>
+            <label>
+              <span>Пересмотреть</span>
+              <input
+                type="datetime-local"
+                value={deferUntil}
+                onChange={(event) => setDeferUntil(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>Объединить с</span>
+              <select
+                value={mergeTargetId}
+                onChange={(event) => setMergeTargetId(event.target.value)}
+              >
+                <option value="">Выберите кандидата</option>
+                {candidates
+                  .filter(({ id, status }) => id !== candidate.id && status !== "merged")
+                  .map((target) => (
+                    <option key={target.id} value={target.id}>
+                      {target.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
           </div>
           <div className="radar-decision-actions">
-            <button className="button button-primary" type="button" disabled={busy || !reason.trim() || candidate.evidence.length === 0 || Boolean(candidate.duplicateOrganization)} onClick={() => command("accept")}><Check size={15} />Принять</button>
-            <button className="button button-secondary" type="button" disabled={busy || !reason.trim() || !deferUntil} onClick={() => command("defer")}>Отложить</button>
-            <button className="button button-secondary" type="button" disabled={busy || !reason.trim() || !mergeTargetId} onClick={() => command("merge")}>Объединить</button>
-            <button className="button button-danger-outline" type="button" disabled={busy || !reason.trim()} onClick={() => command("reject")}>Отклонить</button>
+            <button
+              className="button button-primary"
+              type="button"
+              disabled={
+                busy ||
+                !reason.trim() ||
+                candidate.evidence.length === 0 ||
+                Boolean(candidate.duplicateOrganization)
+              }
+              onClick={() => command("accept")}
+            >
+              <Check size={15} />
+              Принять
+            </button>
+            <button
+              className="button button-secondary"
+              type="button"
+              disabled={busy || !reason.trim() || !deferUntil}
+              onClick={() => command("defer")}
+            >
+              Отложить
+            </button>
+            <button
+              className="button button-secondary"
+              type="button"
+              disabled={busy || !reason.trim() || !mergeTargetId}
+              onClick={() => command("merge")}
+            >
+              Объединить
+            </button>
+            <button
+              className="button button-danger-outline"
+              type="button"
+              disabled={busy || !reason.trim()}
+              onClick={() => command("reject")}
+            >
+              Отклонить
+            </button>
           </div>
-          <form className="radar-score-adjustment" onSubmit={(event) => { event.preventDefault(); onAdjust(Number(adjustment), adjustmentComment.trim()); }}>
-            <label><span>Ручная поправка</span><input required type="number" min={-40} max={40} step={1} value={adjustment} onChange={(event) => setAdjustment(event.target.value)} /></label>
-            <label><span>Комментарий</span><input required maxLength={1_000} value={adjustmentComment} onChange={(event) => setAdjustmentComment(event.target.value)} placeholder="Обязателен для ручной поправки" /></label>
-            <button className="button button-secondary" type="submit" disabled={busyAction === `score:${candidate.id}` || !adjustmentComment.trim()}>Сохранить score</button>
+          <form
+            className="radar-score-adjustment"
+            onSubmit={(event) => {
+              event.preventDefault();
+              onAdjust(Number(adjustment), adjustmentComment.trim());
+            }}
+          >
+            <label>
+              <span>Ручная поправка</span>
+              <input
+                required
+                type="number"
+                min={-40}
+                max={40}
+                step={1}
+                value={adjustment}
+                onChange={(event) => setAdjustment(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>Комментарий</span>
+              <input
+                required
+                maxLength={1_000}
+                value={adjustmentComment}
+                onChange={(event) => setAdjustmentComment(event.target.value)}
+                placeholder="Обязателен для ручной поправки"
+              />
+            </label>
+            <button
+              className="button button-secondary"
+              type="submit"
+              disabled={busyAction === `score:${candidate.id}` || !adjustmentComment.trim()}
+            >
+              Сохранить score
+            </button>
           </form>
         </section>
       ) : (
-        <div className="radar-terminal-summary"><Check size={16} /><span>{decisionNotice(candidate)}</span>{candidate.decisions.at(-1) ? <small>{candidate.decisions.at(-1)?.reason}</small> : null}{candidate.status === "accepted" && candidate.acceptedOpportunityId ? <button className="button button-primary" type="button" onClick={() => onOpenToday(candidate.acceptedOpportunityId!)}>Открыть первую задачу</button> : null}</div>
+        <div className="radar-terminal-summary">
+          <Check size={16} />
+          <span>{decisionNotice(candidate)}</span>
+          {candidate.decisions.at(-1) ? <small>{candidate.decisions.at(-1)?.reason}</small> : null}
+          {candidate.status === "accepted" && candidate.acceptedOpportunityId ? (
+            <button
+              className="button button-primary"
+              type="button"
+              onClick={() => onOpenToday(candidate.acceptedOpportunityId!)}
+            >
+              Открыть первую задачу
+            </button>
+          ) : null}
+        </div>
       )}
     </article>
   );
@@ -580,97 +1036,332 @@ function WorkBrief({
   return (
     <section className="radar-work-brief" aria-labelledby="radar-work-brief-title">
       <div className="radar-work-brief-heading">
-        <div><span>{readiness}</span><h3 id="radar-work-brief-title">Рабочее досье</h3></div>
-        {!terminal ? <button className="button button-primary" type="button" disabled={!canStart || busy} onClick={onStart}><Rocket size={15} />Начать работу</button> : null}
+        <div>
+          <span>{readiness}</span>
+          <h3 id="radar-work-brief-title">Рабочее досье</h3>
+        </div>
+        {!terminal ? (
+          <button
+            className="button button-primary"
+            type="button"
+            disabled={!canStart || busy}
+            onClick={onStart}
+          >
+            <Rocket size={15} />
+            Начать работу
+          </button>
+        ) : null}
       </div>
       <p className="radar-work-summary">{brief.siteSummary}</p>
-      {research.changeSignals?.length ? <div className="radar-change-signals" role="status">
-        <strong>Изменения с прошлого сканирования</strong>
-        <ul>{research.changeSignals.map((signal) => <li key={`${signal.code}:${signal.detectedAt}`}><b>{signal.label}</b><span>{signal.explanation}</span></li>)}</ul>
-      </div> : null}
-      {brief.whyNow ? <div className="radar-why-now">
-        <div><Gauge size={15} /><strong>Почему стоит начать сейчас</strong></div>
-        <p>{brief.whyNow}</p>
-        {brief.priorityInsights?.length ? <ul>{brief.priorityInsights.map((insight) => (
-          <li key={insight.code}><b>{insight.label}</b><span>{insight.explanation}</span><small>{confidenceLabel(insight.confidence)}</small></li>
-        ))}</ul> : null}
-      </div> : null}
-      {potential || research.coverage ? <div className="radar-potential-grid">
-        <div><span>Посещений в день</span><strong>{potential?.minDailyVisits !== null && potential?.minDailyVisits !== undefined && potential.maxDailyVisits !== null ? `${formatCompactNumber(potential.minDailyVisits)}–${formatCompactNumber(potential.maxDailyVisits)}` : "Нет провайдера"}</strong></div>
-        <div><span>Доля видео в выборке</span><strong>{potential?.observedVideoSharePercent !== null && potential?.observedVideoSharePercent !== undefined ? `${potential.observedVideoSharePercent}%` : "—"}</strong></div>
-        <div><span>Видео-возможностей / мес.</span><strong>{potential?.minMonthlyVideoOpportunities !== null && potential?.minMonthlyVideoOpportunities !== undefined && potential.maxMonthlyVideoOpportunities !== null ? `${formatCompactNumber(potential.minMonthlyVideoOpportunities)}–${formatCompactNumber(potential.maxMonthlyVideoOpportunities)}` : "Нужен трафик"}</strong></div>
-        <div><span>Покрытие исследования</span><strong>{research.coverage ? `${research.coverage.coveragePercent}% · ${research.coverage.inspectedUrls}/${research.coverage.discoveredUrls}` : "Базовое"}</strong></div>
-        {potential ? <small>{potential.basis} · {confidenceLabel(potential.confidence)}</small> : null}
-      </div> : null}
-      <div className="radar-work-grid">
-        <div><strong>Где видео</strong><p>{brief.videoUsage}</p></div>
-        <div><strong>Кейс RUTUBE</strong><p>{brief.rutubeUseCase}</p></div>
-        <div><strong>Кого искать</strong><p>{brief.likelyContactRoles.join(" · ")}</p></div>
-        <div><strong>Следующий шаг</strong><p>{brief.nextAction}</p></div>
-      </div>
-      {outreach ? <div className="radar-outreach-package">
-        <div className="radar-outreach-heading">
-          <div><Mail size={14} /><strong>Готовое первое касание</strong></div>
-          <button className="button button-secondary" type="button" onClick={() => {
-            void navigator.clipboard.writeText(`${outreach.subject}\n\n${outreach.messageDraft}`).then(() => setCopied(true));
-          }}><Copy size={13} />{copied ? "Скопировано" : "Скопировать"}</button>
+      {research.changeSignals?.length ? (
+        <div className="radar-change-signals" role="status">
+          <strong>Изменения с прошлого сканирования</strong>
+          <ul>
+            {research.changeSignals.map((signal) => (
+              <li key={`${signal.code}:${signal.detectedAt}`}>
+                <b>{signal.label}</b>
+                <span>{signal.explanation}</span>
+              </li>
+            ))}
+          </ul>
         </div>
-        <dl>
-          <div><dt>Адресат</dt><dd>{outreach.targetName ? `${outreach.targetName} · ` : ""}{outreach.targetRole}</dd></div>
-          <div><dt>Канал</dt><dd>{outreachChannelLabel(outreach.channel)}{outreach.destination ? ` · ${outreach.destination}` : ""}</dd></div>
-        </dl>
-        <label>Тема<input readOnly value={outreach.subject} /></label>
-        <label>Черновик<textarea readOnly value={outreach.messageDraft} /></label>
-        <div className="radar-discovery-questions"><strong>Вопросы для квалификации</strong><ol>{outreach.discoveryQuestions.map((question) => <li key={question}>{question}</li>)}</ol></div>
-        <p><b>Задача:</b> {outreach.nextTask}</p>
-      </div> : null}
-      <div className="radar-decision-makers">
-        <strong><UsersRound size={14} /> ЛПР и целевые контакты</strong>
-        {research.decisionMakers.length > 0 ? <div className="radar-decision-maker-list">{research.decisionMakers.map((person, index) => (
-          <article key={`${person.fullName}:${person.role}:${index}`}>
-            <div><b>{person.fullName ?? "Имя не подтверждено"}</b><span>{person.role}{person.department ? ` · ${person.department}` : ""}</span></div>
-            <div className="radar-decision-maker-channels">
-              {person.email ? <a href={`mailto:${person.email}`}><Mail size={12} />{person.email}</a> : null}
-              {person.phone ? <a href={`tel:${person.phone}`}><Phone size={12} />{person.phone}</a> : null}
-              {person.profileUrl ? <a href={person.profileUrl} target="_blank" rel="noreferrer"><ExternalLink size={12} />Профиль</a> : null}
+      ) : null}
+      {brief.whyNow ? (
+        <div className="radar-why-now">
+          <div>
+            <Gauge size={15} />
+            <strong>Почему стоит начать сейчас</strong>
+          </div>
+          <p>{brief.whyNow}</p>
+          {brief.priorityInsights?.length ? (
+            <ul>
+              {brief.priorityInsights.map((insight) => (
+                <li key={insight.code}>
+                  <b>{insight.label}</b>
+                  <span>{insight.explanation}</span>
+                  <small>{confidenceLabel(insight.confidence)}</small>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+      {potential || research.coverage ? (
+        <div className="radar-potential-grid">
+          <div>
+            <span>Посещений в день</span>
+            <strong>
+              {potential?.minDailyVisits !== null &&
+              potential?.minDailyVisits !== undefined &&
+              potential.maxDailyVisits !== null
+                ? `${formatCompactNumber(potential.minDailyVisits)}–${formatCompactNumber(potential.maxDailyVisits)}`
+                : "Нет провайдера"}
+            </strong>
+          </div>
+          <div>
+            <span>Доля видео в выборке</span>
+            <strong>
+              {potential?.observedVideoSharePercent !== null &&
+              potential?.observedVideoSharePercent !== undefined
+                ? `${potential.observedVideoSharePercent}%`
+                : "—"}
+            </strong>
+          </div>
+          <div>
+            <span>Видео-возможностей / мес.</span>
+            <strong>
+              {potential?.minMonthlyVideoOpportunities !== null &&
+              potential?.minMonthlyVideoOpportunities !== undefined &&
+              potential.maxMonthlyVideoOpportunities !== null
+                ? `${formatCompactNumber(potential.minMonthlyVideoOpportunities)}–${formatCompactNumber(potential.maxMonthlyVideoOpportunities)}`
+                : "Нужен трафик"}
+            </strong>
+          </div>
+          <div>
+            <span>Покрытие исследования</span>
+            <strong>
+              {research.coverage
+                ? `${research.coverage.coveragePercent}% · ${research.coverage.inspectedUrls}/${research.coverage.discoveredUrls}`
+                : "Базовое"}
+            </strong>
+          </div>
+          {potential ? (
+            <small>
+              {potential.basis} · {confidenceLabel(potential.confidence)}
+            </small>
+          ) : null}
+        </div>
+      ) : null}
+      <div className="radar-work-grid">
+        <div>
+          <strong>Где видео</strong>
+          <p>{brief.videoUsage}</p>
+        </div>
+        <div>
+          <strong>Кейс RUTUBE</strong>
+          <p>{brief.rutubeUseCase}</p>
+        </div>
+        <div>
+          <strong>Кого искать</strong>
+          <p>{brief.likelyContactRoles.join(" · ")}</p>
+        </div>
+        <div>
+          <strong>Следующий шаг</strong>
+          <p>{brief.nextAction}</p>
+        </div>
+      </div>
+      {outreach ? (
+        <div className="radar-outreach-package">
+          <div className="radar-outreach-heading">
+            <div>
+              <Mail size={14} />
+              <strong>Готовое первое касание</strong>
             </div>
-            <small>{confidenceLabel(person.confidence)} · <a href={person.sourceUrl} target="_blank" rel="noreferrer">источник</a></small>
-          </article>
-        ))}</div> : <p>ЛПР с подтверждёнными именем и должностью не найден. Ниже показаны общие публичные каналы, если они есть.</p>}
+            <button
+              className="button button-secondary"
+              type="button"
+              onClick={() => {
+                void navigator.clipboard
+                  .writeText(`${outreach.subject}\n\n${outreach.messageDraft}`)
+                  .then(() => setCopied(true));
+              }}
+            >
+              <Copy size={13} />
+              {copied ? "Скопировано" : "Скопировать"}
+            </button>
+          </div>
+          <dl>
+            <div>
+              <dt>Адресат</dt>
+              <dd>
+                {outreach.targetName ? `${outreach.targetName} · ` : ""}
+                {outreach.targetRole}
+              </dd>
+            </div>
+            <div>
+              <dt>Канал</dt>
+              <dd>
+                {outreachChannelLabel(outreach.channel)}
+                {outreach.destination ? ` · ${outreach.destination}` : ""}
+              </dd>
+            </div>
+          </dl>
+          <label>
+            Тема
+            <input readOnly value={outreach.subject} />
+          </label>
+          <label>
+            Черновик
+            <textarea readOnly value={outreach.messageDraft} />
+          </label>
+          <div className="radar-discovery-questions">
+            <strong>Вопросы для квалификации</strong>
+            <ol>
+              {outreach.discoveryQuestions.map((question) => (
+                <li key={question}>{question}</li>
+              ))}
+            </ol>
+          </div>
+          <p>
+            <b>Задача:</b> {outreach.nextTask}
+          </p>
+        </div>
+      ) : null}
+      <div className="radar-decision-makers">
+        <strong>
+          <UsersRound size={14} /> ЛПР и целевые контакты
+        </strong>
+        {research.decisionMakers.length > 0 ? (
+          <div className="radar-decision-maker-list">
+            {research.decisionMakers.map((person, index) => (
+              <article key={`${person.fullName}:${person.role}:${index}`}>
+                <div>
+                  <b>{person.fullName ?? "Имя не подтверждено"}</b>
+                  <span>
+                    {person.role}
+                    {person.department ? ` · ${person.department}` : ""}
+                  </span>
+                </div>
+                <div className="radar-decision-maker-channels">
+                  {person.email ? (
+                    <a href={`mailto:${person.email}`}>
+                      <Mail size={12} />
+                      {person.email}
+                    </a>
+                  ) : null}
+                  {person.phone ? (
+                    <a href={`tel:${person.phone}`}>
+                      <Phone size={12} />
+                      {person.phone}
+                    </a>
+                  ) : null}
+                  {person.profileUrl ? (
+                    <a href={person.profileUrl} target="_blank" rel="noreferrer">
+                      <ExternalLink size={12} />
+                      Профиль
+                    </a>
+                  ) : null}
+                </div>
+                <small>
+                  {confidenceLabel(person.confidence)} ·{" "}
+                  <a href={person.sourceUrl} target="_blank" rel="noreferrer">
+                    источник
+                  </a>
+                </small>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p>
+            ЛПР с подтверждёнными именем и должностью не найден. Ниже показаны общие публичные
+            каналы, если они есть.
+          </p>
+        )}
       </div>
       <div className="radar-lead-columns">
         <div>
           <strong>Каналы связи</strong>
-          {research.contacts.length > 0 ? <ul>{research.contacts.map((contact) => (
-            <li key={`${contact.type}:${contact.href}`}>
-              {contact.type === "email" ? <Mail size={13} /> : contact.type === "phone" ? <Phone size={13} /> : <ExternalLink size={13} />}
-              <a href={contact.href} target={contact.type === "contact_page" ? "_blank" : undefined} rel={contact.type === "contact_page" ? "noreferrer" : undefined}>{contact.value}</a>
-              <small>{confidenceLabel(contact.confidence)}</small>
-            </li>
-          ))}</ul> : <p>Прямой канал не найден — задача будет создана на поиск контакта.</p>}
+          {research.contacts.length > 0 ? (
+            <ul>
+              {research.contacts.map((contact) => (
+                <li key={`${contact.type}:${contact.href}`}>
+                  {contact.type === "email" ? (
+                    <Mail size={13} />
+                  ) : contact.type === "phone" ? (
+                    <Phone size={13} />
+                  ) : (
+                    <ExternalLink size={13} />
+                  )}
+                  <a
+                    href={contact.href}
+                    target={contact.type === "contact_page" ? "_blank" : undefined}
+                    rel={contact.type === "contact_page" ? "noreferrer" : undefined}
+                  >
+                    {contact.value}
+                  </a>
+                  <small>{confidenceLabel(contact.confidence)}</small>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>Прямой канал не найден — задача будет создана на поиск контакта.</p>
+          )}
         </div>
         <div>
           <strong>Примеры видеостраниц</strong>
-          {research.videoPages.length > 0 ? <ul>{research.videoPages.map((page) => <li key={page.pageUrl}><ExternalLink size={13} /><a href={page.pageUrl} target="_blank" rel="noreferrer">{page.label}</a><small>{confidenceLabel(page.confidence)}</small></li>)}</ul> : <p>Подтверждённых примеров пока нет.</p>}
+          {research.videoPages.length > 0 ? (
+            <ul>
+              {research.videoPages.map((page) => (
+                <li key={page.pageUrl}>
+                  <ExternalLink size={13} />
+                  <a href={page.pageUrl} target="_blank" rel="noreferrer">
+                    {page.label}
+                  </a>
+                  <small>{confidenceLabel(page.confidence)}</small>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>Подтверждённых примеров пока нет.</p>
+          )}
         </div>
       </div>
-      <div className="radar-work-risks"><strong>Что проверить</strong><ul>{brief.risks.map((risk) => <li key={risk}>{risk}</li>)}</ul></div>
-      {!terminal ? <small className="radar-work-confirmation">«Начать работу» создаст внутренние организацию, возможность, контакт и первую задачу. Никаких сообщений наружу система не отправляет.</small> : null}
+      <div className="radar-work-risks">
+        <strong>Что проверить</strong>
+        <ul>
+          {brief.risks.map((risk) => (
+            <li key={risk}>{risk}</li>
+          ))}
+        </ul>
+      </div>
+      {!terminal ? (
+        <small className="radar-work-confirmation">
+          «Начать работу» создаст внутренние организацию, возможность, контакт и первую задачу.
+          Никаких сообщений наружу система не отправляет.
+        </small>
+      ) : null}
     </section>
   );
 }
 
-function Message({ tone, onClose, children }: { tone: RadarMessageTone; onClose: () => void; children: string }) {
-  return <div className={`radar-message radar-message-${tone}`} role={tone === "error" ? "alert" : "status"}>{tone === "success" ? <Check size={16} /> : <AlertTriangle size={16} />}<span>{children}</span><button className="icon-button" type="button" onClick={onClose} aria-label="Скрыть сообщение"><X size={14} /></button></div>;
+function Message({
+  tone,
+  onClose,
+  children,
+}: {
+  tone: RadarMessageTone;
+  onClose: () => void;
+  children: string;
+}) {
+  return (
+    <div
+      className={`radar-message radar-message-${tone}`}
+      role={tone === "error" ? "alert" : "status"}
+    >
+      {tone === "success" ? <Check size={16} /> : <AlertTriangle size={16} />}
+      <span>{children}</span>
+      <button className="icon-button" type="button" onClick={onClose} aria-label="Скрыть сообщение">
+        <X size={14} />
+      </button>
+    </div>
+  );
 }
 
 function RadarStatus({ candidate }: { candidate: RadarCandidate }) {
   const evidence = candidate.evidence.at(-1);
   if (candidate.status === "ready" && evidence) {
     const presentation = inspectionPresentation(evidence);
-    return <span className={`radar-status radar-status-inspection-${presentation.tone}`}>{presentation.statusLabel}</span>;
+    return (
+      <span className={`radar-status radar-status-inspection-${presentation.tone}`}>
+        {presentation.statusLabel}
+      </span>
+    );
   }
-  return <span className={`radar-status radar-status-${candidate.status}`}>{statusLabel(candidate.status)}</span>;
+  return (
+    <span className={`radar-status radar-status-${candidate.status}`}>
+      {statusLabel(candidate.status)}
+    </span>
+  );
 }
 
 function Feature({
@@ -684,12 +1375,38 @@ function Feature({
   signal?: RadarFeatureSignal;
   hint?: string;
 }) {
-  return <div><dt>{label}</dt><dd><span>{value || "—"}</span>{signal ? <small>{signal.source} · {confidenceLabel(signal.confidence)}</small> : hint ? <small>{hint}</small> : null}</dd></div>;
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>
+        <span>{value || "—"}</span>
+        {signal ? (
+          <small>
+            {signal.source} · {confidenceLabel(signal.confidence)}
+          </small>
+        ) : hint ? (
+          <small>{hint}</small>
+        ) : null}
+      </dd>
+    </div>
+  );
 }
 
 function groupFactors(factors: RadarScoreFactor[]) {
-  const labels: Record<RadarScoreFactor["group"], string> = { business: "Бизнес", content: "Контент", technical: "Техника", contact: "Контактность", risk: "Риски" };
-  return (Object.keys(labels) as RadarScoreFactor["group"][]).map((key) => ({ key, label: labels[key], factors: factors.filter(({ group }) => group === key) })).filter(({ factors }) => factors.length > 0);
+  const labels: Record<RadarScoreFactor["group"], string> = {
+    business: "Бизнес",
+    content: "Контент",
+    technical: "Техника",
+    contact: "Контактность",
+    risk: "Риски",
+  };
+  return (Object.keys(labels) as RadarScoreFactor["group"][])
+    .map((key) => ({
+      key,
+      label: labels[key],
+      factors: factors.filter(({ group }) => group === key),
+    }))
+    .filter(({ factors }) => factors.length > 0);
 }
 
 function factorTotal(factors: RadarScoreFactor[]) {
@@ -699,7 +1416,14 @@ function factorTotal(factors: RadarScoreFactor[]) {
 }
 
 function statusLabel(status: RadarCandidateStatus) {
-  return { new: "Новый", ready: "После проверки", deferred: "Отложен", rejected: "Отклонён", accepted: "Принят", merged: "Объединён" }[status];
+  return {
+    new: "Новый",
+    ready: "После проверки",
+    deferred: "Отложен",
+    rejected: "Отклонён",
+    accepted: "Принят",
+    merged: "Объединён",
+  }[status];
 }
 
 function priorityLabel(priority: RadarCandidate["score"]["priority"]) {
@@ -707,19 +1431,36 @@ function priorityLabel(priority: RadarCandidate["score"]["priority"]) {
 }
 
 function frequencyLabel(value: RadarCandidate["features"]["publicationFrequency"]) {
-  return { daily: "Ежедневно", weekly: "Еженедельно", monthly: "Ежемесячно", unknown: "Не определено" }[value];
+  return {
+    daily: "Ежедневно",
+    weekly: "Еженедельно",
+    monthly: "Ежемесячно",
+    unknown: "Не определено",
+  }[value];
 }
 
 function confidenceLabel(value: RadarFeatureSignal["confidence"]) {
-  return { high: "высокая уверенность", medium: "средняя уверенность", low: "низкая уверенность" }[value];
+  return { high: "высокая уверенность", medium: "средняя уверенность", low: "низкая уверенность" }[
+    value
+  ];
 }
 
 function formatCompactNumber(value: number) {
-  return new Intl.NumberFormat("ru-RU", { notation: "compact", maximumFractionDigits: 1 }).format(value);
+  return new Intl.NumberFormat("ru-RU", { notation: "compact", maximumFractionDigits: 1 }).format(
+    value,
+  );
 }
 
-function outreachChannelLabel(value: NonNullable<NonNullable<RadarCandidate["research"]>["brief"]["outreach"]>["channel"]) {
-  return { email: "Email", phone: "Телефон", profile: "Профиль", contact_page: "Форма связи", research: "Нужен поиск" }[value];
+function outreachChannelLabel(
+  value: NonNullable<NonNullable<RadarCandidate["research"]>["brief"]["outreach"]>["channel"],
+) {
+  return {
+    email: "Email",
+    phone: "Телефон",
+    profile: "Профиль",
+    contact_page: "Форма связи",
+    research: "Нужен поиск",
+  }[value];
 }
 
 function evidenceLabel(evidence: RadarCandidate["evidence"][number] | null) {
@@ -747,22 +1488,27 @@ function trafficLabel(candidate: RadarCandidate) {
 function trafficHint(candidate: RadarCandidate) {
   const traffic = candidate.features.trafficEstimate;
   if (!traffic) return "Similarweb не подключён — цифры не подменяются предположением";
-  const period = traffic.periodStart && traffic.periodEnd
-    ? ` · период ${new Date(traffic.periodStart).toLocaleDateString("ru-RU")}–${new Date(traffic.periodEnd).toLocaleDateString("ru-RU")}`
-    : "";
+  const period =
+    traffic.periodStart && traffic.periodEnd
+      ? ` · период ${new Date(traffic.periodStart).toLocaleDateString("ru-RU")}–${new Date(traffic.periodEnd).toLocaleDateString("ru-RU")}`
+      : "";
   return `${traffic.provider} · ${traffic.minMonthlyVisits.toLocaleString("ru-RU")}–${traffic.maxMonthlyVisits.toLocaleString("ru-RU")} / мес. · confidence ${traffic.confidence}${period}`;
 }
 
 function decisionNotice(candidate: RadarCandidate) {
-  if (candidate.status === "accepted") return "Кандидат принят: созданы организация, возможность и первая задача.";
-  if (candidate.status === "deferred") return `Кандидат отложен до ${candidate.deferUntil ? formatDate(candidate.deferUntil) : "новой даты"}.`;
+  if (candidate.status === "accepted")
+    return "Кандидат принят: созданы организация, возможность и первая задача.";
+  if (candidate.status === "deferred")
+    return `Кандидат отложен до ${candidate.deferUntil ? formatDate(candidate.deferUntil) : "новой даты"}.`;
   if (candidate.status === "rejected") return "Кандидат отклонён с сохранением причины.";
   if (candidate.status === "merged") return "Кандидат объединён с канонической записью.";
   return "Решение сохранено.";
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+  return new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "short" }).format(
+    new Date(value),
+  );
 }
 
 function signed(value: number) {

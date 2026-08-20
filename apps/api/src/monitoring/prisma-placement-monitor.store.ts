@@ -1,8 +1,5 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
-import type {
-  PlacementMonitorJob,
-  PlacementMonitorStore,
-} from "./placement-monitor.service.js";
+import type { PlacementMonitorJob, PlacementMonitorStore } from "./placement-monitor.service.js";
 
 export class PlacementMonitorLeaseLostError extends Error {
   constructor(readonly placementId: string) {
@@ -58,10 +55,7 @@ export class PrismaPlacementMonitorStore implements PlacementMonitorStore {
     return rows.map(mapClaimedRow);
   }
 
-  async markCompleted(input: {
-    placementId: string;
-    workerId: string;
-  }): Promise<void> {
+  async markCompleted(input: { placementId: string; workerId: string }): Promise<void> {
     const updated = await this.prisma.placement.updateMany({
       where: {
         id: input.placementId,

@@ -1,7 +1,4 @@
-import type {
-  FunnelPayload,
-  OpportunityStageTransitionResult,
-} from "@embed-os/contracts";
+import type { FunnelPayload, OpportunityStageTransitionResult } from "@embed-os/contracts";
 
 export const OPPORTUNITY_PORT = Symbol("OPPORTUNITY_PORT");
 

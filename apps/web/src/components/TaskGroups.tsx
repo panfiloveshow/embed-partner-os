@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { CalendarClock, Check, ExternalLink, GitBranch, MoreHorizontal, UserPlus } from "lucide-react";
+import {
+  CalendarClock,
+  Check,
+  ExternalLink,
+  GitBranch,
+  MoreHorizontal,
+  UserPlus,
+} from "lucide-react";
 import type { ActionGroup, TodayAction } from "@embed-os/contracts";
 
 const groupLabels: Record<ActionGroup, string> = {
@@ -38,9 +45,8 @@ export function TaskGroups({
       {groupOrder.map((group) => {
         const groupActions = actions.filter((action) => action.group === group);
         if (groupActions.length === 0) return null;
-        const visibleActions = group === "today" && !todayExpanded
-          ? groupActions.slice(0, 4)
-          : groupActions;
+        const visibleActions =
+          group === "today" && !todayExpanded ? groupActions.slice(0, 4) : groupActions;
         return (
           <section className={`task-group task-group-${group}`} key={group}>
             <h2>
@@ -71,7 +77,9 @@ export function TaskGroups({
                       onAddContact={onAddContact}
                       onChangeStage={onChangeStage}
                       moreOpen={moreTaskId === task.id}
-                      onToggleMore={() => setMoreTaskId((current) => current === task.id ? null : task.id)}
+                      onToggleMore={() =>
+                        setMoreTaskId((current) => (current === task.id ? null : task.id))
+                      }
                       onCloseMore={() => setMoreTaskId(null)}
                     />
                   ))}
@@ -131,7 +139,9 @@ function TaskRow({
         <span className="domain">{task.domain}</span>
       </td>
       <td data-label="Стадия">
-        <span className="stage-label" title={task.stageLabel}>{task.stageLabel}</span>
+        <span className="stage-label" title={task.stageLabel}>
+          {task.stageLabel}
+        </span>
       </td>
       <td data-label="Действие" className="task-title-cell">
         {task.title}
@@ -150,30 +160,87 @@ function TaskRow({
       <td data-label="Причины">
         <div className="reason-list">
           {task.priorityReasons.length > 0
-            ? task.priorityReasons.slice(0, 2).map((reason) => (
-                <span key={`${task.id}-${reason.code}`}>{reason.label}</span>
-              ))
+            ? task.priorityReasons
+                .slice(0, 2)
+                .map((reason) => <span key={`${task.id}-${reason.code}`}>{reason.label}</span>)
             : "—"}
         </div>
       </td>
       <td className="quick-actions">
-        <button type="button" onClick={() => onComplete?.(task)} aria-label="Выполнить задачу" disabled={!onComplete} title={!onComplete ? "Только чтение" : undefined}>
+        <button
+          type="button"
+          onClick={() => onComplete?.(task)}
+          aria-label="Выполнить задачу"
+          disabled={!onComplete}
+          title={!onComplete ? "Только чтение" : undefined}
+        >
           <Check size={16} aria-hidden="true" />
         </button>
-        <button type="button" onClick={() => onReschedule?.(task)} aria-label="Перенести задачу" disabled={!onReschedule} title={!onReschedule ? "Только чтение" : undefined}>
+        <button
+          type="button"
+          onClick={() => onReschedule?.(task)}
+          aria-label="Перенести задачу"
+          disabled={!onReschedule}
+          title={!onReschedule ? "Только чтение" : undefined}
+        >
           <CalendarClock size={16} aria-hidden="true" />
         </button>
         <button type="button" onClick={() => onSelect(task)} aria-label="Открыть контекст">
           <ExternalLink size={16} aria-hidden="true" />
         </button>
-        <button type="button" aria-label="Другие действия" aria-haspopup="menu" aria-expanded={moreOpen} onClick={onToggleMore}>
+        <button
+          type="button"
+          aria-label="Другие действия"
+          aria-haspopup="menu"
+          aria-expanded={moreOpen}
+          onClick={onToggleMore}
+        >
           <MoreHorizontal size={16} aria-hidden="true" />
         </button>
-        {moreOpen ? <div className="task-action-menu" role="menu" aria-label={`Действия: ${task.organizationName}`}>
-          <button type="button" role="menuitem" disabled={!onAddContact} onClick={() => { onCloseMore(); onAddContact?.(task); }}><UserPlus size={14} aria-hidden="true" />Добавить контакт</button>
-          <button type="button" role="menuitem" disabled={!onReschedule} onClick={() => { onCloseMore(); onReschedule?.(task); }}><CalendarClock size={14} aria-hidden="true" />Перенести</button>
-          <button type="button" role="menuitem" disabled={!onChangeStage} onClick={() => { onCloseMore(); onChangeStage?.(task); }}><GitBranch size={14} aria-hidden="true" />Изменить стадию</button>
-        </div> : null}
+        {moreOpen ? (
+          <div
+            className="task-action-menu"
+            role="menu"
+            aria-label={`Действия: ${task.organizationName}`}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              disabled={!onAddContact}
+              onClick={() => {
+                onCloseMore();
+                onAddContact?.(task);
+              }}
+            >
+              <UserPlus size={14} aria-hidden="true" />
+              Добавить контакт
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={!onReschedule}
+              onClick={() => {
+                onCloseMore();
+                onReschedule?.(task);
+              }}
+            >
+              <CalendarClock size={14} aria-hidden="true" />
+              Перенести
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={!onChangeStage}
+              onClick={() => {
+                onCloseMore();
+                onChangeStage?.(task);
+              }}
+            >
+              <GitBranch size={14} aria-hidden="true" />
+              Изменить стадию
+            </button>
+          </div>
+        ) : null}
       </td>
     </tr>
   );

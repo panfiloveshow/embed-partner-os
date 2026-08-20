@@ -63,13 +63,12 @@ describe("report digest publisher", () => {
     const body = String(request?.body);
     const timestamp = headers.get("X-Embed-Timestamp");
     expect(headers.get("Idempotency-Key")).toBe("event-report-1");
-    expect(headers.get("X-Embed-Signature")).toBe(`sha256=${createHmac(
-      "sha256",
-      "report-webhook-secret-with-at-least-32-characters",
-    ).update(`${timestamp}.event-report-1.${body}`).digest("hex")}`);
-    expect(JSON.parse(body)).toEqual(
-      expect.objectContaining({ messageId: "event-report-1" }),
+    expect(headers.get("X-Embed-Signature")).toBe(
+      `sha256=${createHmac("sha256", "report-webhook-secret-with-at-least-32-characters")
+        .update(`${timestamp}.event-report-1.${body}`)
+        .digest("hex")}`,
     );
+    expect(JSON.parse(body)).toEqual(expect.objectContaining({ messageId: "event-report-1" }));
   });
 
   it("fails the relay attempt when the notification gateway rejects delivery", async () => {

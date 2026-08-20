@@ -5,10 +5,7 @@ import request from "supertest";
 import { AppModule } from "./app.module.js";
 import { ProblemDetailsFilter } from "./problem-details.filter.js";
 import { RADAR_INSPECTOR } from "./monitoring/radar-page-inspector.js";
-import {
-  OIDC_TOKEN_VERIFIER,
-  OidcTokenVerificationError,
-} from "./auth/oidc-token-verifier.js";
+import { OIDC_TOKEN_VERIFIER, OidcTokenVerificationError } from "./auth/oidc-token-verifier.js";
 
 describe("Today HTTP contract", () => {
   let app: INestApplication;
@@ -32,33 +29,39 @@ describe("Today HTTP contract", () => {
             features: {},
             research: {
               method: "html-signals-v1",
-              decisionMakers: [{
-                fullName: "Мария Иванова",
-                role: "Коммерческий директор",
-                department: "Коммерческий отдел",
-                email: "m.ivanova@new-media.example",
-                phone: null,
-                profileUrl: null,
-                sourceUrl: pageUrl,
-                evidence: "Мария Иванова — коммерческий директор",
-                confidence: "high",
-              }],
+              decisionMakers: [
+                {
+                  fullName: "Мария Иванова",
+                  role: "Коммерческий директор",
+                  department: "Коммерческий отдел",
+                  email: "m.ivanova@new-media.example",
+                  phone: null,
+                  profileUrl: null,
+                  sourceUrl: pageUrl,
+                  evidence: "Мария Иванова — коммерческий директор",
+                  confidence: "high",
+                },
+              ],
               pageUrl,
               collectedAt: "2026-08-18T10:00:00.000Z",
               signals: [],
-              contacts: [{
-                type: "email",
-                value: "editor@new-media.example",
-                href: "mailto:editor@new-media.example",
-                sourceUrl: pageUrl,
-                confidence: "high",
-              }],
-              videoPages: [{
-                pageUrl,
-                label: "Видеоновости",
-                sourceUrl: pageUrl,
-                confidence: "medium",
-              }],
+              contacts: [
+                {
+                  type: "email",
+                  value: "editor@new-media.example",
+                  href: "mailto:editor@new-media.example",
+                  sourceUrl: pageUrl,
+                  confidence: "high",
+                },
+              ],
+              videoPages: [
+                {
+                  pageUrl,
+                  label: "Видеоновости",
+                  sourceUrl: pageUrl,
+                  confidence: "medium",
+                },
+              ],
               brief: {
                 readiness: "ready_for_outreach",
                 siteSummary: "Новостная площадка из России.",
@@ -107,10 +110,12 @@ describe("Today HTTP contract", () => {
     });
     const sharedContactLinks = response.body.actions
       .filter((action: { id: string }) => ["task-1", "task-2"].includes(action.id))
-      .map((action: { organizationName: string; contacts: Array<{ id: string; role: string }> }) => ({
-        organizationName: action.organizationName,
-        ...action.contacts[0],
-      }));
+      .map(
+        (action: { organizationName: string; contacts: Array<{ id: string; role: string }> }) => ({
+          organizationName: action.organizationName,
+          ...action.contacts[0],
+        }),
+      );
     expect(sharedContactLinks).toEqual([
       expect.objectContaining({
         organizationName: "Медиа Новости",
@@ -126,9 +131,7 @@ describe("Today HTTP contract", () => {
   });
 
   it("returns the verified session and blocks observer mutations", async () => {
-    const session = await request(app.getHttpServer())
-      .get("/api/v1/session")
-      .expect(200);
+    const session = await request(app.getHttpServer()).get("/api/v1/session").expect(200);
     expect(session.body).toMatchObject({
       subject: "bootstrap:anna.sokolova",
       displayName: "Анна Соколова",
@@ -182,13 +185,18 @@ describe("Today HTTP contract", () => {
         reason: "Регистрация участника пилота",
       })
       .expect(201);
-    expect(created.body).toMatchObject({ subject: "oidc:pilot.user", role: "observer", version: 1 });
+    expect(created.body).toMatchObject({
+      subject: "oidc:pilot.user",
+      role: "observer",
+      version: 1,
+    });
     await request(app.getHttpServer())
       .get("/api/v1/session")
       .set("X-Embed-Actor", "oidc:pilot.user")
       .expect(200);
-    const manager = matrix.body.users.find((user: { subject: string }) =>
-      user.subject === "bootstrap:sergey.volkov");
+    const manager = matrix.body.users.find(
+      (user: { subject: string }) => user.subject === "bootstrap:sergey.volkov",
+    );
     const command = {
       version: manager.version,
       status: "active",
@@ -265,9 +273,7 @@ describe("Today HTTP contract", () => {
       .set("X-Embed-Actor", "bootstrap:observer")
       .expect(403);
 
-    const current = await request(app.getHttpServer())
-      .get("/api/v1/settings/sla")
-      .expect(200);
+    const current = await request(app.getHttpServer()).get("/api/v1/settings/sla").expect(200);
     expect(current.body).toMatchObject({
       version: 1,
       escalationAfterDays: 3,
@@ -279,8 +285,17 @@ describe("Today HTTP contract", () => {
       version: current.body.version,
       escalationAfterDays: 4,
       thresholds: {
-        S0: 2, S1: 2, S2: 3, S3: 3, S4: 6, S5: 5,
-        S6: 5, S7: 7, S8: 7, S9: 14, S10: 14,
+        S0: 2,
+        S1: 2,
+        S2: 3,
+        S3: 3,
+        S4: 6,
+        S5: 5,
+        S6: 5,
+        S7: 7,
+        S8: 7,
+        S9: 14,
+        S10: 14,
       },
       reason: "Увеличили срок диалога после пилотной недели",
     };
@@ -296,10 +311,12 @@ describe("Today HTTP contract", () => {
       .expect(200);
     expect(replay.body).toEqual(first.body);
     expect(first.body).toMatchObject({ version: 2, escalationAfterDays: 4 });
-    expect(first.body.stages).toContainEqual(expect.objectContaining({
-      code: "S4",
-      thresholdDays: 6,
-    }));
+    expect(first.body.stages).toContainEqual(
+      expect.objectContaining({
+        code: "S4",
+        thresholdDays: 6,
+      }),
+    );
 
     const stale = await request(app.getHttpServer())
       .patch("/api/v1/settings/sla")
@@ -328,11 +345,13 @@ describe("Today HTTP contract", () => {
       .set("Idempotency-Key", "test-key-http-reschedule-0001")
       .send(command)
       .expect(200);
-    expect(first.body.actions).toContainEqual(expect.objectContaining({
-      id: "task-11",
-      dueAt: "2026-08-25T09:00:00.000Z",
-      group: "later",
-    }));
+    expect(first.body.actions).toContainEqual(
+      expect.objectContaining({
+        id: "task-11",
+        dueAt: "2026-08-25T09:00:00.000Z",
+        group: "later",
+      }),
+    );
 
     const replay = await request(app.getHttpServer())
       .post("/api/v1/tasks/task-11/reschedule")
@@ -349,9 +368,7 @@ describe("Today HTTP contract", () => {
   });
 
   it("returns the funnel dataset used by kanban and table views", async () => {
-    const response = await request(app.getHttpServer())
-      .get("/api/v1/opportunities")
-      .expect(200);
+    const response = await request(app.getHttpServer()).get("/api/v1/opportunities").expect(200);
 
     expect(response.body).toMatchObject({
       teamName: "Команда внедрения",
@@ -359,16 +376,20 @@ describe("Today HTTP contract", () => {
       truncated: false,
       processVersions: [1],
     });
-    expect(response.body.stageCounts.reduce(
-      (sum: number, stage: { count: number }) => sum + stage.count,
-      0,
-    )).toBe(16);
-    expect(response.body.opportunities).toContainEqual(expect.objectContaining({
-      id: "opp-task-1",
-      organizationName: "Медиа Новости",
-      stageCode: "S7",
-      owner: { id: "user-anna", name: "Анна Соколова" },
-    }));
+    expect(
+      response.body.stageCounts.reduce(
+        (sum: number, stage: { count: number }) => sum + stage.count,
+        0,
+      ),
+    ).toBe(16);
+    expect(response.body.opportunities).toContainEqual(
+      expect.objectContaining({
+        id: "opp-task-1",
+        organizationName: "Медиа Новости",
+        stageCode: "S7",
+        owner: { id: "user-anna", name: "Анна Соколова" },
+      }),
+    );
   });
 
   it("filters organizations and returns the unified partner card", async () => {
@@ -381,20 +402,20 @@ describe("Today HTTP contract", () => {
       total: 3,
       truncated: false,
     });
-    expect(registry.body.partners).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: "org-task-1",
-        name: "Медиа Новости",
-        primaryDomain: "medianovosti.ru",
-        partnerScore: 85,
-        currentStage: { code: "S7", label: "Интеграция" },
-      }),
-      expect.objectContaining({ id: "org-task-2", name: "Спорт Онлайн", partnerScore: 90 }),
-    ]));
+    expect(registry.body.partners).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "org-task-1",
+          name: "Медиа Новости",
+          primaryDomain: "medianovosti.ru",
+          partnerScore: 85,
+          currentStage: { code: "S7", label: "Интеграция" },
+        }),
+        expect.objectContaining({ id: "org-task-2", name: "Спорт Онлайн", partnerScore: 90 }),
+      ]),
+    );
 
-    const card = await request(app.getHttpServer())
-      .get("/api/v1/partners/org-task-1")
-      .expect(200);
+    const card = await request(app.getHttpServer()).get("/api/v1/partners/org-task-1").expect(200);
     expect(card.body).toMatchObject({
       organization: expect.objectContaining({
         id: "org-task-1",
@@ -405,9 +426,9 @@ describe("Today HTTP contract", () => {
       tasks: [expect.objectContaining({ id: "task-1", status: "OPEN" })],
       documents: [],
     });
-    expect(card.body.metrics).toEqual(expect.arrayContaining([
-      expect.objectContaining({ code: "partner_score", value: 85 }),
-    ]));
+    expect(card.body.metrics).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: "partner_score", value: 85 })]),
+    );
   });
 
   it("groups brands, legal entities and domains in one organization group", async () => {
@@ -421,20 +442,20 @@ describe("Today HTTP contract", () => {
         groups: [expect.objectContaining({ id: "group-media", name: "Медиа Альянс" })],
       },
     });
-    expect(registry.body.partners).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: "org-task-1",
-        organizationGroup: { id: "group-media", name: "Медиа Альянс" },
-      }),
-      expect.objectContaining({
-        id: "org-task-3",
-        organizationGroup: { id: "group-media", name: "Медиа Альянс" },
-      }),
-    ]));
+    expect(registry.body.partners).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "org-task-1",
+          organizationGroup: { id: "group-media", name: "Медиа Альянс" },
+        }),
+        expect.objectContaining({
+          id: "org-task-3",
+          organizationGroup: { id: "group-media", name: "Медиа Альянс" },
+        }),
+      ]),
+    );
 
-    const card = await request(app.getHttpServer())
-      .get("/api/v1/partners/org-task-1")
-      .expect(200);
+    const card = await request(app.getHttpServer()).get("/api/v1/partners/org-task-1").expect(200);
     expect(card.body.organizationGroup).toMatchObject({
       id: "group-media",
       name: "Медиа Альянс",
@@ -470,22 +491,31 @@ describe("Today HTTP contract", () => {
       .get("/api/v1/partners/exports/audit")
       .set("X-Embed-Actor", "bootstrap:anna.sokolova")
       .expect(200);
-    expect(audit.body).toContainEqual(expect.objectContaining({
-      id: exported.headers["x-export-audit-id"],
-      actorSubject: "bootstrap:anna.sokolova",
-      permission: "partners.export",
-      rowCount: 4,
-    }));
+    expect(audit.body).toContainEqual(
+      expect.objectContaining({
+        id: exported.headers["x-export-audit-id"],
+        actorSubject: "bootstrap:anna.sokolova",
+        permission: "partners.export",
+        rowCount: 4,
+      }),
+    );
   });
 
   it("previews and cancels an organization CSV import without applying rows", async () => {
     const preview = await request(app.getHttpServer())
       .post("/api/v1/imports/organizations/preview")
-      .attach("file", Buffer.from([
-        "organization_name,domain,source",
-        "Новый партнёр,new-partner.ru,Пилот",
-        "Медиа Новости,another-media.ru,Таблица",
-      ].join("\n"), "utf8"), "partners.csv")
+      .attach(
+        "file",
+        Buffer.from(
+          [
+            "organization_name,domain,source",
+            "Новый партнёр,new-partner.ru,Пилот",
+            "Медиа Новости,another-media.ru,Таблица",
+          ].join("\n"),
+          "utf8",
+        ),
+        "partners.csv",
+      )
       .expect(201);
 
     expect(preview.body).toMatchObject({
@@ -499,8 +529,9 @@ describe("Today HTTP contract", () => {
       .set("Idempotency-Key", "test-key-import-cancel-0001")
       .expect(200);
     expect(cancelled.body).toMatchObject({ status: "cancelled", completedAt: expect.any(String) });
-    expect(cancelled.body.rows.every((row: { entityId: string | null }) => row.entityId === null))
-      .toBe(true);
+    expect(
+      cancelled.body.rows.every((row: { entityId: string | null }) => row.entityId === null),
+    ).toBe(true);
   });
 
   it("registers and lists a placement idempotently", async () => {
@@ -576,7 +607,9 @@ describe("Today HTTP contract", () => {
       .send({ version: paused.body.version, reason: "Размещение демонтировано" })
       .expect(200);
     const list = await request(app.getHttpServer()).get("/api/v1/placements").expect(200);
-    expect(list.body.some((placement: { id: string }) => placement.id === created.body.id)).toBe(false);
+    expect(list.body.some((placement: { id: string }) => placement.id === created.body.id)).toBe(
+      false,
+    );
   });
 
   it("classifies a loopback L0 target as blocked without requesting it", async () => {
@@ -848,10 +881,12 @@ describe("Today HTTP contract", () => {
       verifiedAt: "2026-08-18T09:00:00.000Z",
       restrictions: "Только рабочая почта",
       status: "active",
-      organizationLinks: [expect.objectContaining({
-        organizationId: "org-task-6",
-        role: "Коммерческий директор",
-      })],
+      organizationLinks: [
+        expect.objectContaining({
+          organizationId: "org-task-6",
+          role: "Коммерческий директор",
+        }),
+      ],
     });
 
     const updated = await request(app.getHttpServer())
@@ -896,11 +931,17 @@ describe("Today HTTP contract", () => {
       .set("Idempotency-Key", "test-key-contact-registry-archive-0001")
       .send({ version: 2, reason: "Контакт больше не работает в компании" })
       .expect(200);
-    expect(archived.body).toMatchObject({ version: 3, status: "archived", archivedAt: expect.any(String) });
-    const todayWithoutArchived = await request(app.getHttpServer()).get("/api/v1/today").expect(200);
-    expect(todayWithoutArchived.body.actions.find(
-      ({ id }: { id: string }) => id === "task-6",
-    ).contacts).not.toContainEqual(expect.objectContaining({ id: created.body.id }));
+    expect(archived.body).toMatchObject({
+      version: 3,
+      status: "archived",
+      archivedAt: expect.any(String),
+    });
+    const todayWithoutArchived = await request(app.getHttpServer())
+      .get("/api/v1/today")
+      .expect(200);
+    expect(
+      todayWithoutArchived.body.actions.find(({ id }: { id: string }) => id === "task-6").contacts,
+    ).not.toContainEqual(expect.objectContaining({ id: created.body.id }));
 
     const restored = await request(app.getHttpServer())
       .post(`/api/v1/contacts/${created.body.id}/restore`)
@@ -1093,9 +1134,8 @@ describe("Today HTTP contract", () => {
     expect(replay.body).toEqual(first.body);
     expect(replay.body.summary.completed).toBe(7);
     expect(
-      replay.body.actions.find(
-        (action: { title: string }) => action.title === "Отправить примеры",
-      )?.lastInteraction,
+      replay.body.actions.find((action: { title: string }) => action.title === "Отправить примеры")
+        ?.lastInteraction,
     ).toMatchObject({ type: "Письмо", contactName: "Иван Петров" });
 
     const conflict = await request(app.getHttpServer())
@@ -1243,29 +1283,39 @@ describe("Today HTTP contract", () => {
     });
 
     const today = await request(app.getHttpServer()).get("/api/v1/today").expect(200);
-    expect(today.body.actions).toContainEqual(expect.objectContaining({
-      organizationId: accepted.body.acceptedOrganizationId,
-      opportunityId: accepted.body.acceptedOpportunityId,
-      stageCode: "S2",
-      title: expect.stringContaining("m.ivanova@new-media.example"),
-      contacts: expect.arrayContaining([expect.objectContaining({
-        fullName: "Мария Иванова",
-        role: "Коммерческий директор",
-        email: "m.ivanova@new-media.example",
-        isPrimary: true,
-      })]),
-    }));
+    expect(today.body.actions).toContainEqual(
+      expect.objectContaining({
+        organizationId: accepted.body.acceptedOrganizationId,
+        opportunityId: accepted.body.acceptedOpportunityId,
+        stageCode: "S2",
+        title: expect.stringContaining("m.ivanova@new-media.example"),
+        contacts: expect.arrayContaining([
+          expect.objectContaining({
+            fullName: "Мария Иванова",
+            role: "Коммерческий директор",
+            email: "m.ivanova@new-media.example",
+            isPrimary: true,
+          }),
+        ]),
+      }),
+    );
   });
 
   it("загружает очередь Радара из CSV с построчным протоколом", async () => {
     const imported = await request(app.getHttpServer())
       .post("/api/v1/radar/candidates/import")
       .set("Idempotency-Key", "test-key-radar-import-0001")
-      .attach("file", Buffer.from([
-        "organization_name,domain,source,segment",
-        "Импорт Радара,radar-import.example,Каталог,Медиа",
-        "Дубль строки,radar-import.example,Каталог,Медиа",
-      ].join("\n")), "radar.csv")
+      .attach(
+        "file",
+        Buffer.from(
+          [
+            "organization_name,domain,source,segment",
+            "Импорт Радара,radar-import.example,Каталог,Медиа",
+            "Дубль строки,radar-import.example,Каталог,Медиа",
+          ].join("\n"),
+        ),
+        "radar.csv",
+      )
       .expect(201);
 
     expect(imported.body).toMatchObject({
@@ -1277,7 +1327,11 @@ describe("Today HTTP contract", () => {
       failed: 0,
     });
     expect(imported.body.rows).toEqual([
-      expect.objectContaining({ rowNo: 2, status: "created", hostNormalized: "radar-import.example" }),
+      expect.objectContaining({
+        rowNo: 2,
+        status: "created",
+        hostNormalized: "radar-import.example",
+      }),
       expect.objectContaining({ rowNo: 3, status: "skipped", candidateId: null }),
     ]);
   });

@@ -69,12 +69,7 @@ export const accessRoleDefaults: Record<ActorRole, ActorPermission[]> = {
     "placements.write",
     "reports.view",
   ],
-  analyst: [
-    ...READ_PERMISSIONS,
-    "partners.export",
-    "partners.export.audit",
-    "reports.generate",
-  ],
+  analyst: [...READ_PERMISSIONS, "partners.export", "partners.export.audit", "reports.generate"],
   legal: ["partners.read", "contacts.view", "opportunities.read", "reports.view"],
   admin: [...actorPermissions],
   observer: [...READ_PERMISSIONS],
@@ -111,23 +106,29 @@ interface MemoryAccessUser extends Omit<AccessUserView, "currentUser"> {}
 
 @Injectable()
 export class AccessAdministrationService {
-  private readonly memoryUsers = new Map<string, MemoryAccessUser>(seedMemoryUsers().map((user) => [user.id, user]));
-  private readonly memoryIdempotency = new Map<string, {
-    requestHash: string;
-    response: AccessUserView;
-  }>();
+  private readonly memoryUsers = new Map<string, MemoryAccessUser>(
+    seedMemoryUsers().map((user) => [user.id, user]),
+  );
+  private readonly memoryIdempotency = new Map<
+    string,
+    {
+      requestHash: string;
+      response: AccessUserView;
+    }
+  >();
 
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async list(actorId: string): Promise<AccessAdministrationPayload> {
-    const result = process.env.PERSISTENCE_MODE === "postgres"
-      ? await this.listPostgres(actorId)
-      : {
-        users: [...this.memoryUsers.values()]
-        .sort((left, right) => left.displayName.localeCompare(right.displayName, "ru"))
-        .map((user) => ({ ...structuredClone(user), currentUser: user.id === actorId })),
-        teams: [{ id: TEAM_ID, name: TEAM_NAME }],
-      };
+    const result =
+      process.env.PERSISTENCE_MODE === "postgres"
+        ? await this.listPostgres(actorId)
+        : {
+            users: [...this.memoryUsers.values()]
+              .sort((left, right) => left.displayName.localeCompare(right.displayName, "ru"))
+              .map((user) => ({ ...structuredClone(user), currentUser: user.id === actorId })),
+            teams: [{ id: TEAM_ID, name: TEAM_NAME }],
+          };
     return {
       ...result,
       roles: [...actorRoles],
@@ -136,11 +137,7 @@ export class AccessAdministrationService {
     };
   }
 
-  async create(
-    actorId: string,
-    input: unknown,
-    idempotencyKey: string,
-  ): Promise<AccessUserView> {
+  async create(actorId: string, input: unknown, idempotencyKey: string): Promise<AccessUserView> {
     const command = parseCreateAccessUserCommand(input);
     return process.env.PERSISTENCE_MODE === "postgres"
       ? this.createPostgres(actorId, command, idempotencyKey)
@@ -242,9 +239,14 @@ export class AccessAdministrationService {
       if (replay.requestHash !== requestHash) throw new IdempotencyConflictError(idempotencyKey);
       return structuredClone(replay.response);
     }
-    if ([...this.memoryUsers.values()].some((user) =>
-      user.subject === command.subject || user.email.toLocaleLowerCase() === command.email.toLocaleLowerCase()
-    )) throw new AccessUserAlreadyExistsError();
+    if (
+      [...this.memoryUsers.values()].some(
+        (user) =>
+          user.subject === command.subject ||
+          user.email.toLocaleLowerCase() === command.email.toLocaleLowerCase(),
+      )
+    )
+      throw new AccessUserAlreadyExistsError();
     if (command.teamId !== null && command.teamId !== TEAM_ID) {
       throw accessValidation({ teamId: "Команда не найдена" });
     }
@@ -277,8 +279,10 @@ export class AccessAdministrationService {
     const reservationId = randomUUID();
     const userId = randomUUID();
     const now = new Date();
-    return this.prisma.$transaction(async (transaction) => {
-      const inserted = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    return this.prisma
+      .$transaction(
+        async (transaction) => {
+          const inserted = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
         INSERT INTO "idempotency_record" (
           "id", "actor_id", "operation", "request_key", "request_hash", "created_at", "expires_at"
         ) VALUES (
@@ -293,95 +297,102 @@ export class AccessAdministrationService {
         ON CONFLICT ("actor_id", "operation", "request_key") DO NOTHING
         RETURNING "id"
       `);
-      if (inserted.length === 0) {
-        const existing = await transaction.idempotencyRecord.findUnique({
-          where: {
-            actorId_operation_requestKey: {
-              actorId,
-              operation: "settings.access.user.create",
-              requestKey: idempotencyKey,
-            },
-          },
-        });
-        if (!existing) throw new IdempotencyInProgressError(idempotencyKey);
-        if (existing.requestHash !== requestHash) throw new IdempotencyConflictError(idempotencyKey);
-        const replay = parseAccessUserResponse(existing.responseJson);
-        if (!replay) throw new IdempotencyInProgressError(idempotencyKey);
-        return replay;
-      }
+          if (inserted.length === 0) {
+            const existing = await transaction.idempotencyRecord.findUnique({
+              where: {
+                actorId_operation_requestKey: {
+                  actorId,
+                  operation: "settings.access.user.create",
+                  requestKey: idempotencyKey,
+                },
+              },
+            });
+            if (!existing) throw new IdempotencyInProgressError(idempotencyKey);
+            if (existing.requestHash !== requestHash)
+              throw new IdempotencyConflictError(idempotencyKey);
+            const replay = parseAccessUserResponse(existing.responseJson);
+            if (!replay) throw new IdempotencyInProgressError(idempotencyKey);
+            return replay;
+          }
 
-      const duplicate = await transaction.user.findFirst({
-        where: { OR: [{ externalSubject: command.subject }, { email: command.email }] },
-        select: { id: true },
-      });
-      if (duplicate) throw new AccessUserAlreadyExistsError();
-      if (command.teamId) {
-        const team = await transaction.team.findUnique({ where: { id: command.teamId }, select: { id: true } });
-        if (!team) throw accessValidation({ teamId: "Команда не найдена" });
-      }
-      await transaction.user.create({
-        data: {
-          id: userId,
-          externalSubject: command.subject,
-          displayName: command.displayName,
-          email: command.email,
-          teamId: command.teamId,
-          status: UserStatus.ACTIVE,
-          timezone: "Europe/Moscow",
+          const duplicate = await transaction.user.findFirst({
+            where: { OR: [{ externalSubject: command.subject }, { email: command.email }] },
+            select: { id: true },
+          });
+          if (duplicate) throw new AccessUserAlreadyExistsError();
+          if (command.teamId) {
+            const team = await transaction.team.findUnique({
+              where: { id: command.teamId },
+              select: { id: true },
+            });
+            if (!team) throw accessValidation({ teamId: "Команда не найдена" });
+          }
+          await transaction.user.create({
+            data: {
+              id: userId,
+              externalSubject: command.subject,
+              displayName: command.displayName,
+              email: command.email,
+              teamId: command.teamId,
+              status: UserStatus.ACTIVE,
+              timezone: "Europe/Moscow",
+            },
+          });
+          await transaction.userPermission.createMany({
+            data: [`role:${command.role}`, ...command.permissions].map((permission) => ({
+              userId,
+              permission,
+              source: `admin:${actorId}`,
+              grantedAt: now,
+            })),
+            skipDuplicates: true,
+          });
+          const created = await transaction.user.findUniqueOrThrow({
+            where: { id: userId },
+            include: {
+              team: { select: { name: true } },
+              permissions: { where: { revokedAt: null }, select: { permission: true } },
+            },
+          });
+          const response = postgresUserView(created, actorId);
+          await transaction.auditLog.create({
+            data: {
+              id: randomUUID(),
+              actorId,
+              action: "settings.access.user-created",
+              entityType: "User",
+              entityId: userId,
+              beforeJson: Prisma.DbNull,
+              afterJson: toJson({ ...accessSnapshot(response), reason: command.reason }),
+              occurredAt: now,
+            },
+          });
+          await transaction.outboxEvent.create({
+            data: {
+              id: randomUUID(),
+              eventType: "settings.access.user-created",
+              aggregateType: "User",
+              aggregateId: userId,
+              aggregateVersion: 1,
+              schemaVersion: 1,
+              payload: toJson({ ...accessSnapshot(response), actorId, reason: command.reason }),
+              occurredAt: now,
+            },
+          });
+          await transaction.idempotencyRecord.update({
+            where: { id: reservationId },
+            data: { responseStatus: 201, responseJson: toJson(response), completedAt: now },
+          });
+          return response;
         },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      )
+      .catch((error: unknown) => {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+          throw new AccessUserAlreadyExistsError();
+        }
+        throw error;
       });
-      await transaction.userPermission.createMany({
-        data: [`role:${command.role}`, ...command.permissions].map((permission) => ({
-          userId,
-          permission,
-          source: `admin:${actorId}`,
-          grantedAt: now,
-        })),
-        skipDuplicates: true,
-      });
-      const created = await transaction.user.findUniqueOrThrow({
-        where: { id: userId },
-        include: {
-          team: { select: { name: true } },
-          permissions: { where: { revokedAt: null }, select: { permission: true } },
-        },
-      });
-      const response = postgresUserView(created, actorId);
-      await transaction.auditLog.create({
-        data: {
-          id: randomUUID(),
-          actorId,
-          action: "settings.access.user-created",
-          entityType: "User",
-          entityId: userId,
-          beforeJson: Prisma.DbNull,
-          afterJson: toJson({ ...accessSnapshot(response), reason: command.reason }),
-          occurredAt: now,
-        },
-      });
-      await transaction.outboxEvent.create({
-        data: {
-          id: randomUUID(),
-          eventType: "settings.access.user-created",
-          aggregateType: "User",
-          aggregateId: userId,
-          aggregateVersion: 1,
-          schemaVersion: 1,
-          payload: toJson({ ...accessSnapshot(response), actorId, reason: command.reason }),
-          occurredAt: now,
-        },
-      });
-      await transaction.idempotencyRecord.update({
-        where: { id: reservationId },
-        data: { responseStatus: 201, responseJson: toJson(response), completedAt: now },
-      });
-      return response;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }).catch((error: unknown) => {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        throw new AccessUserAlreadyExistsError();
-      }
-      throw error;
-    });
   }
 
   private async updatePostgres(
@@ -393,8 +404,9 @@ export class AccessAdministrationService {
     const requestHash = accessUserRequestHash(command);
     const reservationId = randomUUID();
     const now = new Date();
-    return this.prisma.$transaction(async (transaction) => {
-      const inserted = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    return this.prisma.$transaction(
+      async (transaction) => {
+        const inserted = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
         INSERT INTO "idempotency_record" (
           "id", "actor_id", "operation", "request_key", "request_hash", "created_at", "expires_at"
         ) VALUES (
@@ -409,136 +421,145 @@ export class AccessAdministrationService {
         ON CONFLICT ("actor_id", "operation", "request_key") DO NOTHING
         RETURNING "id"
       `);
-      if (inserted.length === 0) {
-        const existing = await transaction.idempotencyRecord.findUnique({
-          where: {
-            actorId_operation_requestKey: {
-              actorId,
-              operation: "settings.access.user.update",
-              requestKey: idempotencyKey,
+        if (inserted.length === 0) {
+          const existing = await transaction.idempotencyRecord.findUnique({
+            where: {
+              actorId_operation_requestKey: {
+                actorId,
+                operation: "settings.access.user.update",
+                requestKey: idempotencyKey,
+              },
             },
-          },
-        });
-        if (!existing) throw new IdempotencyInProgressError(idempotencyKey);
-        if (existing.requestHash !== requestHash) throw new IdempotencyConflictError(idempotencyKey);
-        const replay = parseAccessUserResponse(existing.responseJson);
-        if (!replay) throw new IdempotencyInProgressError(idempotencyKey);
-        return replay;
-      }
+          });
+          if (!existing) throw new IdempotencyInProgressError(idempotencyKey);
+          if (existing.requestHash !== requestHash)
+            throw new IdempotencyConflictError(idempotencyKey);
+          const replay = parseAccessUserResponse(existing.responseJson);
+          if (!replay) throw new IdempotencyInProgressError(idempotencyKey);
+          return replay;
+        }
 
-      await transaction.$queryRaw(Prisma.sql`
+        await transaction.$queryRaw(Prisma.sql`
         SELECT "id" FROM "user_account" WHERE "id" = ${targetUserId}::uuid FOR UPDATE
       `);
-      const current = await transaction.user.findUnique({
-        where: { id: targetUserId },
-        include: {
-          team: { select: { name: true } },
-          permissions: { where: { revokedAt: null }, select: { permission: true } },
-        },
-      });
-      if (!current || current.externalSubject.startsWith("system:")) {
-        throw new AccessUserNotFoundError();
-      }
-      if (current.version !== command.version) {
-        throw new AccessUserVersionConflictError(current.version);
-      }
-      const currentView = postgresUserView(current, actorId);
-      if (targetUserId === actorId && accessChanged(currentView, command)) {
-        throw unsafeChange("ACCESS_SELF_MODIFICATION", "Нельзя изменять собственную роль, статус или разрешения");
-      }
-      if (
-        currentView.status === "active" &&
-        currentView.role === "admin" &&
-        (command.status !== "active" || command.role !== "admin")
-      ) {
-        const otherAdmins = await transaction.user.count({
-          where: {
-            id: { not: targetUserId },
-            status: UserStatus.ACTIVE,
-            permissions: {
-              some: { permission: "role:admin", revokedAt: null },
-            },
+        const current = await transaction.user.findUnique({
+          where: { id: targetUserId },
+          include: {
+            team: { select: { name: true } },
+            permissions: { where: { revokedAt: null }, select: { permission: true } },
           },
         });
-        if (otherAdmins === 0) {
-          throw unsafeChange("ACCESS_LAST_ADMIN", "Нельзя отключить или понизить последнего администратора");
+        if (!current || current.externalSubject.startsWith("system:")) {
+          throw new AccessUserNotFoundError();
         }
-      }
+        if (current.version !== command.version) {
+          throw new AccessUserVersionConflictError(current.version);
+        }
+        const currentView = postgresUserView(current, actorId);
+        if (targetUserId === actorId && accessChanged(currentView, command)) {
+          throw unsafeChange(
+            "ACCESS_SELF_MODIFICATION",
+            "Нельзя изменять собственную роль, статус или разрешения",
+          );
+        }
+        if (
+          currentView.status === "active" &&
+          currentView.role === "admin" &&
+          (command.status !== "active" || command.role !== "admin")
+        ) {
+          const otherAdmins = await transaction.user.count({
+            where: {
+              id: { not: targetUserId },
+              status: UserStatus.ACTIVE,
+              permissions: {
+                some: { permission: "role:admin", revokedAt: null },
+              },
+            },
+          });
+          if (otherAdmins === 0) {
+            throw unsafeChange(
+              "ACCESS_LAST_ADMIN",
+              "Нельзя отключить или понизить последнего администратора",
+            );
+          }
+        }
 
-      const changed = await transaction.user.updateMany({
-        where: { id: targetUserId, version: command.version },
-        data: {
-          status: command.status === "active" ? UserStatus.ACTIVE : UserStatus.INACTIVE,
-          version: { increment: 1 },
-          updatedAt: now,
-        },
-      });
-      if (changed.count !== 1) throw new AccessUserVersionConflictError(command.version + 1);
-
-      const desired = [`role:${command.role}`, ...command.permissions];
-      await transaction.userPermission.updateMany({
-        where: {
-          userId: targetUserId,
-          revokedAt: null,
-          permission: { in: MANAGED_PERMISSIONS, notIn: desired },
-        },
-        data: { revokedAt: now },
-      });
-      for (const permission of desired) {
-        await transaction.userPermission.upsert({
-          where: { userId_permission: { userId: targetUserId, permission } },
-          update: { revokedAt: null, grantedAt: now, source: `admin:${actorId}` },
-          create: {
-            userId: targetUserId,
-            permission,
-            grantedAt: now,
-            source: `admin:${actorId}`,
+        const changed = await transaction.user.updateMany({
+          where: { id: targetUserId, version: command.version },
+          data: {
+            status: command.status === "active" ? UserStatus.ACTIVE : UserStatus.INACTIVE,
+            version: { increment: 1 },
+            updatedAt: now,
           },
         });
-      }
+        if (changed.count !== 1) throw new AccessUserVersionConflictError(command.version + 1);
 
-      const updated = await transaction.user.findUniqueOrThrow({
-        where: { id: targetUserId },
-        include: {
-          team: { select: { name: true } },
-          permissions: { where: { revokedAt: null }, select: { permission: true } },
-        },
-      });
-      const response = postgresUserView(updated, actorId);
-      await transaction.auditLog.create({
-        data: {
-          id: randomUUID(),
-          actorId,
-          action: "settings.access.user-updated",
-          entityType: "User",
-          entityId: targetUserId,
-          beforeJson: toJson(accessSnapshot(currentView)),
-          afterJson: toJson({ ...accessSnapshot(response), reason: command.reason }),
-          occurredAt: now,
-        },
-      });
-      await transaction.outboxEvent.create({
-        data: {
-          id: randomUUID(),
-          eventType: "settings.access.user-updated",
-          aggregateType: "User",
-          aggregateId: targetUserId,
-          aggregateVersion: response.version,
-          schemaVersion: 1,
-          payload: toJson({ ...accessSnapshot(response), actorId, reason: command.reason }),
-          occurredAt: now,
-        },
-      });
-      await transaction.idempotencyRecord.update({
-        where: { id: reservationId },
-        data: {
-          responseStatus: 200,
-          responseJson: toJson(response),
-          completedAt: now,
-        },
-      });
-      return response;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+        const desired = [`role:${command.role}`, ...command.permissions];
+        await transaction.userPermission.updateMany({
+          where: {
+            userId: targetUserId,
+            revokedAt: null,
+            permission: { in: MANAGED_PERMISSIONS, notIn: desired },
+          },
+          data: { revokedAt: now },
+        });
+        for (const permission of desired) {
+          await transaction.userPermission.upsert({
+            where: { userId_permission: { userId: targetUserId, permission } },
+            update: { revokedAt: null, grantedAt: now, source: `admin:${actorId}` },
+            create: {
+              userId: targetUserId,
+              permission,
+              grantedAt: now,
+              source: `admin:${actorId}`,
+            },
+          });
+        }
+
+        const updated = await transaction.user.findUniqueOrThrow({
+          where: { id: targetUserId },
+          include: {
+            team: { select: { name: true } },
+            permissions: { where: { revokedAt: null }, select: { permission: true } },
+          },
+        });
+        const response = postgresUserView(updated, actorId);
+        await transaction.auditLog.create({
+          data: {
+            id: randomUUID(),
+            actorId,
+            action: "settings.access.user-updated",
+            entityType: "User",
+            entityId: targetUserId,
+            beforeJson: toJson(accessSnapshot(currentView)),
+            afterJson: toJson({ ...accessSnapshot(response), reason: command.reason }),
+            occurredAt: now,
+          },
+        });
+        await transaction.outboxEvent.create({
+          data: {
+            id: randomUUID(),
+            eventType: "settings.access.user-updated",
+            aggregateType: "User",
+            aggregateId: targetUserId,
+            aggregateVersion: response.version,
+            schemaVersion: 1,
+            payload: toJson({ ...accessSnapshot(response), actorId, reason: command.reason }),
+            occurredAt: now,
+          },
+        });
+        await transaction.idempotencyRecord.update({
+          where: { id: reservationId },
+          data: {
+            responseStatus: 200,
+            responseJson: toJson(response),
+            completedAt: now,
+          },
+        });
+        return response;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 }
 
@@ -557,11 +578,12 @@ function parseCreateAccessUserCommand(input: unknown): CreateAccessUserCommand {
   if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email)) {
     fieldErrors.email = "Укажите корректный корпоративный email";
   }
-  const teamId = input.teamId === null || input.teamId === undefined || input.teamId === ""
-    ? null
-    : typeof input.teamId === "string" && isUuid(input.teamId)
-      ? input.teamId
-      : (fieldErrors.teamId = "Выберите существующую команду", null);
+  const teamId =
+    input.teamId === null || input.teamId === undefined || input.teamId === ""
+      ? null
+      : typeof input.teamId === "string" && isUuid(input.teamId)
+        ? input.teamId
+        : ((fieldErrors.teamId = "Выберите существующую команду"), null);
   const role = actorRoles.find((candidate) => candidate === input.role);
   if (!role) fieldErrors.role = "Выберите поддерживаемую роль";
   const permissions = Array.isArray(input.permissions)
@@ -581,12 +603,14 @@ function parseCreateAccessUserCommand(input: unknown): CreateAccessUserCommand {
 function parseUpdateAccessUserCommand(input: unknown): UpdateAccessUserCommand {
   if (!isRecord(input)) throw accessValidation({ command: "Передайте настройки пользователя" });
   const fieldErrors: Record<string, string> = {};
-  const version = Number.isInteger(input.version) && Number(input.version) > 0
-    ? Number(input.version)
-    : (fieldErrors.version = "Версия должна быть положительным целым числом", 0);
-  const status = input.status === "active" || input.status === "inactive"
-    ? input.status
-    : (fieldErrors.status = "Выберите статус active или inactive", "active");
+  const version =
+    Number.isInteger(input.version) && Number(input.version) > 0
+      ? Number(input.version)
+      : ((fieldErrors.version = "Версия должна быть положительным целым числом"), 0);
+  const status =
+    input.status === "active" || input.status === "inactive"
+      ? input.status
+      : ((fieldErrors.status = "Выберите статус active или inactive"), "active");
   const role = actorRoles.find((candidate) => candidate === input.role);
   if (!role) fieldErrors.role = "Выберите поддерживаемую роль";
   const permissions = Array.isArray(input.permissions)
@@ -610,15 +634,23 @@ function assertSafeAccessChange(
   allUsers: MemoryAccessUser[],
 ) {
   if (actorId === current.id && accessChanged(current, command)) {
-    throw unsafeChange("ACCESS_SELF_MODIFICATION", "Нельзя изменять собственную роль, статус или разрешения");
+    throw unsafeChange(
+      "ACCESS_SELF_MODIFICATION",
+      "Нельзя изменять собственную роль, статус или разрешения",
+    );
   }
   if (
     current.status === "active" &&
     current.role === "admin" &&
     (command.status !== "active" || command.role !== "admin") &&
-    !allUsers.some((user) => user.id !== current.id && user.status === "active" && user.role === "admin")
+    !allUsers.some(
+      (user) => user.id !== current.id && user.status === "active" && user.role === "admin",
+    )
   ) {
-    throw unsafeChange("ACCESS_LAST_ADMIN", "Нельзя отключить или понизить последнего администратора");
+    throw unsafeChange(
+      "ACCESS_LAST_ADMIN",
+      "Нельзя отключить или понизить последнего администратора",
+    );
   }
 }
 
@@ -626,9 +658,11 @@ function accessChanged(
   current: Pick<AccessUserView, "role" | "status" | "permissions">,
   command: UpdateAccessUserCommand,
 ) {
-  return current.role !== command.role ||
+  return (
+    current.role !== command.role ||
     current.status !== command.status ||
-    [...current.permissions].sort().join("|") !== [...command.permissions].sort().join("|");
+    [...current.permissions].sort().join("|") !== [...command.permissions].sort().join("|")
+  );
 }
 
 function postgresUserView(
@@ -667,11 +701,46 @@ function postgresUserView(
 function seedMemoryUsers(): MemoryAccessUser[] {
   const updatedAt = "2026-08-19T09:00:00.000Z";
   return [
-    memoryUser("00000000-0000-4000-8000-000000000001", "bootstrap:anna.sokolova", "Анна Соколова", "anna.sokolova@example.invalid", "admin", updatedAt),
-    memoryUser("00000000-0000-4000-8000-000000000003", "bootstrap:observer", "Наблюдатель", "observer@example.invalid", "observer", updatedAt),
-    memoryUser("00000000-0000-4000-8000-000000000005", "bootstrap:sergey.volkov", "Сергей Волков", "sergey.volkov@example.invalid", "partner_manager", updatedAt),
-    memoryUser("00000000-0000-4000-8000-000000000006", "bootstrap:elena.orlova", "Елена Орлова", "elena.orlova@example.invalid", "team_lead", updatedAt),
-    memoryUser("00000000-0000-4000-8000-000000000007", "bootstrap:mikhail.lebedev", "Михаил Лебедев", "mikhail.lebedev@example.invalid", "technical_specialist", updatedAt),
+    memoryUser(
+      "00000000-0000-4000-8000-000000000001",
+      "bootstrap:anna.sokolova",
+      "Анна Соколова",
+      "anna.sokolova@example.invalid",
+      "admin",
+      updatedAt,
+    ),
+    memoryUser(
+      "00000000-0000-4000-8000-000000000003",
+      "bootstrap:observer",
+      "Наблюдатель",
+      "observer@example.invalid",
+      "observer",
+      updatedAt,
+    ),
+    memoryUser(
+      "00000000-0000-4000-8000-000000000005",
+      "bootstrap:sergey.volkov",
+      "Сергей Волков",
+      "sergey.volkov@example.invalid",
+      "partner_manager",
+      updatedAt,
+    ),
+    memoryUser(
+      "00000000-0000-4000-8000-000000000006",
+      "bootstrap:elena.orlova",
+      "Елена Орлова",
+      "elena.orlova@example.invalid",
+      "team_lead",
+      updatedAt,
+    ),
+    memoryUser(
+      "00000000-0000-4000-8000-000000000007",
+      "bootstrap:mikhail.lebedev",
+      "Михаил Лебедев",
+      "mikhail.lebedev@example.invalid",
+      "technical_specialist",
+      updatedAt,
+    ),
   ];
 }
 
@@ -724,7 +793,7 @@ function accessSnapshot(user: AccessUserView) {
 
 function parseAccessUserResponse(value: unknown): AccessUserView | null {
   return isRecord(value) && typeof value.id === "string" && typeof value.version === "number"
-    ? value as unknown as AccessUserView
+    ? (value as unknown as AccessUserView)
     : null;
 }
 
@@ -748,8 +817,14 @@ function scopeFor(role: ActorRole): SessionPayload["scope"]["mode"] {
 }
 
 function initialsFor(displayName: string) {
-  return displayName.trim().split(/\s+/u).slice(0, 2)
-    .map((part) => part[0]?.toLocaleUpperCase("ru-RU") ?? "").join("") || "?";
+  return (
+    displayName
+      .trim()
+      .split(/\s+/u)
+      .slice(0, 2)
+      .map((part) => part[0]?.toLocaleUpperCase("ru-RU") ?? "")
+      .join("") || "?"
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -24,9 +24,7 @@ describe("calculatePriority", () => {
   });
 
   it("reduces waiting work before its review date", () => {
-    expect(
-      calculatePriority({ partnerScore: 80, isWaitingBeforeReview: true }).score,
-    ).toBe(0);
+    expect(calculatePriority({ partnerScore: 80, isWaitingBeforeReview: true }).score).toBe(0);
   });
 
   it("keeps the result in the inclusive 0..100 range", () => {
@@ -41,4 +39,3 @@ describe("calculatePriority", () => {
     ).toBe(100);
   });
 });
-

@@ -47,9 +47,10 @@ export class PartnerService implements PartnerPort {
     );
     const partners = allPartners
       .filter((partner) => matchesPartner(partner, query))
-      .sort((left, right) =>
-        (right.partnerScore ?? -1) - (left.partnerScore ?? -1) ||
-        left.name.localeCompare(right.name, "ru"),
+      .sort(
+        (left, right) =>
+          (right.partnerScore ?? -1) - (left.partnerScore ?? -1) ||
+          left.name.localeCompare(right.name, "ru"),
       );
 
     return {
@@ -68,8 +69,8 @@ export class PartnerService implements PartnerPort {
     const actions = today.actions.filter((action) => action.organizationId === organizationId);
     if (actions.length === 0) throw new PartnerNotFoundError(organizationId);
     const allPlacements = await this.placements.list();
-    const placements = allPlacements.filter((placement) =>
-      placement.organizationId === organizationId,
+    const placements = allPlacements.filter(
+      (placement) => placement.organizationId === organizationId,
     );
     const organization = toRegistryItem(actions, placements, now);
     const contacts = this.today.listContacts({ status: "active", organizationId }).contacts;
@@ -114,12 +115,7 @@ export class PartnerService implements PartnerPort {
       generatedAt: now.toISOString(),
       summary: partnerSummary(organization),
       organization,
-      organizationGroup: demoOrganizationGroup(
-        organization,
-        today.actions,
-        allPlacements,
-        now,
-      ),
+      organizationGroup: demoOrganizationGroup(organization, today.actions, allPlacements, now),
       contacts,
       opportunities,
       interactions,
@@ -182,12 +178,12 @@ function toRegistryItem(
   placements: PlacementView[],
   now: Date,
 ): PartnerRegistryItem {
-  const primary = [...actions].sort((left, right) =>
-    (right.partnerScore ?? -1) - (left.partnerScore ?? -1),
+  const primary = [...actions].sort(
+    (left, right) => (right.partnerScore ?? -1) - (left.partnerScore ?? -1),
   )[0];
   if (!primary) throw new Error("Partner action group is empty");
-  const organizationPlacements = placements.filter((placement) =>
-    placement.organizationId === primary.organizationId,
+  const organizationPlacements = placements.filter(
+    (placement) => placement.organizationId === primary.organizationId,
   );
   const opportunityActions = uniqueBy(actions, ({ opportunityId }) => opportunityId);
   const contacts = new Set(actions.flatMap((action) => action.contacts.map(({ id }) => id)));
@@ -197,9 +193,9 @@ function toRegistryItem(
     isPrimary: index === 0,
     verifiedAt: action.opportunityStageData?.researchCheckedAt ?? null,
   }));
-  const lastActivityAt = latestIso(actions.flatMap((action) => [
-    action.lastInteraction?.occurredAt ?? null,
-  ]));
+  const lastActivityAt = latestIso(
+    actions.flatMap((action) => [action.lastInteraction?.occurredAt ?? null]),
+  );
   const nextActionSource = [...actions]
     .filter((action) => action.dueAt !== null)
     .sort((left, right) => (left.dueAt ?? "").localeCompare(right.dueAt ?? ""))[0];
@@ -235,53 +231,69 @@ function integrationStatus(
   placements: PlacementView[],
   opportunities: TodayAction[],
 ): PartnerIntegrationStatus {
-  if (placements.some((placement) =>
-    placement.healthStatus === "failed" ||
-    placement.healthStatus === "degraded" ||
-    placement.activeAlert !== null,
-  )) return "issue";
+  if (
+    placements.some(
+      (placement) =>
+        placement.healthStatus === "failed" ||
+        placement.healthStatus === "degraded" ||
+        placement.activeAlert !== null,
+    )
+  )
+    return "issue";
   if (placements.some(({ businessStatus }) => businessStatus === "active")) return "active";
   if (
     placements.some(({ businessStatus }) => businessStatus === "planned") ||
     opportunities.some(({ stageCode }) => ["S7", "S8", "S9", "S10"].includes(stageCode))
-  ) return "planned";
+  )
+    return "planned";
   return "not_started";
 }
 
 function matchesPartner(partner: PartnerRegistryItem, query: PartnerRegistryQuery) {
   const search = query.search?.toLocaleLowerCase("ru");
-  if (search && ![
-    partner.name,
-    partner.legalName,
-    partner.segment,
-    partner.organizationGroup?.name,
-    ...partner.domains.map(({ host }) => host),
-  ].some((value) => value?.toLocaleLowerCase("ru").includes(search))) return false;
+  if (
+    search &&
+    ![
+      partner.name,
+      partner.legalName,
+      partner.segment,
+      partner.organizationGroup?.name,
+      ...partner.domains.map(({ host }) => host),
+    ].some((value) => value?.toLocaleLowerCase("ru").includes(search))
+  )
+    return false;
   if (query.groupId && partner.organizationGroup?.id !== query.groupId) return false;
   if (query.segment && partner.segment !== query.segment) return false;
   if (query.ownerId && partner.owner?.id !== query.ownerId) return false;
   if (query.stageCode && partner.currentStage?.code !== query.stageCode) return false;
   if (query.scoreMin !== undefined && (partner.partnerScore ?? -1) < query.scoreMin) return false;
-  if (query.scoreMax !== undefined && (partner.partnerScore ?? Number.POSITIVE_INFINITY) > query.scoreMax) return false;
-  if (query.integrationStatus && partner.integrationStatus !== query.integrationStatus) return false;
-  if (query.activeAfter && (!partner.lastActivityAt || partner.lastActivityAt < query.activeAfter)) return false;
+  if (
+    query.scoreMax !== undefined &&
+    (partner.partnerScore ?? Number.POSITIVE_INFINITY) > query.scoreMax
+  )
+    return false;
+  if (query.integrationStatus && partner.integrationStatus !== query.integrationStatus)
+    return false;
+  if (query.activeAfter && (!partner.lastActivityAt || partner.lastActivityAt < query.activeAfter))
+    return false;
   return true;
 }
 
 function registryFilters(partners: PartnerRegistryItem[]): PartnerRegistryPayload["filters"] {
   return {
     groups: uniqueBy(
-      partners.flatMap(({ organizationGroup }) => organizationGroup ? [organizationGroup] : []),
+      partners.flatMap(({ organizationGroup }) => (organizationGroup ? [organizationGroup] : [])),
       ({ id }) => id,
     ).sort((left, right) => left.name.localeCompare(right.name, "ru")),
-    segments: [...new Set(partners.flatMap(({ segment }) => segment ? [segment] : []))]
-      .sort((left, right) => left.localeCompare(right, "ru")),
+    segments: [...new Set(partners.flatMap(({ segment }) => (segment ? [segment] : [])))].sort(
+      (left, right) => left.localeCompare(right, "ru"),
+    ),
     owners: uniqueBy(
-      partners.flatMap(({ owner }) => owner ? [owner] : []),
+      partners.flatMap(({ owner }) => (owner ? [owner] : [])),
       ({ id }) => id,
     ).sort((left, right) => left.name.localeCompare(right.name, "ru")),
     stages: uniqueBy(
-      partners.flatMap(({ currentStage }) => currentStage ? [currentStage] : []),
+      partners.flatMap(({ currentStage }) => (currentStage ? [currentStage] : [])),
       ({ code }) => code,
     ).sort((left, right) => left.code.localeCompare(right.code)),
     integrationStatuses: ["not_started", "planned", "active", "issue"],
@@ -339,16 +351,48 @@ function demoOrganizationGroup(
 function partnerMetrics(organization: PartnerRegistryItem, now: Date): PartnerMetricView[] {
   const dataAsOf = now.toISOString();
   return [
-    { code: "partner_score", label: "Partner Score", value: organization.partnerScore ?? 0, dataAsOf, completeness: organization.partnerScore === null ? "unavailable" : "complete" },
-    { code: "contacts", label: "Контакты", value: organization.counts.contacts, dataAsOf, completeness: "complete" },
-    { code: "opportunities", label: "Возможности", value: organization.counts.opportunities, dataAsOf, completeness: "complete" },
-    { code: "active_tasks", label: "Активные задачи", value: organization.counts.tasks, dataAsOf, completeness: "complete" },
-    { code: "active_placements", label: "Размещения", value: organization.counts.placements, dataAsOf, completeness: "complete" },
+    {
+      code: "partner_score",
+      label: "Partner Score",
+      value: organization.partnerScore ?? 0,
+      dataAsOf,
+      completeness: organization.partnerScore === null ? "unavailable" : "complete",
+    },
+    {
+      code: "contacts",
+      label: "Контакты",
+      value: organization.counts.contacts,
+      dataAsOf,
+      completeness: "complete",
+    },
+    {
+      code: "opportunities",
+      label: "Возможности",
+      value: organization.counts.opportunities,
+      dataAsOf,
+      completeness: "complete",
+    },
+    {
+      code: "active_tasks",
+      label: "Активные задачи",
+      value: organization.counts.tasks,
+      dataAsOf,
+      completeness: "complete",
+    },
+    {
+      code: "active_placements",
+      label: "Размещения",
+      value: organization.counts.placements,
+      dataAsOf,
+      completeness: "complete",
+    },
   ];
 }
 
 function partnerSummary(partner: PartnerRegistryItem) {
-  const domain = partner.primaryDomain ? `Основной домен — ${partner.primaryDomain}.` : "Основной домен не указан.";
+  const domain = partner.primaryDomain
+    ? `Основной домен — ${partner.primaryDomain}.`
+    : "Основной домен не указан.";
   const stage = partner.currentStage
     ? `Текущая стадия — ${partner.currentStage.label}.`
     : "Активной возможности нет.";
@@ -356,7 +400,12 @@ function partnerSummary(partner: PartnerRegistryItem) {
 }
 
 function latestIso(values: Array<string | null>) {
-  return values.filter((value): value is string => value !== null).sort().at(-1) ?? null;
+  return (
+    values
+      .filter((value): value is string => value !== null)
+      .sort()
+      .at(-1) ?? null
+  );
 }
 
 function uniqueBy<T, K>(values: T[], key: (value: T) => K) {

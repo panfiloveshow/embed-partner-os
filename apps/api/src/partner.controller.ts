@@ -1,4 +1,16 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Param, Post, Query, Req, Res } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Inject,
+  Param,
+  Post,
+  Query,
+  Req,
+  Res,
+} from "@nestjs/common";
 import { ApiOperation, ApiParam, ApiResponse, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import type {
@@ -55,10 +67,7 @@ export class PartnerController {
     @Body() body: unknown,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const result = await this.partners.exportPartners(
-      exportQuery(body),
-      request.actor!.subject,
-    );
+    const result = await this.partners.exportPartners(exportQuery(body), request.actor!.subject);
     response.setHeader("Content-Type", result.contentType);
     response.setHeader("Content-Disposition", `attachment; filename="${result.audit.fileName}"`);
     response.setHeader("Cache-Control", "no-store");
@@ -70,9 +79,7 @@ export class PartnerController {
   @Get("exports/audit")
   @RequirePermission("partners.export.audit")
   @ApiOperation({ summary: "Получить аудит экспортов доступной команды" })
-  async exportAudit(
-    @Req() request: ActorRequest,
-  ): Promise<PartnerExportAuditView[]> {
+  async exportAudit(@Req() request: ActorRequest): Promise<PartnerExportAuditView[]> {
     return this.partners.listPartnerExportAudit(request.actor!.subject);
   }
 

@@ -3,9 +3,7 @@ import { hostname } from "node:os";
 import { setTimeout as wait } from "node:timers/promises";
 import { NestFactory } from "@nestjs/core";
 import { AppModule } from "../app.module.js";
-import {
-  PlacementMonitorService,
-} from "../monitoring/placement-monitor.service.js";
+import { PlacementMonitorService } from "../monitoring/placement-monitor.service.js";
 import { PrismaPlacementMonitorStore } from "../monitoring/prisma-placement-monitor.store.js";
 import type { PlacementPort } from "../placement.port.js";
 import { PLACEMENT_PORT } from "../placement.port.js";
@@ -21,7 +19,8 @@ async function bootstrap() {
   const batchSize = integerSetting("PLACEMENT_MONITOR_BATCH_SIZE", 10, 1, 500);
   const leaseMs = integerSetting("PLACEMENT_MONITOR_LEASE_MS", 60_000, 1_000, 15 * 60_000);
   const maxAttempts = integerSetting("PLACEMENT_MONITOR_MAX_ATTEMPTS", 8, 1, 50);
-  const workerId = process.env.PLACEMENT_MONITOR_WORKER_ID?.trim() ||
+  const workerId =
+    process.env.PLACEMENT_MONITOR_WORKER_ID?.trim() ||
     `${hostname()}:${process.pid}:placement-monitor`;
   const monitor = new PlacementMonitorService(
     new PrismaPlacementMonitorStore(prisma),

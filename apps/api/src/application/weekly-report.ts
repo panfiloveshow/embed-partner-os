@@ -107,9 +107,7 @@ export function buildWeeklyReportPayload(
       label: stageOpportunities[0]?.stageLabel ?? code,
       opportunities: stageOpportunities.length,
       medianAgeDays: median(
-        stageOpportunities.map((opportunity) =>
-          ageInDays(opportunity.stageEnteredAt, dataAsOf),
-        ),
+        stageOpportunities.map((opportunity) => ageInDays(opportunity.stageEnteredAt, dataAsOf)),
       ),
     }));
 
@@ -120,26 +118,30 @@ export function buildWeeklyReportPayload(
         left.activityMarkerAt.getTime() - right.activityMarkerAt.getTime() ||
         left.id.localeCompare(right.id),
     )
-    .map(
-      (incident): WeeklyReportException => ({
-        code: "sla-escalation",
-        severity: "high",
-        organizationId: incident.organizationId,
-        organizationName: incident.organizationName,
-        opportunityId: incident.opportunityId,
-        ownerName: incident.ownerName,
-        title: `SLA стадии «${incident.stageLabel}» нарушен и эскалирован`,
-        ageDays: ageInDays(incident.activityMarkerAt, dataAsOf),
-      }),
-    );
+    .map((incident): WeeklyReportException => ({
+      code: "sla-escalation",
+      severity: "high",
+      organizationId: incident.organizationId,
+      organizationName: incident.organizationName,
+      opportunityId: incident.opportunityId,
+      ownerName: incident.ownerName,
+      title: `SLA стадии «${incident.stageLabel}» нарушен и эскалирован`,
+      ageDays: ageInDays(incident.activityMarkerAt, dataAsOf),
+    }));
   const escalatedOpportunityIds = new Set(
     slaEscalations.map((exception) => exception.opportunityId),
   );
   const stageStalls = active
     .filter((opportunity) => !escalatedOpportunityIds.has(opportunity.id))
-    .map((opportunity) => ({ opportunity, ageDays: ageInDays(opportunity.stageEnteredAt, dataAsOf) }))
+    .map((opportunity) => ({
+      opportunity,
+      ageDays: ageInDays(opportunity.stageEnteredAt, dataAsOf),
+    }))
     .filter(({ ageDays }) => ageDays >= 7)
-    .sort((left, right) => right.ageDays - left.ageDays || left.opportunity.id.localeCompare(right.opportunity.id))
+    .sort(
+      (left, right) =>
+        right.ageDays - left.ageDays || left.opportunity.id.localeCompare(right.opportunity.id),
+    )
     .slice(0, 10)
     .map(({ opportunity, ageDays }): WeeklyReportException => ({
       code: "stage-stall",
@@ -155,33 +157,32 @@ export function buildWeeklyReportPayload(
 
   const overdueTasks = source.tasks
     .filter((task) => task.status === "OPEN" && task.dueAt < dataAsOf)
-    .sort((left, right) => left.dueAt.getTime() - right.dueAt.getTime() || left.id.localeCompare(right.id));
-  const overdueExceptions = overdueTasks.map(
-    (task): WeeklyReportException => ({
-      code: "overdue-task",
-      severity: ageInDays(task.dueAt, dataAsOf) >= 3 ? "high" : "medium",
-      organizationId: task.organizationId,
-      organizationName: task.organizationName,
-      opportunityId: task.opportunityId,
-      ownerName: task.ownerName,
-      title: task.title,
-      ageDays: ageInDays(task.dueAt, dataAsOf),
-    }),
-  );
+    .sort(
+      (left, right) =>
+        left.dueAt.getTime() - right.dueAt.getTime() || left.id.localeCompare(right.id),
+    );
+  const overdueExceptions = overdueTasks.map((task): WeeklyReportException => ({
+    code: "overdue-task",
+    severity: ageInDays(task.dueAt, dataAsOf) >= 3 ? "high" : "medium",
+    organizationId: task.organizationId,
+    organizationName: task.organizationName,
+    opportunityId: task.opportunityId,
+    ownerName: task.ownerName,
+    title: task.title,
+    ageDays: ageInDays(task.dueAt, dataAsOf),
+  }));
   const missingNextAction = active
     .filter((opportunity) => opportunity.nextTaskId === null)
-    .map(
-      (opportunity): WeeklyReportException => ({
-        code: "missing-next-action",
-        severity: "high",
-        organizationId: opportunity.organizationId,
-        organizationName: opportunity.organizationName,
-        opportunityId: opportunity.id,
-        ownerName: opportunity.ownerName,
-        title: "У активной возможности отсутствует следующее действие",
-        ageDays: ageInDays(opportunity.stageEnteredAt, dataAsOf),
-      }),
-    );
+    .map((opportunity): WeeklyReportException => ({
+      code: "missing-next-action",
+      severity: "high",
+      organizationId: opportunity.organizationId,
+      organizationName: opportunity.organizationName,
+      opportunityId: opportunity.id,
+      ownerName: opportunity.ownerName,
+      title: "У активной возможности отсутствует следующее действие",
+      ageDays: ageInDays(opportunity.stageEnteredAt, dataAsOf),
+    }));
   const exceptions = [...overdueExceptions, ...missingNextAction, ...topStalls]
     .sort(compareExceptions)
     .slice(0, 10);
@@ -341,7 +342,7 @@ function median(values: number[]) {
   const ordered = [...values].sort((left, right) => left - right);
   const middle = Math.floor(ordered.length / 2);
   return ordered.length % 2 === 1
-    ? ordered[middle] ?? null
+    ? (ordered[middle] ?? null)
     : Math.round((((ordered[middle - 1] ?? 0) + (ordered[middle] ?? 0)) / 2) * 10) / 10;
 }
 

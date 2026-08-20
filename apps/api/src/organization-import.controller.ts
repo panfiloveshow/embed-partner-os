@@ -31,16 +31,16 @@ interface UploadedOrganizationImport {
 @Controller("imports/organizations")
 @RequirePermission("imports.organizations.write")
 export class OrganizationImportController {
-  constructor(
-    @Inject(ORGANIZATION_IMPORT_PORT) private readonly imports: OrganizationImportPort,
-  ) {}
+  constructor(@Inject(ORGANIZATION_IMPORT_PORT) private readonly imports: OrganizationImportPort) {}
 
   @Post("preview")
   @UseInterceptors(FileInterceptor("file", { limits: { files: 1, fileSize: 10 * 1024 * 1024 } }))
   @ApiConsumes("multipart/form-data")
   @ApiOperation({ summary: "Проверить CSV/XLSX и подготовить построчный предпросмотр" })
   @ApiResponse({ status: 201, description: "Предпросмотр импорта подготовлен" })
-  preview(@UploadedFile() file: UploadedOrganizationImport | undefined): Promise<OrganizationImportJob> {
+  preview(
+    @UploadedFile() file: UploadedOrganizationImport | undefined,
+  ): Promise<OrganizationImportJob> {
     if (!file) throw new BadRequestException("Добавьте CSV или XLSX в поле file");
     return this.imports.preview({ fileName: file.originalname, buffer: file.buffer });
   }

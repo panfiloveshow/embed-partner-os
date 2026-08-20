@@ -35,7 +35,9 @@ export function extractRadarPageFeatures(
   };
   const title = firstTagText(html, "title");
   const description = metaContent(html, "description") ?? metaContent(html, "og:description");
-  const summary = compactText([title, metaContent(html, "og:title"), description].filter(Boolean).join(" "));
+  const summary = compactText(
+    [title, metaContent(html, "og:title"), description].filter(Boolean).join(" "),
+  );
 
   const language = htmlAttribute(html, "lang")?.split(/[-_]/, 1)[0]?.toLocaleLowerCase("en-US");
   if (language && /^[a-z]{2,3}$/.test(language)) {
@@ -58,12 +60,15 @@ export function extractRadarPageFeatures(
   const publicationFrequency = detectPublicationFrequency(html);
   if (publicationFrequency) {
     features.publicationFrequency = publicationFrequency.value;
-    add("publicationFrequency", signal(
-      "Частота публикаций",
-      frequencyLabel(publicationFrequency.value),
-      `${publicationFrequency.count} дат публикаций на странице`,
-      publicationFrequency.confidence,
-    ));
+    add(
+      "publicationFrequency",
+      signal(
+        "Частота публикаций",
+        frequencyLabel(publicationFrequency.value),
+        `${publicationFrequency.count} дат публикаций на странице`,
+        publicationFrequency.confidence,
+      ),
+    );
   }
 
   const contacts = detectContacts(html, pageUrl);
@@ -71,12 +76,15 @@ export function extractRadarPageFeatures(
   if (contacts.length > 0) {
     features.contactsFound = true;
     const direct = contacts.filter(({ type }) => type !== "contact_page").length;
-    add("contactsFound", signal(
-      "Контакты",
-      "Найдены",
-      direct > 0 ? `${direct} публичных каналов связи` : "страница контактов",
-      direct > 0 ? "high" : "medium",
-    ));
+    add(
+      "contactsFound",
+      signal(
+        "Контакты",
+        "Найдены",
+        direct > 0 ? `${direct} публичных каналов связи` : "страница контактов",
+        direct > 0 ? "high" : "medium",
+      ),
+    );
   }
 
   const cms = detectCms(html);
@@ -89,12 +97,15 @@ export function extractRadarPageFeatures(
   if (videoPages.length > 0) {
     features.estimatedVideoPagesMin = videoPages.length;
     features.estimatedVideoPagesMax = videoPages.length;
-    add("estimatedVideoPages", signal(
-      "Страницы с видео",
-      String(videoPages.length),
-      "уникальные видеоссылки на проверенной странице",
-      "low",
-    ));
+    add(
+      "estimatedVideoPages",
+      signal(
+        "Страницы с видео",
+        String(videoPages.length),
+        "уникальные видеоссылки на проверенной странице",
+        "low",
+      ),
+    );
   }
 
   const brief = buildWorkBrief(features, contacts, decisionMakers, videoPages, pageUrl);
@@ -120,7 +131,8 @@ export function extractRadarPageFeatures(
 
 export function findRadarResearchLinks(html: string, pageUrl: URL, limit = 3) {
   const candidates = anchorLinks(html, pageUrl).flatMap((link) => {
-    if (!link.url || link.url.origin !== pageUrl.origin || !/^https?:$/.test(link.url.protocol)) return [];
+    if (!link.url || link.url.origin !== pageUrl.origin || !/^https?:$/.test(link.url.protocol))
+      return [];
     const haystack = `${link.url.pathname} ${link.label}`.toLocaleLowerCase("ru-RU");
     const score = researchLinkScore(haystack);
     if (score === 0) return [];
@@ -145,28 +157,58 @@ export function mergeRadarPageExtractions(
 ): RadarPageFeatureExtraction {
   const primary = extractions[0];
   if (!primary) throw new Error("At least one radar page extraction is required");
-  const features = extractions.reduce<Partial<RadarCandidateFeatures>>((current, extraction) => ({
-    topic: current.topic ?? extraction.features.topic,
-    language: current.language ?? extraction.features.language,
-    geography: current.geography ?? extraction.features.geography,
-    publicationFrequency: current.publicationFrequency && current.publicationFrequency !== "unknown"
-      ? current.publicationFrequency
-      : extraction.features.publicationFrequency,
-    contactsFound: current.contactsFound === true || extraction.features.contactsFound === true,
-    cms: current.cms ?? extraction.features.cms,
-    estimatedVideoPagesMin: Math.max(current.estimatedVideoPagesMin ?? 0, extraction.features.estimatedVideoPagesMin ?? 0) || undefined,
-    estimatedVideoPagesMax: Math.max(current.estimatedVideoPagesMax ?? 0, extraction.features.estimatedVideoPagesMax ?? 0) || undefined,
-    trafficEstimate: trafficEstimate ?? current.trafficEstimate ?? extraction.features.trafficEstimate,
-  }), {});
-  const contacts = uniqueBy(extractions.flatMap(({ research }) => research.contacts), (lead) => `${lead.type}:${lead.href}`);
-  const decisionMakers = mergeDecisionMakers(extractions.flatMap(({ research }) => research.decisionMakers));
-  const videoPages = uniqueBy(extractions.flatMap(({ research }) => research.videoPages), ({ pageUrl }) => pageUrl);
-  const signals = uniqueBy(extractions.flatMap(({ research }) => research.signals), ({ field }) => field);
+  const features = extractions.reduce<Partial<RadarCandidateFeatures>>(
+    (current, extraction) => ({
+      topic: current.topic ?? extraction.features.topic,
+      language: current.language ?? extraction.features.language,
+      geography: current.geography ?? extraction.features.geography,
+      publicationFrequency:
+        current.publicationFrequency && current.publicationFrequency !== "unknown"
+          ? current.publicationFrequency
+          : extraction.features.publicationFrequency,
+      contactsFound: current.contactsFound === true || extraction.features.contactsFound === true,
+      cms: current.cms ?? extraction.features.cms,
+      estimatedVideoPagesMin:
+        Math.max(
+          current.estimatedVideoPagesMin ?? 0,
+          extraction.features.estimatedVideoPagesMin ?? 0,
+        ) || undefined,
+      estimatedVideoPagesMax:
+        Math.max(
+          current.estimatedVideoPagesMax ?? 0,
+          extraction.features.estimatedVideoPagesMax ?? 0,
+        ) || undefined,
+      trafficEstimate:
+        trafficEstimate ?? current.trafficEstimate ?? extraction.features.trafficEstimate,
+    }),
+    {},
+  );
+  const contacts = uniqueBy(
+    extractions.flatMap(({ research }) => research.contacts),
+    (lead) => `${lead.type}:${lead.href}`,
+  );
+  const decisionMakers = mergeDecisionMakers(
+    extractions.flatMap(({ research }) => research.decisionMakers),
+  );
+  const videoPages = uniqueBy(
+    extractions.flatMap(({ research }) => research.videoPages),
+    ({ pageUrl }) => pageUrl,
+  );
+  const signals = uniqueBy(
+    extractions.flatMap(({ research }) => research.signals),
+    ({ field }) => field,
+  );
   const pageUrl = new URL(primary.research.pageUrl);
-  const notes = uniqueBy(extractions.flatMap(({ research }) => research.notes), (note) => note)
-    .filter((note) => !trafficEstimate || !note.startsWith("Трафик не оценивается"));
-  if (extractions.length > 1) notes.push(`Дополнительно проверено внутренних страниц: ${extractions.length - 1}.`);
-  if (trafficEstimate) notes.push(`Посещаемость получена через ${trafficEstimate.provider}; это внешняя оценка, а не данные счётчика сайта.`);
+  const notes = uniqueBy(
+    extractions.flatMap(({ research }) => research.notes),
+    (note) => note,
+  ).filter((note) => !trafficEstimate || !note.startsWith("Трафик не оценивается"));
+  if (extractions.length > 1)
+    notes.push(`Дополнительно проверено внутренних страниц: ${extractions.length - 1}.`);
+  if (trafficEstimate)
+    notes.push(
+      `Посещаемость получена через ${trafficEstimate.provider}; это внешняя оценка, а не данные счётчика сайта.`,
+    );
   return {
     features,
     research: {
@@ -191,23 +233,33 @@ export function enrichRadarResearchWithChanges(
   const detectedAt = current.collectedAt;
   const changes: RadarChangeSignal[] = [];
   const previousPeople = new Set(previous.decisionMakers.map(decisionMakerKey));
-  const newPeople = current.decisionMakers.filter((person) => !previousPeople.has(decisionMakerKey(person)));
+  const newPeople = current.decisionMakers.filter(
+    (person) => !previousPeople.has(decisionMakerKey(person)),
+  );
   if (newPeople.length > 0) {
     changes.push({
       code: "new_lpr",
       label: "Новый ЛПР",
-      explanation: `Найдены новые целевые контакты: ${newPeople.slice(0, 2).map(({ fullName, role }) => fullName ?? role).join(", ")}.`,
+      explanation: `Найдены новые целевые контакты: ${newPeople
+        .slice(0, 2)
+        .map(({ fullName, role }) => fullName ?? role)
+        .join(", ")}.`,
       detectedAt,
       confidence: newPeople.some(({ confidence }) => confidence === "high") ? "high" : "medium",
     });
   }
   const previousChannels = new Set(previous.contacts.map(({ type, value }) => `${type}:${value}`));
-  const newChannels = current.contacts.filter(({ type, value }) => !previousChannels.has(`${type}:${value}`));
+  const newChannels = current.contacts.filter(
+    ({ type, value }) => !previousChannels.has(`${type}:${value}`),
+  );
   if (newChannels.length > 0) {
     changes.push({
       code: "new_contact",
       label: "Новый канал связи",
-      explanation: `Появились новые публичные каналы: ${newChannels.slice(0, 2).map(({ value }) => value).join(", ")}.`,
+      explanation: `Появились новые публичные каналы: ${newChannels
+        .slice(0, 2)
+        .map(({ value }) => value)
+        .join(", ")}.`,
       detectedAt,
       confidence: newChannels.some(({ confidence }) => confidence === "high") ? "high" : "medium",
     });
@@ -245,12 +297,18 @@ export function enrichRadarResearchWithChanges(
   }
   const meaningful = changes.filter(({ code }) => code !== "data_refreshed");
   const priorityInsights = [
-    ...(meaningful.length > 0 ? [{
-      code: "timing" as const,
-      label: "Появился новый сигнал",
-      explanation: meaningful.map(({ label }) => label).join(" · "),
-      confidence: meaningful.some(({ confidence }) => confidence === "high") ? "high" as const : "medium" as const,
-    }] : []),
+    ...(meaningful.length > 0
+      ? [
+          {
+            code: "timing" as const,
+            label: "Появился новый сигнал",
+            explanation: meaningful.map(({ label }) => label).join(" · "),
+            confidence: meaningful.some(({ confidence }) => confidence === "high")
+              ? ("high" as const)
+              : ("medium" as const),
+          },
+        ]
+      : []),
     ...(current.brief.priorityInsights ?? []).filter(({ code }) => code !== "timing"),
   ];
   return {
@@ -259,9 +317,10 @@ export function enrichRadarResearchWithChanges(
     brief: {
       ...current.brief,
       priorityInsights,
-      whyNow: meaningful.length > 0
-        ? `${meaningful.map(({ explanation }) => explanation).join(" ")} ${current.brief.whyNow ?? ""}`.trim()
-        : current.brief.whyNow,
+      whyNow:
+        meaningful.length > 0
+          ? `${meaningful.map(({ explanation }) => explanation).join(" ")} ${current.brief.whyNow ?? ""}`.trim()
+          : current.brief.whyNow,
     },
   };
 }
@@ -274,13 +333,16 @@ export function mergeRadarFeatures(
     topic: current.topic ?? extracted.topic ?? null,
     language: current.language ?? extracted.language ?? null,
     geography: current.geography ?? extracted.geography ?? null,
-    publicationFrequency: current.publicationFrequency === "unknown"
-      ? extracted.publicationFrequency ?? "unknown"
-      : current.publicationFrequency,
+    publicationFrequency:
+      current.publicationFrequency === "unknown"
+        ? (extracted.publicationFrequency ?? "unknown")
+        : current.publicationFrequency,
     contactsFound: current.contactsFound || extracted.contactsFound === true,
     cms: current.cms ?? extracted.cms ?? null,
-    estimatedVideoPagesMin: current.estimatedVideoPagesMin ?? extracted.estimatedVideoPagesMin ?? null,
-    estimatedVideoPagesMax: current.estimatedVideoPagesMax ?? extracted.estimatedVideoPagesMax ?? null,
+    estimatedVideoPagesMin:
+      current.estimatedVideoPagesMin ?? extracted.estimatedVideoPagesMin ?? null,
+    estimatedVideoPagesMax:
+      current.estimatedVideoPagesMax ?? extracted.estimatedVideoPagesMax ?? null,
     trafficEstimate: current.trafficEstimate,
   };
 }
@@ -295,14 +357,27 @@ function signal(
 }
 
 function detectTopic(html: string, summary: string) {
-  const explicit = metaContent(html, "article:section") ?? metaContent(html, "section") ?? metaContent(html, "category");
+  const explicit =
+    metaContent(html, "article:section") ??
+    metaContent(html, "section") ??
+    metaContent(html, "category");
   if (explicit && explicit.length <= 80) {
-    return { value: compactText(explicit), source: "метаданные раздела", confidence: "high" as const };
+    return {
+      value: compactText(explicit),
+      source: "метаданные раздела",
+      confidence: "high" as const,
+    };
   }
   const normalized = summary.toLocaleLowerCase("ru-RU");
   const topics: Array<{ value: string; words: string[] }> = [
-    { value: "Спорт", words: ["спорт", "футбол", "хоккей", "теннис", "матч", "чемпионат", "спортсмен"] },
-    { value: "Технологии", words: ["технолог", "гаджет", "software", "разработ", "искусственн", "интернет"] },
+    {
+      value: "Спорт",
+      words: ["спорт", "футбол", "хоккей", "теннис", "матч", "чемпионат", "спортсмен"],
+    },
+    {
+      value: "Технологии",
+      words: ["технолог", "гаджет", "software", "разработ", "искусственн", "интернет"],
+    },
     { value: "Финансы и бизнес", words: ["финанс", "бизнес", "банк", "рынок", "инвест", "эконом"] },
     { value: "Новости", words: ["новост", "событи", "происшеств", "общество", "политик"] },
     { value: "Развлечения", words: ["кино", "сериал", "музык", "шоу", "знаменит"] },
@@ -313,17 +388,29 @@ function detectTopic(html: string, summary: string) {
     { value: "Стиль жизни", words: ["lifestyle", "стиль жизни", "мода", "ресторан", "рецепт"] },
   ];
   const ranked = topics
-    .map((topic) => ({ ...topic, score: topic.words.reduce((score, word) => score + occurrences(normalized, word), 0) }))
+    .map((topic) => ({
+      ...topic,
+      score: topic.words.reduce((score, word) => score + occurrences(normalized, word), 0),
+    }))
     .sort((left, right) => right.score - left.score);
   const best = ranked[0];
   return best && best.score > 0
-    ? { value: best.value, source: "title и meta description", confidence: best.score >= 2 ? "medium" as const : "low" as const }
+    ? {
+        value: best.value,
+        source: "title и meta description",
+        confidence: best.score >= 2 ? ("medium" as const) : ("low" as const),
+      }
     : null;
 }
 
 function detectGeography(html: string, summary: string) {
   const explicit = metaContent(html, "geo.placename") ?? metaContent(html, "geo.region");
-  if (explicit) return { value: compactText(explicit), source: "географические метаданные", confidence: "high" as const };
+  if (explicit)
+    return {
+      value: compactText(explicit),
+      source: "географические метаданные",
+      confidence: "high" as const,
+    };
   const normalized = summary.toLocaleLowerCase("ru-RU");
   const patterns: Array<[RegExp, string]> = [
     [/российск|\bросси[ия]\b|\brussia\b/i, "Россия"],
@@ -333,7 +420,9 @@ function detectGeography(html: string, summary: string) {
     [/украин|\bukraine\b/i, "Украина"],
   ];
   const match = patterns.find(([pattern]) => pattern.test(normalized));
-  return match ? { value: match[1], source: "title и meta description", confidence: "medium" as const } : null;
+  return match
+    ? { value: match[1], source: "title и meta description", confidence: "medium" as const }
+    : null;
 }
 
 function detectPublicationFrequency(html: string): {
@@ -351,12 +440,16 @@ function detectPublicationFrequency(html: string): {
     .sort((left, right) => right.time - left.time);
   if (dates.length < 2) return null;
   const uniqueDays = new Set(dates.map(({ value }) => value.slice(0, 10))).size;
-  const spanDays = Math.max(1, Math.ceil(((dates[0]?.time ?? 0) - (dates.at(-1)?.time ?? 0)) / 86_400_000));
+  const spanDays = Math.max(
+    1,
+    Math.ceil(((dates[0]?.time ?? 0) - (dates.at(-1)?.time ?? 0)) / 86_400_000),
+  );
   const perDay = dates.length / (spanDays + 1);
   if (dates.length >= 3 && (uniqueDays <= 2 || perDay >= 0.7)) {
     return { value: "daily", count: dates.length, confidence: "high" };
   }
-  if (perDay >= 0.12 || spanDays <= 14) return { value: "weekly", count: dates.length, confidence: "medium" };
+  if (perDay >= 0.12 || spanDays <= 14)
+    return { value: "weekly", count: dates.length, confidence: "medium" };
   return { value: "monthly", count: dates.length, confidence: "low" };
 }
 
@@ -365,7 +458,9 @@ function detectContacts(html: string, pageUrl: URL): RadarContactLead[] {
   for (const link of anchorLinks(html, pageUrl)) {
     const raw = link.rawHref.trim();
     if (/^mailto:/i.test(raw)) {
-      const email = safeDecode(raw.slice(7).split("?", 1)[0] ?? "").trim().toLocaleLowerCase("en-US");
+      const email = safeDecode(raw.slice(7).split("?", 1)[0] ?? "")
+        .trim()
+        .toLocaleLowerCase("en-US");
       if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         leads.set(`email:${email}`, {
           type: "email",
@@ -410,7 +505,10 @@ function detectContacts(html: string, pageUrl: URL): RadarContactLead[] {
 
 function detectDecisionMakers(html: string, pageUrl: URL): RadarDecisionMakerLead[] {
   const leads: RadarDecisionMakerLead[] = [];
-  for (const rawJson of matches(html, /<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
+  for (const rawJson of matches(
+    html,
+    /<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi,
+  )) {
     let parsed: unknown;
     try {
       parsed = JSON.parse(rawJson);
@@ -439,8 +537,14 @@ function detectDecisionMakers(html: string, pageUrl: URL): RadarDecisionMakerLea
   }
 
   const blocks = [
-    ...matches(html, /<(?:article|section|li)\b[^>]*>([\s\S]{0,4000}?)<\/(?:article|section|li)>/gi),
-    ...matches(html, /<div\b[^>]*(?:class|id)\s*=\s*["'][^"']*(?:team|staff|person|employee|author|contact|management|editor)[^"']*["'][^>]*>([\s\S]{0,4000}?)<\/div>/gi),
+    ...matches(
+      html,
+      /<(?:article|section|li)\b[^>]*>([\s\S]{0,4000}?)<\/(?:article|section|li)>/gi,
+    ),
+    ...matches(
+      html,
+      /<div\b[^>]*(?:class|id)\s*=\s*["'][^"']*(?:team|staff|person|employee|author|contact|management|editor)[^"']*["'][^>]*>([\s\S]{0,4000}?)<\/div>/gi,
+    ),
   ];
   for (const block of blocks) {
     const role = decisionRole(compactText(block));
@@ -467,7 +571,9 @@ function detectDecisionMakers(html: string, pageUrl: URL): RadarDecisionMakerLea
     for (const link of anchorLinks(block, pageUrl)) {
       if (!/^(?:mailto|tel):/i.test(link.rawHref)) continue;
       const linkPosition = block.indexOf(link.rawHref);
-      const context = compactText(block.slice(Math.max(0, linkPosition - 320), linkPosition + link.rawHref.length + 60));
+      const context = compactText(
+        block.slice(Math.max(0, linkPosition - 320), linkPosition + link.rawHref.length + 60),
+      );
       const functional = functionalContactRole(context);
       if (!functional) continue;
       const email = /^mailto:/i.test(link.rawHref) ? normalizeEmail(link.rawHref) : null;
@@ -492,9 +598,23 @@ function detectDecisionMakers(html: string, pageUrl: URL): RadarDecisionMakerLea
 function detectCms(html: string) {
   const generator = metaContent(html, "generator");
   if (generator) {
-    const known = ["WordPress", "Drupal", "Joomla", "Ghost", "Tilda", "Wix", "Webflow", "1C-Битрикс"]
-      .find((name) => generator.toLocaleLowerCase("ru-RU").includes(name.toLocaleLowerCase("ru-RU")));
-    return { value: known ?? compactText(generator).slice(0, 120), source: "meta generator", confidence: "high" as const };
+    const known = [
+      "WordPress",
+      "Drupal",
+      "Joomla",
+      "Ghost",
+      "Tilda",
+      "Wix",
+      "Webflow",
+      "1C-Битрикс",
+    ].find((name) =>
+      generator.toLocaleLowerCase("ru-RU").includes(name.toLocaleLowerCase("ru-RU")),
+    );
+    return {
+      value: known ?? compactText(generator).slice(0, 120),
+      source: "meta generator",
+      confidence: "high" as const,
+    };
   }
   const fingerprints: Array<[RegExp, string, RadarConfidence]> = [
     [/wp-(?:content|includes)\//i, "WordPress", "high"],
@@ -513,7 +633,11 @@ function detectVideoPageLinks(html: string, pageUrl: URL): RadarVideoPageLead[] 
   const leads = new Map<string, RadarVideoPageLead>();
   for (const link of anchorLinks(html, pageUrl)) {
     if (!link.url || link.url.hostname !== pageUrl.hostname) continue;
-    if (/(?:^|\/)videos?(?:\/|$)|(?:^|\/)(?:watch|embed|translyac(?:iya|ii|iy)|live|efir)(?:\/|$)/i.test(link.url.pathname)) {
+    if (
+      /(?:^|\/)videos?(?:\/|$)|(?:^|\/)(?:watch|embed|translyac(?:iya|ii|iy)|live|efir)(?:\/|$)/i.test(
+        link.url.pathname,
+      )
+    ) {
       link.url.hash = "";
       leads.set(link.url.toString(), {
         pageUrl: link.url.toString(),
@@ -523,7 +647,11 @@ function detectVideoPageLinks(html: string, pageUrl: URL): RadarVideoPageLead[] 
       });
     }
   }
-  if (/<video\b|["']@type["']\s*:\s*["']VideoObject["']|<(?:iframe|embed)\b[^>]*(?:rutube|youtube|vkvideo)/i.test(html)) {
+  if (
+    /<video\b|["']@type["']\s*:\s*["']VideoObject["']|<(?:iframe|embed)\b[^>]*(?:rutube|youtube|vkvideo)/i.test(
+      html,
+    )
+  ) {
     leads.set(pageUrl.toString(), {
       pageUrl: pageUrl.toString(),
       label: firstTagText(html, "title") ?? "Переданная страница",
@@ -542,47 +670,69 @@ function buildWorkBrief(
   pageUrl: URL,
   coverage?: RadarResearchCoverage,
 ): RadarWorkBrief {
-  const namedContact = decisionMakers.find(({ email, phone }) => email || phone) ?? decisionMakers[0];
-  const directContact = contacts.find(({ type }) => type === "email")
-    ?? contacts.find(({ type }) => type === "phone");
+  const namedContact =
+    decisionMakers.find(({ email, phone }) => email || phone) ?? decisionMakers[0];
+  const directContact =
+    contacts.find(({ type }) => type === "email") ?? contacts.find(({ type }) => type === "phone");
   const contactPage = contacts.find(({ type }) => type === "contact_page");
   const topic = features.topic ?? "контентная площадка";
   const geography = features.geography ? `, география — ${features.geography}` : "";
-  const frequency = features.publicationFrequency && features.publicationFrequency !== "unknown"
-    ? `, публикации — ${frequencyLabel(features.publicationFrequency)}`
-    : "";
+  const frequency =
+    features.publicationFrequency && features.publicationFrequency !== "unknown"
+      ? `, публикации — ${frequencyLabel(features.publicationFrequency)}`
+      : "";
   const traffic = features.trafficEstimate;
-  const trafficSummary = traffic?.minDailyVisits !== undefined && traffic.maxDailyVisits !== undefined
-    ? ` Оценка посещаемости: ${formatNumber(traffic.minDailyVisits)}–${formatNumber(traffic.maxDailyVisits)} в день.`
-    : "";
+  const trafficSummary =
+    traffic?.minDailyVisits !== undefined && traffic.maxDailyVisits !== undefined
+      ? ` Оценка посещаемости: ${formatNumber(traffic.minDailyVisits)}–${formatNumber(traffic.maxDailyVisits)} в день.`
+      : "";
   const siteSummary = `${topic}${geography}${frequency}. Проверен домен ${pageUrl.hostname}.${trafficSummary}`;
-  const videoUsage = videoPages.length > 0
-    ? `Найдены видеостраницы: ${videoPages.slice(0, 3).map(({ label }) => label).join(", ")}.`
-    : "На переданной странице не найдено подтверждённых видеостраниц; сценарий нужно уточнить у площадки.";
+  const videoUsage =
+    videoPages.length > 0
+      ? `Найдены видеостраницы: ${videoPages
+          .slice(0, 3)
+          .map(({ label }) => label)
+          .join(", ")}.`
+      : "На переданной странице не найдено подтверждённых видеостраниц; сценарий нужно уточнить у площадки.";
   const rutubeUseCase = useCaseFor(features.topic);
   const likelyContactRoles = contactRolesFor(features.topic);
   const risks = [
     ...(videoPages.length === 0 ? ["Нет подтверждённого примера страницы с видео."] : []),
-    ...(!namedContact && !directContact ? [contactPage ? "Найден только общий раздел контактов." : "Не найден прямой публичный канал связи."] : []),
-    ...(!decisionMakers.some(({ fullName }) => fullName) ? ["Имя ЛПР не подтверждено; найдены только функциональные рабочие контакты."] : []),
+    ...(!namedContact && !directContact
+      ? [
+          contactPage
+            ? "Найден только общий раздел контактов."
+            : "Не найден прямой публичный канал связи.",
+        ]
+      : []),
+    ...(!decisionMakers.some(({ fullName }) => fullName)
+      ? ["Имя ЛПР не подтверждено; найдены только функциональные рабочие контакты."]
+      : []),
     ...(!traffic ? ["Трафик не подтверждён внешним провайдером."] : []),
   ];
-  const readiness: RadarWorkBrief["readiness"] = namedContact || directContact
-    ? "ready_for_outreach"
-    : contactPage ? "contact_page_found" : "needs_contact";
+  const readiness: RadarWorkBrief["readiness"] =
+    namedContact || directContact
+      ? "ready_for_outreach"
+      : contactPage
+        ? "contact_page_found"
+        : "needs_contact";
   const nextAction = namedContact
     ? namedContact.fullName
       ? `Связаться с ${namedContact.fullName} (${namedContact.role})${namedContact.email ? ` через ${namedContact.email}` : namedContact.phone ? ` по ${namedContact.phone}` : " через публичный профиль"}: проверить интерес к кейсу «${rutubeUseCase}».`
       : `Связаться через «${namedContact.role}»${namedContact.email ? ` — ${namedContact.email}` : namedContact.phone ? ` — ${namedContact.phone}` : " в публичном профиле"}: проверить интерес к кейсу «${rutubeUseCase}».`
     : directContact
-    ? `Связаться через ${directContact.value}: проверить интерес к кейсу «${rutubeUseCase}» и запросить пример видеостраницы.`
-    : contactPage
-      ? `Открыть ${contactPage.href}, найти роль «${likelyContactRoles[0]}» и запросить пример видеостраницы.`
-      : `Найти публичный контакт роли «${likelyContactRoles[0]}» и запросить пример видеостраницы.`;
+      ? `Связаться через ${directContact.value}: проверить интерес к кейсу «${rutubeUseCase}» и запросить пример видеостраницы.`
+      : contactPage
+        ? `Открыть ${contactPage.href}, найти роль «${likelyContactRoles[0]}» и запросить пример видеостраницы.`
+        : `Найти публичный контакт роли «${likelyContactRoles[0]}» и запросить пример видеостраницы.`;
   const priorityInsights = buildPriorityInsights(features, contacts, decisionMakers, videoPages);
-  const whyNow = priorityInsights.length > 0
-    ? priorityInsights.slice(0, 3).map(({ explanation }) => explanation).join(" ")
-    : "Публичных сигналов срочности пока недостаточно — сначала нужно дополнить исследование.";
+  const whyNow =
+    priorityInsights.length > 0
+      ? priorityInsights
+          .slice(0, 3)
+          .map(({ explanation }) => explanation)
+          .join(" ")
+      : "Публичных сигналов срочности пока недостаточно — сначала нужно дополнить исследование.";
   const opportunityPotential = buildOpportunityPotential(features, videoPages, coverage);
   const outreach = buildOutreachPackage(
     namedContact,
@@ -627,14 +777,16 @@ function buildPriorityInsights(
     insights.push({
       code: "publishing",
       label: "Ежедневный контент",
-      explanation: "Площадка публикует материалы ежедневно — видеосценарий может получать регулярный инвентарь.",
+      explanation:
+        "Площадка публикует материалы ежедневно — видеосценарий может получать регулярный инвентарь.",
       confidence: "high",
     });
   } else if (features.publicationFrequency === "weekly") {
     insights.push({
       code: "publishing",
       label: "Регулярный контент",
-      explanation: "Площадка публикует материалы еженедельно и подходит для повторяемого видеосценария.",
+      explanation:
+        "Площадка публикует материалы еженедельно и подходит для повторяемого видеосценария.",
       confidence: "medium",
     });
   }
@@ -643,10 +795,16 @@ function buildPriorityInsights(
       code: "video",
       label: "Видео уже используется",
       explanation: `Подтверждены видеостраницы (${videoPages.length}) — интеграционный сценарий можно показать на реальных материалах.`,
-      confidence: videoPages.some(({ confidence }) => confidence === "medium" || confidence === "high") ? "medium" : "low",
+      confidence: videoPages.some(
+        ({ confidence }) => confidence === "medium" || confidence === "high",
+      )
+        ? "medium"
+        : "low",
     });
   }
-  const directLpr = decisionMakers.find(({ email, phone, profileUrl }) => email || phone || profileUrl);
+  const directLpr = decisionMakers.find(
+    ({ email, phone, profileUrl }) => email || phone || profileUrl,
+  );
   const directContact = contacts.find(({ type }) => type === "email" || type === "phone");
   if (directLpr || directContact) {
     insights.push({
@@ -669,18 +827,15 @@ function buildOpportunityPotential(
   const traffic = features.trafficEstimate;
   const inspected = coverage?.inspectedUrls ?? 1;
   const videoObserved = coverage?.videoPagesObserved ?? videoPages.length;
-  const observedVideoSharePercent = inspected > 0
-    ? Math.min(100, Math.round(videoObserved / inspected * 100))
-    : null;
+  const observedVideoSharePercent =
+    inspected > 0 ? Math.min(100, Math.round((videoObserved / inspected) * 100)) : null;
   const share = observedVideoSharePercent === null ? null : observedVideoSharePercent / 100;
   const minDailyVisits = traffic?.minDailyVisits ?? null;
   const maxDailyVisits = traffic?.maxDailyVisits ?? null;
-  const minMonthlyVideoOpportunities = minDailyVisits !== null && share !== null
-    ? Math.round(minDailyVisits * share * 30)
-    : null;
-  const maxMonthlyVideoOpportunities = maxDailyVisits !== null && share !== null
-    ? Math.round(maxDailyVisits * share * 30)
-    : null;
+  const minMonthlyVideoOpportunities =
+    minDailyVisits !== null && share !== null ? Math.round(minDailyVisits * share * 30) : null;
+  const maxMonthlyVideoOpportunities =
+    maxDailyVisits !== null && share !== null ? Math.round(maxDailyVisits * share * 30) : null;
   return {
     minDailyVisits,
     maxDailyVisits,
@@ -702,19 +857,27 @@ function buildOutreachPackage(
   rutubeUseCase: string,
   fallbackRole: string,
 ): RadarOutreachPackage {
-  const channel: RadarOutreachPackage["channel"] = namedContact?.email || directContact?.type === "email"
-    ? "email"
-    : namedContact?.phone || directContact?.type === "phone"
-      ? "phone"
-      : namedContact?.profileUrl
-        ? "profile"
-        : contactPage
-          ? "contact_page"
-          : "research";
-  const destination = namedContact?.email ?? namedContact?.phone ?? namedContact?.profileUrl
-    ?? directContact?.value ?? contactPage?.href ?? null;
+  const channel: RadarOutreachPackage["channel"] =
+    namedContact?.email || directContact?.type === "email"
+      ? "email"
+      : namedContact?.phone || directContact?.type === "phone"
+        ? "phone"
+        : namedContact?.profileUrl
+          ? "profile"
+          : contactPage
+            ? "contact_page"
+            : "research";
+  const destination =
+    namedContact?.email ??
+    namedContact?.phone ??
+    namedContact?.profileUrl ??
+    directContact?.value ??
+    contactPage?.href ??
+    null;
   const targetRole = namedContact?.role ?? fallbackRole;
-  const greeting = namedContact?.fullName ? `Здравствуйте, ${namedContact.fullName}!` : "Здравствуйте!";
+  const greeting = namedContact?.fullName
+    ? `Здравствуйте, ${namedContact.fullName}!`
+    : "Здравствуйте!";
   return {
     targetName: namedContact?.fullName ?? null,
     targetRole,
@@ -727,14 +890,19 @@ function buildOutreachPackage(
       "Какой плеер используется сейчас и какие ограничения мешают его развитию?",
       "Кто отвечает за редакционный сценарий, техническую интеграцию и метрики?",
     ],
-    nextTask: channel === "research"
-      ? `Найти публичный контакт роли «${targetRole}» и подтвердить видеосценарий.`
-      : `Проверить адресата и подготовить персональное первое касание для роли «${targetRole}».`,
+    nextTask:
+      channel === "research"
+        ? `Найти публичный контакт роли «${targetRole}» и подтвердить видеосценарий.`
+        : `Проверить адресата и подготовить персональное первое касание для роли «${targetRole}».`,
   };
 }
 
 function decisionMakerKey(person: RadarDecisionMakerLead) {
-  return person.email ?? person.phone ?? `${person.fullName ?? ""}:${person.role}`.toLocaleLowerCase("ru-RU");
+  return (
+    person.email ??
+    person.phone ??
+    `${person.fullName ?? ""}:${person.role}`.toLocaleLowerCase("ru-RU")
+  );
 }
 
 function researchLinkScore(value: string) {
@@ -747,13 +915,30 @@ function researchLinkScore(value: string) {
 }
 
 const roleDefinitions: Array<{ pattern: RegExp; department: string }> = [
-  { pattern: /(?:генеральн(?:ый|ая)\s+директор|chief executive officer|\bceo\b)/i, department: "Руководство" },
-  { pattern: /(?:директор\s+по\s+развитию|руководитель\s+по\s+развитию|business development director|head of business development)/i, department: "Развитие бизнеса" },
-  { pattern: /(?:коммерческ(?:ий|ая)\s+директор|chief commercial officer|\bcco\b)/i, department: "Коммерческий отдел" },
+  {
+    pattern: /(?:генеральн(?:ый|ая)\s+директор|chief executive officer|\bceo\b)/i,
+    department: "Руководство",
+  },
+  {
+    pattern:
+      /(?:директор\s+по\s+развитию|руководитель\s+по\s+развитию|business development director|head of business development)/i,
+    department: "Развитие бизнеса",
+  },
+  {
+    pattern: /(?:коммерческ(?:ий|ая)\s+директор|chief commercial officer|\bcco\b)/i,
+    department: "Коммерческий отдел",
+  },
   { pattern: /(?:главн(?:ый|ая)\s+редактор|editor[- ]in[- ]chief)/i, department: "Редакция" },
-  { pattern: /(?:руководитель\s+видео(?:редакции|направления)?|директор\s+по\s+видео|head of video)/i, department: "Видеоредакция" },
+  {
+    pattern:
+      /(?:руководитель\s+видео(?:редакции|направления)?|директор\s+по\s+видео|head of video)/i,
+    department: "Видеоредакция",
+  },
   { pattern: /(?:директор\s+по\s+продукту|chief product officer|\bcpo\b)/i, department: "Продукт" },
-  { pattern: /(?:техническ(?:ий|ая)\s+директор|chief technology officer|\bcto\b)/i, department: "Технологии" },
+  {
+    pattern: /(?:техническ(?:ий|ая)\s+директор|chief technology officer|\bcto\b)/i,
+    department: "Технологии",
+  },
 ];
 
 function decisionRole(value: string) {
@@ -770,10 +955,28 @@ function departmentForRole(role: string) {
 
 function functionalContactRole(value: string) {
   const definitions: Array<{ pattern: RegExp; role: string; department: string }> = [
-    { pattern: /(?:по\s+вопросам\s+сотрудничества|предложени[яе]\s+о\s+сотрудничестве|business inquiries|partnership inquiries)/i, role: "Ответственный за сотрудничество", department: "Развитие бизнеса" },
-    { pattern: /(?:по\s+вопросам\s+рекламы|размещени[яе]\s+рекламы|advertising inquiries)/i, role: "Ответственный за рекламу", department: "Коммерческий отдел" },
-    { pattern: /(?:связ[ьи]\s+с\s+редакцией|для\s+редакции|email\s+редакции|editorial inquiries)/i, role: "Контакт редакции", department: "Редакция" },
-    { pattern: /(?:нашли\s+баг|ошибк[ау]\s+на\s+сайте|техническ(?:ий|ие)\s+вопрос|предложени[яе]\s+по\s+улучшению)/i, role: "Технический контакт", department: "Технологии" },
+    {
+      pattern:
+        /(?:по\s+вопросам\s+сотрудничества|предложени[яе]\s+о\s+сотрудничестве|business inquiries|partnership inquiries)/i,
+      role: "Ответственный за сотрудничество",
+      department: "Развитие бизнеса",
+    },
+    {
+      pattern: /(?:по\s+вопросам\s+рекламы|размещени[яе]\s+рекламы|advertising inquiries)/i,
+      role: "Ответственный за рекламу",
+      department: "Коммерческий отдел",
+    },
+    {
+      pattern: /(?:связ[ьи]\s+с\s+редакцией|для\s+редакции|email\s+редакции|editorial inquiries)/i,
+      role: "Контакт редакции",
+      department: "Редакция",
+    },
+    {
+      pattern:
+        /(?:нашли\s+баг|ошибк[ау]\s+на\s+сайте|техническ(?:ий|ие)\s+вопрос|предложени[яе]\s+по\s+улучшению)/i,
+      role: "Технический контакт",
+      department: "Технологии",
+    },
   ];
   const match = definitions
     .map((definition) => ({ definition, index: value.match(definition.pattern)?.index ?? -1 }))
@@ -783,19 +986,26 @@ function functionalContactRole(value: string) {
 }
 
 function findPersonName(block: string, role: string) {
-  const tagged = [...block.matchAll(/<(?:h[1-6]|strong|b|a)\b[^>]*>([\s\S]*?)<\/(?:h[1-6]|strong|b|a)>/gi)]
-    .map((match) => compactText(match[1] ?? ""));
+  const tagged = [
+    ...block.matchAll(/<(?:h[1-6]|strong|b|a)\b[^>]*>([\s\S]*?)<\/(?:h[1-6]|strong|b|a)>/gi),
+  ].map((match) => compactText(match[1] ?? ""));
   const plain = compactText(block).replace(role, " ");
   for (const value of [...tagged, plain]) {
-    const match = value.match(/(?:[А-ЯЁ][а-яё-]{1,30}|[A-Z][a-z-]{1,30})(?:\s+(?:[А-ЯЁ][а-яё-]{1,30}|[A-Z][a-z-]{1,30})){1,2}/)?.[0];
-    if (match && !decisionRole(match) && !/^(?:Email|Phone|Позвонить|Контакты)/i.test(match)) return match;
+    const match = value.match(
+      /(?:[А-ЯЁ][а-яё-]{1,30}|[A-Z][a-z-]{1,30})(?:\s+(?:[А-ЯЁ][а-яё-]{1,30}|[A-Z][a-z-]{1,30})){1,2}/,
+    )?.[0];
+    if (match && !decisionRole(match) && !/^(?:Email|Phone|Позвонить|Контакты)/i.test(match))
+      return match;
   }
   return null;
 }
 
 function normalizeEmail(value: string | null) {
   if (!value) return null;
-  const email = value.replace(/^mailto:/i, "").trim().toLocaleLowerCase("en-US");
+  const email = value
+    .replace(/^mailto:/i, "")
+    .trim()
+    .toLocaleLowerCase("en-US");
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
 }
 
@@ -807,7 +1017,9 @@ function normalizePhone(value: string | null) {
 }
 
 function findProfileUrl(block: string, pageUrl: URL) {
-  const link = anchorLinks(block, pageUrl).find(({ url }) => url && /team|staff|person|people|author|editor|management/i.test(url.pathname));
+  const link = anchorLinks(block, pageUrl).find(
+    ({ url }) => url && /team|staff|person|people|author|editor|management/i.test(url.pathname),
+  );
   return link?.url ? link.url.toString() : null;
 }
 
@@ -826,7 +1038,11 @@ function structuredPeople(value: unknown): Array<Record<string, unknown>> {
   if (!isRecord(value)) return [];
   const type = value["@type"];
   const types = Array.isArray(type) ? type : [type];
-  const current = types.some((item) => typeof item === "string" && item.toLocaleLowerCase("en-US") === "person") ? [value] : [];
+  const current = types.some(
+    (item) => typeof item === "string" && item.toLocaleLowerCase("en-US") === "person",
+  )
+    ? [value]
+    : [];
   return [...current, ...Object.values(value).flatMap(structuredPeople)];
 }
 
@@ -837,19 +1053,29 @@ function textValue(value: unknown) {
 function mergeDecisionMakers(leads: RadarDecisionMakerLead[]) {
   const merged = new Map<string, RadarDecisionMakerLead>();
   for (const lead of leads) {
-    const key = lead.email ?? `${lead.fullName?.toLocaleLowerCase("ru-RU")}:${lead.role.toLocaleLowerCase("ru-RU")}`;
+    const key =
+      lead.email ??
+      `${lead.fullName?.toLocaleLowerCase("ru-RU")}:${lead.role.toLocaleLowerCase("ru-RU")}`;
     const current = merged.get(key);
-    merged.set(key, current ? {
-      ...current,
-      email: current.email ?? lead.email,
-      phone: current.phone ?? lead.phone,
-      profileUrl: current.profileUrl ?? lead.profileUrl,
-      confidence: current.confidence === "high" || lead.confidence === "high" ? "high" : "medium",
-    } : lead);
+    merged.set(
+      key,
+      current
+        ? {
+            ...current,
+            email: current.email ?? lead.email,
+            phone: current.phone ?? lead.phone,
+            profileUrl: current.profileUrl ?? lead.profileUrl,
+            confidence:
+              current.confidence === "high" || lead.confidence === "high" ? "high" : "medium",
+          }
+        : lead,
+    );
   }
-  return [...merged.values()].sort((left, right) =>
-    rolePriority(left.role) - rolePriority(right.role) ||
-    Number(Boolean(right.email || right.phone)) - Number(Boolean(left.email || left.phone)));
+  return [...merged.values()].sort(
+    (left, right) =>
+      rolePriority(left.role) - rolePriority(right.role) ||
+      Number(Boolean(right.email || right.phone)) - Number(Boolean(left.email || left.phone)),
+  );
 }
 
 function rolePriority(role: string) {
@@ -878,10 +1104,12 @@ function formatNumber(value: number) {
 
 function useCaseFor(topic: string | null | undefined) {
   const normalized = topic?.toLocaleLowerCase("ru-RU") ?? "";
-  if (normalized.includes("спорт")) return "спортивные хайлайты, интервью и разборы матчей в RUTUBE-плеере";
+  if (normalized.includes("спорт"))
+    return "спортивные хайлайты, интервью и разборы матчей в RUTUBE-плеере";
   if (normalized.includes("новост")) return "видеоновости и репортажи в RUTUBE-плеере";
   if (normalized.includes("технолог")) return "обзоры, интервью и обучающие видео в RUTUBE-плеере";
-  if (normalized.includes("развлеч") || normalized.includes("кино")) return "трейлеры, интервью и развлекательные видео в RUTUBE-плеере";
+  if (normalized.includes("развлеч") || normalized.includes("кино"))
+    return "трейлеры, интервью и развлекательные видео в RUTUBE-плеере";
   return "редакционные видео и интервью в RUTUBE-плеере";
 }
 
@@ -935,7 +1163,9 @@ function htmlAttribute(html: string, name: string) {
 }
 
 function attribute(tag: string, name: string) {
-  const match = tag.match(new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>]+))`, "i"));
+  const match = tag.match(
+    new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>]+))`, "i"),
+  );
   return decodeHtml(match?.[1] ?? match?.[2] ?? match?.[3] ?? "") || null;
 }
 
@@ -945,7 +1175,9 @@ function firstTagText(html: string, tag: string) {
 }
 
 function compactText(value: string) {
-  return decodeHtml(value.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
+  return decodeHtml(value.replace(/<[^>]+>/g, " "))
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function decodeHtml(value: string) {
@@ -958,7 +1190,7 @@ function decodeHtml(value: string) {
 }
 
 function matches(source: string, pattern: RegExp) {
-  return [...source.matchAll(pattern)].flatMap((match) => match[1] ? [decodeHtml(match[1])] : []);
+  return [...source.matchAll(pattern)].flatMap((match) => (match[1] ? [decodeHtml(match[1])] : []));
 }
 
 function occurrences(source: string, needle: string) {
@@ -972,5 +1204,10 @@ function occurrences(source: string, needle: string) {
 }
 
 function frequencyLabel(value: RadarCandidateFeatures["publicationFrequency"]) {
-  return { daily: "Ежедневно", weekly: "Еженедельно", monthly: "Ежемесячно", unknown: "Не определено" }[value];
+  return {
+    daily: "Ежедневно",
+    weekly: "Еженедельно",
+    monthly: "Ежемесячно",
+    unknown: "Не определено",
+  }[value];
 }

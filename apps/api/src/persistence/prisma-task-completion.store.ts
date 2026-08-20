@@ -1,9 +1,4 @@
-import {
-  OpportunityStatus,
-  Prisma,
-  type PrismaClient,
-  TaskStatus,
-} from "@prisma/client";
+import { OpportunityStatus, Prisma, type PrismaClient, TaskStatus } from "@prisma/client";
 import type {
   CompletionResult,
   CompletionTaskRecord,
@@ -127,9 +122,7 @@ class PrismaCompletionTransaction implements CompletionTransaction {
       version: task.version,
       priorityScore: task.priorityScore,
       opportunity: {
-        contactIds: task.opportunity.organization.contactLinks.map(
-          ({ contactId }) => contactId,
-        ),
+        contactIds: task.opportunity.organization.contactLinks.map(({ contactId }) => contactId),
         version: task.opportunity.version,
         stageCode: task.opportunity.stageCode,
         status: task.opportunity.status,

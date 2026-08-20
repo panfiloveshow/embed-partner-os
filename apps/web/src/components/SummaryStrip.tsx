@@ -23,4 +23,3 @@ export function SummaryStrip({ summary }: { summary: TodaySummary }) {
     </section>
   );
 }
-

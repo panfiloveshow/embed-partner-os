@@ -25,7 +25,9 @@ describe("access administration", () => {
     const payload = await service.list(ADMIN_ID);
 
     expect(payload.users).toHaveLength(5);
-    expect(payload.teams).toEqual([{ id: "00000000-0000-4000-8000-000000000002", name: "Команда внедрения" }]);
+    expect(payload.teams).toEqual([
+      { id: "00000000-0000-4000-8000-000000000002", name: "Команда внедрения" },
+    ]);
     expect(payload.users.find(({ id }) => id === ADMIN_ID)).toMatchObject({
       role: "admin",
       currentUser: true,
@@ -56,10 +58,16 @@ describe("access administration", () => {
       role: "partner_manager",
       scope: { mode: "own" },
     });
-    await expect(service.create(ADMIN_ID, {
-      ...command,
-      subject: "oidc:another-subject",
-    }, "access-create-test-0002")).rejects.toMatchObject({ code: "ACCESS_USER_ALREADY_EXISTS" });
+    await expect(
+      service.create(
+        ADMIN_ID,
+        {
+          ...command,
+          subject: "oidc:another-subject",
+        },
+        "access-create-test-0002",
+      ),
+    ).rejects.toMatchObject({ code: "ACCESS_USER_ALREADY_EXISTS" });
   });
 
   it("updates access idempotently and applies it to the next session", async () => {
@@ -80,10 +88,17 @@ describe("access administration", () => {
       role: "analyst",
       permissions: expect.arrayContaining(["reports.generate"]),
     });
-    await expect(service.update(ADMIN_ID, MANAGER_ID, {
-      ...command,
-      reason: "Другое содержимое команды",
-    }, "access-update-test-0001")).rejects.toBeInstanceOf(IdempotencyConflictError);
+    await expect(
+      service.update(
+        ADMIN_ID,
+        MANAGER_ID,
+        {
+          ...command,
+          reason: "Другое содержимое команды",
+        },
+        "access-update-test-0001",
+      ),
+    ).rejects.toBeInstanceOf(IdempotencyConflictError);
   });
 
   it("blocks self-modification and removal of the last administrator", async () => {
@@ -96,9 +111,11 @@ describe("access administration", () => {
       reason: "Проверка защиты администратора",
     };
 
-    await expect(service.update(ADMIN_ID, ADMIN_ID, command, "access-self-test-0001"))
-      .rejects.toMatchObject({ code: "ACCESS_SELF_MODIFICATION" });
-    await expect(service.update(MANAGER_ID, ADMIN_ID, command, "access-last-admin-test-0001"))
-      .rejects.toMatchObject({ code: "ACCESS_LAST_ADMIN" });
+    await expect(
+      service.update(ADMIN_ID, ADMIN_ID, command, "access-self-test-0001"),
+    ).rejects.toMatchObject({ code: "ACCESS_SELF_MODIFICATION" });
+    await expect(
+      service.update(MANAGER_ID, ADMIN_ID, command, "access-last-admin-test-0001"),
+    ).rejects.toMatchObject({ code: "ACCESS_LAST_ADMIN" });
   });
 });

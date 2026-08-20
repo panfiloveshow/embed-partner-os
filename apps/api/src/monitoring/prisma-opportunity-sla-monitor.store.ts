@@ -1,10 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-  OpportunityStatus,
-  Prisma,
-  TaskStatus,
-  type PrismaClient,
-} from "@prisma/client";
+import { OpportunityStatus, Prisma, TaskStatus, type PrismaClient } from "@prisma/client";
 import type {
   OpportunitySlaCandidate,
   OpportunitySlaMonitorStore,
@@ -31,7 +26,10 @@ export class PrismaOpportunitySlaMonitorStore implements OpportunitySlaMonitorSt
 
   constructor(private readonly prisma: PrismaClient) {}
 
-  async listCandidates(input: { now: Date; batchSize: number }): Promise<OpportunitySlaCandidate[]> {
+  async listCandidates(input: {
+    now: Date;
+    batchSize: number;
+  }): Promise<OpportunitySlaCandidate[]> {
     let opportunities = await this.loadCandidateRows(this.candidateCursor, input.batchSize);
     if (opportunities.length === 0 && this.candidateCursor !== null) {
       this.candidateCursor = null;
@@ -43,30 +41,34 @@ export class PrismaOpportunitySlaMonitorStore implements OpportunitySlaMonitorSt
       const config = slaConfig(opportunity.processDefinition.schemaJson, opportunity.stageCode);
       if (!config && opportunity.slaIncidents.length === 0) return [];
       const incident = opportunity.slaIncidents[0] ?? null;
-      return [{
-        id: opportunity.id,
-        organizationId: opportunity.organization.id,
-        organizationName: opportunity.organization.name,
-        ownerId: opportunity.owner.id,
-        ownerName: opportunity.owner.displayName,
-        ownerEmail: opportunity.owner.email,
-        teamId: opportunity.owner.teamId,
-        teamName: opportunity.owner.team?.name ?? null,
-        stageCode: opportunity.stageCode,
-        stageLabel: opportunity.stageLabel,
-        status: opportunity.status,
-        createdAt: opportunity.createdAt,
-        lastInteractionAt: opportunity.interactions[0]?.occurredAt ?? null,
-        lastStageChangeAt: opportunity.stageHistory[0]?.occurredAt ?? null,
-        thresholdDays: incident?.thresholdDays ?? config?.thresholdDays ?? 30,
-        escalationAfterDays: incident?.escalationAfterDays ?? config?.escalationAfterDays ?? 3,
-        activeIncident: incident ? {
-          id: incident.id,
-          activityMarkerAt: incident.activityMarkerAt,
-          ownerNotifiedAt: incident.ownerNotifiedAt,
-          escalatedAt: incident.escalatedAt,
-        } : null,
-      }];
+      return [
+        {
+          id: opportunity.id,
+          organizationId: opportunity.organization.id,
+          organizationName: opportunity.organization.name,
+          ownerId: opportunity.owner.id,
+          ownerName: opportunity.owner.displayName,
+          ownerEmail: opportunity.owner.email,
+          teamId: opportunity.owner.teamId,
+          teamName: opportunity.owner.team?.name ?? null,
+          stageCode: opportunity.stageCode,
+          stageLabel: opportunity.stageLabel,
+          status: opportunity.status,
+          createdAt: opportunity.createdAt,
+          lastInteractionAt: opportunity.interactions[0]?.occurredAt ?? null,
+          lastStageChangeAt: opportunity.stageHistory[0]?.occurredAt ?? null,
+          thresholdDays: incident?.thresholdDays ?? config?.thresholdDays ?? 30,
+          escalationAfterDays: incident?.escalationAfterDays ?? config?.escalationAfterDays ?? 3,
+          activeIncident: incident
+            ? {
+                id: incident.id,
+                activityMarkerAt: incident.activityMarkerAt,
+                ownerNotifiedAt: incident.ownerNotifiedAt,
+                escalatedAt: incident.escalatedAt,
+              }
+            : null,
+        },
+      ];
     });
   }
 
@@ -118,7 +120,11 @@ export class PrismaOpportunitySlaMonitorStore implements OpportunitySlaMonitorSt
       return await this.prisma.$transaction(async (transaction) => {
         const current = await currentOpportunity(transaction, input.candidate.id);
         if (!current || current.status !== OpportunityStatus.ACTIVE) return false;
-        const marker = activityMarker(current.createdAt, current.interactions, current.stageHistory);
+        const marker = activityMarker(
+          current.createdAt,
+          current.interactions,
+          current.stageHistory,
+        );
         if (marker.getTime() !== input.evaluation.activityMarkerAt.getTime()) return false;
         if (input.occurredAt < input.evaluation.thresholdReachedAt) return false;
         if (current.slaIncidents.length > 0) return false;
@@ -146,7 +152,9 @@ export class PrismaOpportunitySlaMonitorStore implements OpportunitySlaMonitorSt
             title: `Разобрать зависание: ${current.stageLabel}`,
             dueAt: input.occurredAt,
             priorityScore: 95,
-            priorityReasons: [{ code: "inactivity", label: `Нет активности ${input.candidate.thresholdDays} дн.` }],
+            priorityReasons: [
+              { code: "inactivity", label: `Нет активности ${input.candidate.thresholdDays} дн.` },
+            ],
             status: TaskStatus.OPEN,
             source: "sla-monitor",
           },
@@ -202,15 +210,27 @@ export class PrismaOpportunitySlaMonitorStore implements OpportunitySlaMonitorSt
         include: {
           opportunity: {
             include: {
-              interactions: { select: { occurredAt: true }, orderBy: { occurredAt: "desc" }, take: 1 },
-              stageHistory: { select: { occurredAt: true }, orderBy: { occurredAt: "desc" }, take: 1 },
+              interactions: {
+                select: { occurredAt: true },
+                orderBy: { occurredAt: "desc" },
+                take: 1,
+              },
+              stageHistory: {
+                select: { occurredAt: true },
+                orderBy: { occurredAt: "desc" },
+                take: 1,
+              },
             },
           },
         },
       });
       if (!incident || incident.status !== "open" || incident.escalatedAt) return false;
       const opportunity = incident.opportunity;
-      const marker = activityMarker(opportunity.createdAt, opportunity.interactions, opportunity.stageHistory);
+      const marker = activityMarker(
+        opportunity.createdAt,
+        opportunity.interactions,
+        opportunity.stageHistory,
+      );
       const escalationDueAt = new Date(
         incident.ownerNotifiedAt.getTime() + incident.escalationAfterDays * DAY_MS,
       );
@@ -218,7 +238,8 @@ export class PrismaOpportunitySlaMonitorStore implements OpportunitySlaMonitorSt
         opportunity.status !== OpportunityStatus.ACTIVE ||
         marker.getTime() !== incident.activityMarkerAt.getTime() ||
         input.occurredAt < escalationDueAt
-      ) return false;
+      )
+        return false;
 
       const updated = await transaction.opportunitySlaIncident.updateMany({
         where: { id: incident.id, status: "open", escalatedAt: null },
@@ -248,12 +269,7 @@ export class PrismaOpportunitySlaMonitorStore implements OpportunitySlaMonitorSt
           aggregateId: incident.id,
           aggregateVersion: 2,
           schemaVersion: 1,
-          payload: notificationPayload(
-            input.candidate,
-            incident.id,
-            incident.taskId,
-            input,
-          ),
+          payload: notificationPayload(input.candidate, incident.id, incident.taskId, input),
           occurredAt: input.occurredAt,
         },
       });
@@ -300,10 +316,7 @@ export class PrismaOpportunitySlaMonitorStore implements OpportunitySlaMonitorSt
   }
 }
 
-async function currentOpportunity(
-  transaction: Prisma.TransactionClient,
-  opportunityId: string,
-) {
+async function currentOpportunity(transaction: Prisma.TransactionClient, opportunityId: string) {
   return transaction.opportunity.findUnique({
     where: { id: opportunityId },
     include: {
@@ -319,9 +332,10 @@ function activityMarker(
   interactions: Array<{ occurredAt: Date }>,
   stageHistory: Array<{ occurredAt: Date }>,
 ) {
-  const values = [createdAt, interactions[0]?.occurredAt, stageHistory[0]?.occurredAt]
-    .filter((value): value is Date => value instanceof Date);
-  return values.reduce((latest, value) => value > latest ? value : latest, createdAt);
+  const values = [createdAt, interactions[0]?.occurredAt, stageHistory[0]?.occurredAt].filter(
+    (value): value is Date => value instanceof Date,
+  );
+  return values.reduce((latest, value) => (value > latest ? value : latest), createdAt);
 }
 
 function slaConfig(value: Prisma.JsonValue, stageCode: string) {
@@ -367,7 +381,7 @@ function notificationPayload(
 
 function validDays(value: unknown) {
   return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= 365
-    ? value as number
+    ? (value as number)
     : undefined;
 }
 

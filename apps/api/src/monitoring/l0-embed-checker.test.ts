@@ -1,21 +1,23 @@
 import { describe, expect, it } from "vitest";
-import {
-  L0EmbedChecker,
-  findDocumentedRutubeEmbed,
-  type HttpReader,
-} from "./l0-embed-checker.js";
+import { L0EmbedChecker, findDocumentedRutubeEmbed, type HttpReader } from "./l0-embed-checker.js";
 
 describe("RUTUBE L0 embed checker", () => {
   it("recognizes only the documented RUTUBE play/embed iframe URL", () => {
-    expect(findDocumentedRutubeEmbed(`
+    expect(
+      findDocumentedRutubeEmbed(`
       <iframe src="https://rutube.ru/play/embed/7716bd3e665725c3c008ae7ab4ff02e2?skinColor=e53935"></iframe>
-    `)).toBe("https://rutube.ru/play/embed/7716bd3e665725c3c008ae7ab4ff02e2?skinColor=e53935");
-    expect(findDocumentedRutubeEmbed(
-      `<iframe src="https://evil.example/?next=https://rutube.ru/play/embed/fake"></iframe>`,
-    )).toBeNull();
-    expect(findDocumentedRutubeEmbed(
-      `<iframe src="https://rutube.ru.evil.example/play/embed/fake"></iframe>`,
-    )).toBeNull();
+    `),
+    ).toBe("https://rutube.ru/play/embed/7716bd3e665725c3c008ae7ab4ff02e2?skinColor=e53935");
+    expect(
+      findDocumentedRutubeEmbed(
+        `<iframe src="https://evil.example/?next=https://rutube.ru/play/embed/fake"></iframe>`,
+      ),
+    ).toBeNull();
+    expect(
+      findDocumentedRutubeEmbed(
+        `<iframe src="https://rutube.ru.evil.example/play/embed/fake"></iframe>`,
+      ),
+    ).toBeNull();
   });
 
   it("returns healthy without executing the player when page and embed respond", async () => {
@@ -42,7 +44,9 @@ describe("RUTUBE L0 embed checker", () => {
 
   it("classifies policy blocks separately from confirmed player failures", async () => {
     const blocked = new L0EmbedChecker(new SequenceReader([response(429, "rate limited")]));
-    const missing = new L0EmbedChecker(new SequenceReader([response(200, "<main>No player</main>")]));
+    const missing = new L0EmbedChecker(
+      new SequenceReader([response(200, "<main>No player</main>")]),
+    );
 
     await expect(blocked.check("https://partner.example/article")).resolves.toMatchObject({
       result: "blocked",

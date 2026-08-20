@@ -8,12 +8,14 @@ describe("RadarService", () => {
     const service = new RadarService(new TodayService(), new FoundInspector(), fixedClock);
     const file = {
       fileName: "radar.csv",
-      buffer: Buffer.from([
-        "organization_name,domain,source,segment",
-        "Новый сайт,new-radar.example,Каталог,Новости",
-        "Дубль,new-radar.example,Каталог,Новости",
-        "Тест,staging.media.example,Каталог,Новости",
-      ].join("\n")),
+      buffer: Buffer.from(
+        [
+          "organization_name,domain,source,segment",
+          "Новый сайт,new-radar.example,Каталог,Новости",
+          "Дубль,new-radar.example,Каталог,Новости",
+          "Тест,staging.media.example,Каталог,Новости",
+        ].join("\n"),
+      ),
     };
 
     const result = await service.import(file, "radar-import-key-0001");
@@ -50,25 +52,34 @@ describe("RadarService", () => {
       version: 2,
       evidence: [{ status: "found", playerType: "RUTUBE", confidence: "high" }],
     });
-    expect(inspected.score.factors.find(({ code }) => code === "player"))
-      .toMatchObject({ value: 14 });
+    expect(inspected.score.factors.find(({ code }) => code === "player")).toMatchObject({
+      value: 14,
+    });
 
-    const adjusted = service.adjustScore(created.id, {
-      version: 2,
-      adjustment: -7,
-      comment: "Низкая доля видео на главной",
-    }, "radar-score-key-0001");
+    const adjusted = service.adjustScore(
+      created.id,
+      {
+        version: 2,
+        adjustment: -7,
+        comment: "Низкая доля видео на главной",
+      },
+      "radar-score-key-0001",
+    );
     expect(adjusted.score).toMatchObject({
       manualAdjustment: -7,
       manualAdjustmentComment: "Низкая доля видео на главной",
     });
 
-    const deferred = service.decide(created.id, {
-      version: 3,
-      decision: "defer",
-      reason: "Повторная оценка после медиакита",
-      deferUntil: "2026-08-25T10:00:00.000Z",
-    }, "radar-decision-key-0001");
+    const deferred = service.decide(
+      created.id,
+      {
+        version: 3,
+        decision: "defer",
+        reason: "Повторная оценка после медиакита",
+        deferUntil: "2026-08-25T10:00:00.000Z",
+      },
+      "radar-decision-key-0001",
+    );
     expect(deferred).toMatchObject({
       status: "deferred",
       deferUntil: "2026-08-25T10:00:00.000Z",
@@ -83,12 +94,16 @@ describe("RadarService", () => {
     const created = service.create(candidateCommand(), "radar-create-key-0010");
     const inspected = await service.inspect(created.id, "radar-check-key-0010");
 
-    const accepted = service.decide(created.id, {
-      version: inspected.version,
-      decision: "accept",
-      reason: "Целевой охват и найден RUTUBE",
-      comment: "Передать в работу Анне",
-    }, "radar-decision-key-0010");
+    const accepted = service.decide(
+      created.id,
+      {
+        version: inspected.version,
+        decision: "accept",
+        reason: "Целевой охват и найден RUTUBE",
+        comment: "Передать в работу Анне",
+      },
+      "radar-decision-key-0010",
+    );
 
     expect(accepted).toMatchObject({
       status: "accepted",
@@ -97,19 +112,23 @@ describe("RadarService", () => {
       decisions: [{ decision: "accept", reason: "Целевой охват и найден RUTUBE" }],
     });
     expect(today.getToday().actions).toHaveLength(17);
-    expect(today.getToday().actions.find(({ organizationId }) =>
-      organizationId === accepted.acceptedOrganizationId
-    )).toMatchObject({
+    expect(
+      today
+        .getToday()
+        .actions.find(({ organizationId }) => organizationId === accepted.acceptedOrganizationId),
+    ).toMatchObject({
       opportunityId: accepted.acceptedOpportunityId,
       organizationName: "Новые медиа",
       domain: "new-media.example",
       stageCode: "S2",
       stageLabel: "Квалифицирован",
       title: expect.stringContaining("editor@new-media.example"),
-      contacts: [expect.objectContaining({
-        email: "editor@new-media.example",
-        role: "Видеоредакция",
-      })],
+      contacts: [
+        expect.objectContaining({
+          email: "editor@new-media.example",
+          role: "Видеоредакция",
+        }),
+      ],
       opportunityStageData: expect.objectContaining({
         rutubeUseCase: expect.stringContaining("видеоновости"),
       }),
@@ -118,33 +137,48 @@ describe("RadarService", () => {
 
   it("помечает дубль действующей организации и защищает от устаревшей версии", async () => {
     const service = new RadarService(new TodayService(), new FoundInspector(), fixedClock);
-    const duplicate = service.create({
-      ...candidateCommand(),
-      name: "Дубль Медиа Новости",
-      url: "https://www.medianovosti.ru/article",
-    }, "radar-create-key-0020");
+    const duplicate = service.create(
+      {
+        ...candidateCommand(),
+        name: "Дубль Медиа Новости",
+        url: "https://www.medianovosti.ru/article",
+      },
+      "radar-create-key-0020",
+    );
     const inspected = await service.inspect(duplicate.id, "radar-check-key-0020");
 
     expect(inspected.duplicateOrganization).toMatchObject({
       id: "org-task-1",
       name: "Медиа Новости",
     });
-    expect(inspected.score.factors).toContainEqual(expect.objectContaining({
-      code: "duplicate-partner",
-      value: -40,
-    }));
-    expect(() => service.adjustScore(duplicate.id, {
-      version: 1,
-      adjustment: 1,
-      comment: "Устаревшая форма",
-    }, "radar-score-key-0020")).toThrow(RadarCandidateVersionConflictError);
+    expect(inspected.score.factors).toContainEqual(
+      expect.objectContaining({
+        code: "duplicate-partner",
+        value: -40,
+      }),
+    );
+    expect(() =>
+      service.adjustScore(
+        duplicate.id,
+        {
+          version: 1,
+          adjustment: 1,
+          comment: "Устаревшая форма",
+        },
+        "radar-score-key-0020",
+      ),
+    ).toThrow(RadarCandidateVersionConflictError);
     let duplicateError: unknown;
     try {
-      service.decide(duplicate.id, {
-        version: inspected.version,
-        decision: "accept",
-        reason: "Попытка принять дубль",
-      }, "radar-decision-key-0020");
+      service.decide(
+        duplicate.id,
+        {
+          version: inspected.version,
+          decision: "accept",
+          reason: "Попытка принять дубль",
+        },
+        "radar-decision-key-0020",
+      );
     } catch (error) {
       duplicateError = error;
     }
@@ -153,11 +187,14 @@ describe("RadarService", () => {
 
   it("добавляет в карточку автоматически собранные признаки и пересчитывает score", async () => {
     const service = new RadarService(new TodayService(), new FoundInspector(), fixedClock);
-    const created = service.create({
-      name: "Спортивная площадка",
-      url: "https://sports-research.example/",
-      source: "Ручной поиск",
-    }, "radar-create-key-0030");
+    const created = service.create(
+      {
+        name: "Спортивная площадка",
+        url: "https://sports-research.example/",
+        source: "Ручной поиск",
+      },
+      "radar-create-key-0030",
+    );
 
     const inspected = await service.inspect(created.id, "radar-check-key-0030");
 
@@ -174,7 +211,9 @@ describe("RadarService", () => {
     expect(inspected.research).toMatchObject({
       method: "html-signals-v1",
       decisionMakers: [],
-      signals: expect.arrayContaining([expect.objectContaining({ field: "topic", confidence: "medium" })]),
+      signals: expect.arrayContaining([
+        expect.objectContaining({ field: "topic", confidence: "medium" }),
+      ]),
     });
     expect(inspected.score.total).toBeGreaterThan(created.score.total);
   });
@@ -209,26 +248,32 @@ class FoundInspector {
           decisionMakers: [],
           pageUrl,
           collectedAt: fixedClock().toISOString(),
-          signals: [{
-            field: "topic",
-            label: "Тематика",
-            value: "Спорт",
-            source: "title и meta description",
-            confidence: "medium",
-          }],
-          contacts: [{
-            type: "email",
-            value: "editor@new-media.example",
-            href: "mailto:editor@new-media.example",
-            sourceUrl: pageUrl,
-            confidence: "high",
-          }],
-          videoPages: [{
-            pageUrl,
-            label: "Видеоновости",
-            sourceUrl: pageUrl,
-            confidence: "medium",
-          }],
+          signals: [
+            {
+              field: "topic",
+              label: "Тематика",
+              value: "Спорт",
+              source: "title и meta description",
+              confidence: "medium",
+            },
+          ],
+          contacts: [
+            {
+              type: "email",
+              value: "editor@new-media.example",
+              href: "mailto:editor@new-media.example",
+              sourceUrl: pageUrl,
+              confidence: "high",
+            },
+          ],
+          videoPages: [
+            {
+              pageUrl,
+              label: "Видеоновости",
+              sourceUrl: pageUrl,
+              confidence: "medium",
+            },
+          ],
           brief: {
             readiness: "ready_for_outreach",
             siteSummary: "Новости, Россия, публикации — ежедневно.",
@@ -236,7 +281,8 @@ class FoundInspector {
             rutubeUseCase: "видеоновости и репортажи в RUTUBE-плеере",
             likelyContactRoles: ["Видеоредакция", "Коммерческий отдел"],
             risks: ["Трафик не подтверждён внешним провайдером."],
-            nextAction: "Связаться через editor@new-media.example и запросить пример видеостраницы.",
+            nextAction:
+              "Связаться через editor@new-media.example и запросить пример видеостраницы.",
           },
           notes: ["Автоматический сбор"],
         },

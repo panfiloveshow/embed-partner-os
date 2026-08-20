@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { RadarPageInspector, findVideoPattern, robotsAllows, type RadarHttpReader } from "./radar-page-inspector.js";
+import {
+  RadarPageInspector,
+  findVideoPattern,
+  robotsAllows,
+  type RadarHttpReader,
+} from "./radar-page-inspector.js";
 
 describe("RadarPageInspector", () => {
   it("honors robots.txt and detects a documented RUTUBE iframe", async () => {
@@ -7,9 +12,12 @@ describe("RadarPageInspector", () => {
     const reader: RadarHttpReader = {
       async get(url) {
         requests.push(url);
-        return response(url, url.endsWith("/robots.txt")
-          ? "User-agent: *\nAllow: /video"
-          : '<iframe src="https://rutube.ru/play/embed/abc123/"></iframe>');
+        return response(
+          url,
+          url.endsWith("/robots.txt")
+            ? "User-agent: *\nAllow: /video"
+            : '<iframe src="https://rutube.ru/play/embed/abc123/"></iframe>',
+        );
       },
     };
     const inspector = new RadarPageInspector(reader, () => new Date("2026-08-18T12:00:00.000Z"));
@@ -53,15 +61,21 @@ describe("RadarPageInspector", () => {
         <a href="/editorial">Редакция</a>
         <a href="/about">О компании</a>
         <a href="https://outside.example/management">Внешнее руководство</a>`,
-      "https://media.example/contacts": '<a href="mailto:sales@media.example">sales@media.example</a>',
-      "https://media.example/team": '<article><b>Анна Смирнова</b><span>Директор по развитию</span><a href="mailto:anna@media.example">Email</a></article>',
-      "https://media.example/editorial": '<article><b>Иван Орлов</b><span>Главный редактор</span></article>',
+      "https://media.example/contacts":
+        '<a href="mailto:sales@media.example">sales@media.example</a>',
+      "https://media.example/team":
+        '<article><b>Анна Смирнова</b><span>Директор по развитию</span><a href="mailto:anna@media.example">Email</a></article>',
+      "https://media.example/editorial":
+        "<article><b>Иван Орлов</b><span>Главный редактор</span></article>",
       "https://media.example/about": "Эта четвёртая страница не должна загружаться",
     };
     const reader: RadarHttpReader = {
       async get(url) {
         requests.push(url);
-        return response(url, url.endsWith("/robots.txt") ? "User-agent: *\nAllow: /" : pages[url] ?? "");
+        return response(
+          url,
+          url.endsWith("/robots.txt") ? "User-agent: *\nAllow: /" : (pages[url] ?? ""),
+        );
       },
     };
 
@@ -74,10 +88,12 @@ describe("RadarPageInspector", () => {
       "https://media.example/team",
       "https://media.example/editorial",
     ]);
-    expect(observation.featureExtraction?.research.decisionMakers).toEqual(expect.arrayContaining([
-      expect.objectContaining({ fullName: "Анна Смирнова", role: "Директор по развитию" }),
-      expect.objectContaining({ fullName: "Иван Орлов", role: "Главный редактор" }),
-    ]));
+    expect(observation.featureExtraction?.research.decisionMakers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ fullName: "Анна Смирнова", role: "Директор по развитию" }),
+        expect.objectContaining({ fullName: "Иван Орлов", role: "Главный редактор" }),
+      ]),
+    );
     expect(requests).not.toContain("https://outside.example/management");
   });
 
@@ -95,16 +111,22 @@ describe("RadarPageInspector", () => {
       "https://media.example/feed.xml": `<?xml version="1.0"?><rss><channel>
         <item><link>https://media.example/news/3</link></item>
       </channel></rss>`,
-      "https://media.example/contacts": '<p>По вопросам сотрудничества <a href="mailto:partner@media.example">partner@media.example</a></p>',
-      "https://media.example/news/1": '<time datetime="2026-08-20T09:00:00Z"></time><p>Новости спорта</p>',
+      "https://media.example/contacts":
+        '<p>По вопросам сотрудничества <a href="mailto:partner@media.example">partner@media.example</a></p>',
+      "https://media.example/news/1":
+        '<time datetime="2026-08-20T09:00:00Z"></time><p>Новости спорта</p>',
       "https://media.example/video/2": '<iframe src="https://www.youtube.com/embed/abc"></iframe>',
-      "https://media.example/news/3": '<time datetime="2026-08-20T10:00:00Z"></time><p>Свежие новости</p>',
+      "https://media.example/news/3":
+        '<time datetime="2026-08-20T10:00:00Z"></time><p>Свежие новости</p>',
     };
     const reader: RadarHttpReader = {
       async get(url) {
         requests.push(url);
         if (url.endsWith("/robots.txt")) {
-          return response(url, "User-agent: *\nAllow: /\nSitemap: https://media.example/sitemap.xml");
+          return response(
+            url,
+            "User-agent: *\nAllow: /\nSitemap: https://media.example/sitemap.xml",
+          );
         }
         const body = pages[url] ?? "";
         return response(url, body, url.endsWith(".xml") ? "application/xml" : "text/html");
@@ -148,10 +170,9 @@ describe("radar HTML and robots rules", () => {
   });
 
   it("uses the longest matching allow/disallow rule", () => {
-    expect(robotsAllows(
-      "User-agent: *\nDisallow: /media\nAllow: /media/public",
-      "/media/public/video",
-    )).toBe(true);
+    expect(
+      robotsAllows("User-agent: *\nDisallow: /media\nAllow: /media/public", "/media/public/video"),
+    ).toBe(true);
   });
 });
 

@@ -30,7 +30,10 @@ export class ContactNotFoundError extends Error {
 export class ContactAlreadyLinkedError extends Error {
   readonly code = "CONTACT_ALREADY_LINKED";
 
-  constructor(readonly contactId: string, readonly organizationId: string) {
+  constructor(
+    readonly contactId: string,
+    readonly organizationId: string,
+  ) {
     super("Контакт уже связан с этой организацией.");
     this.name = "ContactAlreadyLinkedError";
   }
@@ -48,7 +51,10 @@ export class ContactMergeSameContactError extends Error {
 export class ContactAlreadyMergedError extends Error {
   readonly code = "CONTACT_ALREADY_MERGED";
 
-  constructor(readonly contactId: string, readonly targetContactId: string) {
+  constructor(
+    readonly contactId: string,
+    readonly targetContactId: string,
+  ) {
     super(`Контакт ${contactId} уже объединён с контактом ${targetContactId}.`);
     this.name = "ContactAlreadyMergedError";
   }
@@ -57,7 +63,10 @@ export class ContactAlreadyMergedError extends Error {
 export class ContactMergeTargetRetiredError extends Error {
   readonly code = "CONTACT_MERGE_TARGET_RETIRED";
 
-  constructor(readonly contactId: string, readonly targetContactId: string) {
+  constructor(
+    readonly contactId: string,
+    readonly targetContactId: string,
+  ) {
     super(`Целевой контакт ${contactId} уже объединён с контактом ${targetContactId}.`);
     this.name = "ContactMergeTargetRetiredError";
   }
@@ -66,7 +75,10 @@ export class ContactMergeTargetRetiredError extends Error {
 export class ContactVersionConflictError extends Error {
   readonly code = "CONTACT_VERSION_CONFLICT";
 
-  constructor(readonly contactId: string, readonly currentVersion: number) {
+  constructor(
+    readonly contactId: string,
+    readonly currentVersion: number,
+  ) {
     super(`Контакт ${contactId} уже изменён. Обновите данные и повторите действие.`);
     this.name = "ContactVersionConflictError";
   }

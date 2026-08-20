@@ -1,4 +1,8 @@
-import type { RadarConfidence, RadarEvidenceStatus, RadarResearchCoverage } from "@embed-os/contracts";
+import type {
+  RadarConfidence,
+  RadarEvidenceStatus,
+  RadarResearchCoverage,
+} from "@embed-os/contracts";
 import {
   extractRadarPageFeatures,
   findRadarResearchLinks,
@@ -51,36 +55,75 @@ export class RadarPageInspector implements RadarInspector {
       const robotsUrl = new URL("/robots.txt", parsed.origin).toString();
       const robots = await this.http.get(robotsUrl);
       if (robots.status === 401 || robots.status === 403) {
-        return this.observation(pageUrl, checkedAt, "blocked", null, "low", robots.status, null,
-          "ROBOTS_ACCESS_DENIED");
+        return this.observation(
+          pageUrl,
+          checkedAt,
+          "blocked",
+          null,
+          "low",
+          robots.status,
+          null,
+          "ROBOTS_ACCESS_DENIED",
+        );
       }
       if (robots.status >= 200 && robots.status < 300) {
         const path = `${parsed.pathname}${parsed.search}`;
         if (!robotsAllows(robots.body.toString("utf8"), path)) {
-          return this.observation(pageUrl, checkedAt, "blocked", null, "high", null, null,
-            "ROBOTS_DISALLOWED");
+          return this.observation(
+            pageUrl,
+            checkedAt,
+            "blocked",
+            null,
+            "high",
+            null,
+            null,
+            "ROBOTS_DISALLOWED",
+          );
         }
       }
 
       const page = await this.http.get(pageUrl);
       if (page.status === 403 || page.status === 429) {
-        return this.observation(page.url.toString(), checkedAt, "blocked", null, "high", page.status,
-          null, "PAGE_HTTP_BLOCKED");
+        return this.observation(
+          page.url.toString(),
+          checkedAt,
+          "blocked",
+          null,
+          "high",
+          page.status,
+          null,
+          "PAGE_HTTP_BLOCKED",
+        );
       }
       if (page.status < 200 || page.status >= 300) {
-        return this.observation(page.url.toString(), checkedAt, "unknown", null, "low", page.status,
-          null, "PAGE_HTTP_ERROR");
+        return this.observation(
+          page.url.toString(),
+          checkedAt,
+          "unknown",
+          null,
+          "low",
+          page.status,
+          null,
+          "PAGE_HTTP_ERROR",
+        );
       }
       const contentType = page.headers["content-type"] ?? "";
       if (contentType && !/text\/html|application\/xhtml\+xml/i.test(contentType)) {
-        return this.observation(page.url.toString(), checkedAt, "unknown", null, "low", page.status,
-          null, "PAGE_CONTENT_TYPE_UNSUPPORTED");
+        return this.observation(
+          page.url.toString(),
+          checkedAt,
+          "unknown",
+          null,
+          "low",
+          page.status,
+          null,
+          "PAGE_CONTENT_TYPE_UNSUPPORTED",
+        );
       }
       const html = page.body.toString("utf8");
       const extractions = [extractRadarPageFeatures(html, page.url, checkedAt)];
-      const robotsSource = robots.status >= 200 && robots.status < 300
-        ? robots.body.toString("utf8")
-        : "";
+      const robotsSource =
+        robots.status >= 200 && robots.status < 300 ? robots.body.toString("utf8") : "";
       if (page.url.origin === parsed.origin) {
         const businessUrls = findRadarResearchLinks(html, page.url, 3);
         const declaredSitemaps = findDeclaredSitemaps(robotsSource, page.url)
@@ -91,53 +134,68 @@ export class RadarPageInspector implements RadarInspector {
           .slice(0, 2);
         const sitemapUrls = await this.readSitemapPages(declaredSitemaps, page.url, robotsSource);
         const feedUrls = await this.readFeedPages(declaredFeeds, page.url);
-        const discoveredUrls = uniqueSameOriginUrls([
-          page.url.toString(),
-          ...businessUrls,
-          ...sitemapUrls,
-          ...feedUrls,
-        ], page.url, 200);
-        const pageCandidates = uniqueSameOriginUrls([
-          ...businessUrls,
-          ...sitemapUrls.slice(0, 6),
-          ...feedUrls.slice(0, 4),
-        ], page.url, 11).filter((url) => url !== page.url.toString());
-        const linkedExtractions = await Promise.all(pageCandidates.map(async (linkedUrl) => {
-          const linked = new URL(linkedUrl);
-          if (!robotsAllows(robotsSource, `${linked.pathname}${linked.search}`)) return null;
-          try {
-            const linkedPage = await this.http.get(linkedUrl);
-            const linkedType = linkedPage.headers["content-type"] ?? "";
-            if (
-              linkedPage.url.origin === page.url.origin &&
-              linkedPage.status >= 200 && linkedPage.status < 300 &&
-              (!linkedType || /text\/html|application\/xhtml\+xml/i.test(linkedType))
-            ) {
-              return extractRadarPageFeatures(linkedPage.body.toString("utf8"), linkedPage.url, checkedAt);
+        const discoveredUrls = uniqueSameOriginUrls(
+          [page.url.toString(), ...businessUrls, ...sitemapUrls, ...feedUrls],
+          page.url,
+          200,
+        );
+        const pageCandidates = uniqueSameOriginUrls(
+          [...businessUrls, ...sitemapUrls.slice(0, 6), ...feedUrls.slice(0, 4)],
+          page.url,
+          11,
+        ).filter((url) => url !== page.url.toString());
+        const linkedExtractions = await Promise.all(
+          pageCandidates.map(async (linkedUrl) => {
+            const linked = new URL(linkedUrl);
+            if (!robotsAllows(robotsSource, `${linked.pathname}${linked.search}`)) return null;
+            try {
+              const linkedPage = await this.http.get(linkedUrl);
+              const linkedType = linkedPage.headers["content-type"] ?? "";
+              if (
+                linkedPage.url.origin === page.url.origin &&
+                linkedPage.status >= 200 &&
+                linkedPage.status < 300 &&
+                (!linkedType || /text\/html|application\/xhtml\+xml/i.test(linkedType))
+              ) {
+                return extractRadarPageFeatures(
+                  linkedPage.body.toString("utf8"),
+                  linkedPage.url,
+                  checkedAt,
+                );
+              }
+            } catch {
+              // A secondary research page must not invalidate the primary page inspection.
             }
-          } catch {
-            // A secondary research page must not invalidate the primary page inspection.
-          }
-          return null;
-        }));
-        extractions.push(...linkedExtractions.filter((item): item is RadarPageFeatureExtraction => item !== null));
+            return null;
+          }),
+        );
+        extractions.push(
+          ...linkedExtractions.filter((item): item is RadarPageFeatureExtraction => item !== null),
+        );
 
-        const videoPagesObserved = new Set(extractions.flatMap(({ research }) =>
-          research.videoPages.map(({ pageUrl: videoPageUrl }) => videoPageUrl))).size;
+        const videoPagesObserved = new Set(
+          extractions.flatMap(({ research }) =>
+            research.videoPages.map(({ pageUrl: videoPageUrl }) => videoPageUrl),
+          ),
+        ).size;
         const coverage: RadarResearchCoverage = {
           discoveredUrls: discoveredUrls.length,
           inspectedUrls: extractions.length,
           sitemapUrls: sitemapUrls.length,
           feedUrls: feedUrls.length,
           videoPagesObserved,
-          coveragePercent: discoveredUrls.length > 0
-            ? Math.min(100, Math.round((extractions.length / discoveredUrls.length) * 100))
-            : 100,
+          coveragePercent:
+            discoveredUrls.length > 0
+              ? Math.min(100, Math.round((extractions.length / discoveredUrls.length) * 100))
+              : 100,
         };
         let trafficEstimate = null;
         if (this.trafficProvider) {
           try {
-            trafficEstimate = await this.trafficProvider.estimate(page.url.hostname.replace(/^www\./, ""), checkedAt);
+            trafficEstimate = await this.trafficProvider.estimate(
+              page.url.hostname.replace(/^www\./, ""),
+              checkedAt,
+            );
           } catch {
             // Provider failures do not turn a valid page inspection into an error.
           }
@@ -145,16 +203,37 @@ export class RadarPageInspector implements RadarInspector {
         const extraction = mergeRadarPageExtractions(extractions, trafficEstimate, coverage);
         const player = findVideoPattern(html);
         if (!player) {
-          return this.observation(page.url.toString(), checkedAt, "not_found", null, "medium", page.status,
-            null, "VIDEO_PATTERN_NOT_FOUND", extraction);
+          return this.observation(
+            page.url.toString(),
+            checkedAt,
+            "not_found",
+            null,
+            "medium",
+            page.status,
+            null,
+            "VIDEO_PATTERN_NOT_FOUND",
+            extraction,
+          );
         }
-        return this.observation(page.url.toString(), checkedAt, "found", player.playerType,
-          player.confidence, page.status, player.embedUrl, null, extraction);
+        return this.observation(
+          page.url.toString(),
+          checkedAt,
+          "found",
+          player.playerType,
+          player.confidence,
+          page.status,
+          player.embedUrl,
+          null,
+          extraction,
+        );
       }
       let trafficEstimate = null;
       if (this.trafficProvider) {
         try {
-          trafficEstimate = await this.trafficProvider.estimate(page.url.hostname.replace(/^www\./, ""), checkedAt);
+          trafficEstimate = await this.trafficProvider.estimate(
+            page.url.hostname.replace(/^www\./, ""),
+            checkedAt,
+          );
         } catch {
           // Provider failures do not turn a valid page inspection into an error.
         }
@@ -162,23 +241,58 @@ export class RadarPageInspector implements RadarInspector {
       const extraction = mergeRadarPageExtractions(extractions, trafficEstimate);
       const player = findVideoPattern(html);
       if (!player) {
-        return this.observation(page.url.toString(), checkedAt, "not_found", null, "medium", page.status,
-          null, "VIDEO_PATTERN_NOT_FOUND", extraction);
+        return this.observation(
+          page.url.toString(),
+          checkedAt,
+          "not_found",
+          null,
+          "medium",
+          page.status,
+          null,
+          "VIDEO_PATTERN_NOT_FOUND",
+          extraction,
+        );
       }
-      return this.observation(page.url.toString(), checkedAt, "found", player.playerType,
-        player.confidence, page.status, player.embedUrl, null, extraction);
+      return this.observation(
+        page.url.toString(),
+        checkedAt,
+        "found",
+        player.playerType,
+        player.confidence,
+        page.status,
+        player.embedUrl,
+        null,
+        extraction,
+      );
     } catch (error) {
       if (error instanceof BlockedNetworkTargetError) {
-        return this.observation(pageUrl, checkedAt, "blocked", null, "high", null, null,
-          "NETWORK_TARGET_BLOCKED");
+        return this.observation(
+          pageUrl,
+          checkedAt,
+          "blocked",
+          null,
+          "high",
+          null,
+          null,
+          "NETWORK_TARGET_BLOCKED",
+        );
       }
       if (error instanceof ResponseTooLargeError) {
-        return this.observation(pageUrl, checkedAt, "unknown", null, "low", null, null,
-          "RESPONSE_TOO_LARGE");
+        return this.observation(
+          pageUrl,
+          checkedAt,
+          "unknown",
+          null,
+          "low",
+          null,
+          null,
+          "RESPONSE_TOO_LARGE",
+        );
       }
-      const code = error instanceof Error && error.name === "TimeoutError"
-        ? "NETWORK_TIMEOUT"
-        : "NETWORK_ERROR";
+      const code =
+        error instanceof Error && error.name === "TimeoutError"
+          ? "NETWORK_TIMEOUT"
+          : "NETWORK_ERROR";
       return this.observation(pageUrl, checkedAt, "unknown", null, "low", null, null, code);
     }
   }
@@ -193,16 +307,24 @@ export class RadarPageInspector implements RadarInspector {
       if (/<sitemapindex\b/i.test(response.body)) {
         childSitemaps.push(...sameOriginUrls(locations, response.url, pageUrl, 3));
       } else {
-        pages.push(...sameOriginUrls(locations, response.url, pageUrl, 200).map((url) => url.toString()));
+        pages.push(
+          ...sameOriginUrls(locations, response.url, pageUrl, 200).map((url) => url.toString()),
+        );
       }
     }
     const allowedChildren = childSitemaps
       .filter((url) => robotsAllows(robotsSource, `${url.pathname}${url.search}`))
       .slice(0, 3);
-    const childResponses = await Promise.all(allowedChildren.map((url) => this.readXml(url, pageUrl)));
+    const childResponses = await Promise.all(
+      allowedChildren.map((url) => this.readXml(url, pageUrl)),
+    );
     for (const response of childResponses) {
       if (!response) continue;
-      pages.push(...sameOriginUrls(xmlLocations(response.body), response.url, pageUrl, 200).map((url) => url.toString()));
+      pages.push(
+        ...sameOriginUrls(xmlLocations(response.body), response.url, pageUrl, 200).map((url) =>
+          url.toString(),
+        ),
+      );
     }
     return uniqueSameOriginUrls(pages, pageUrl, 200);
   }
@@ -212,7 +334,11 @@ export class RadarPageInspector implements RadarInspector {
     const responses = await Promise.all(feeds.map((url) => this.readXml(url, pageUrl)));
     for (const response of responses) {
       if (!response) continue;
-      pages.push(...sameOriginUrls(xmlFeedLinks(response.body), response.url, pageUrl, 100).map((url) => url.toString()));
+      pages.push(
+        ...sameOriginUrls(xmlFeedLinks(response.body), response.url, pageUrl, 100).map((url) =>
+          url.toString(),
+        ),
+      );
     }
     return uniqueSameOriginUrls(pages, pageUrl, 100);
   }
@@ -223,9 +349,11 @@ export class RadarPageInspector implements RadarInspector {
       const contentType = response.headers["content-type"] ?? "";
       if (
         response.url.origin !== pageUrl.origin ||
-        response.status < 200 || response.status >= 300 ||
+        response.status < 200 ||
+        response.status >= 300 ||
         (contentType && !/xml|rss|atom/i.test(contentType))
-      ) return null;
+      )
+        return null;
       return { url: response.url, body: response.body.toString("utf8") };
     } catch {
       return null;
@@ -291,10 +419,12 @@ function xmlLocations(xml: string) {
 }
 
 function xmlFeedLinks(xml: string) {
-  const textLinks = [...xml.matchAll(/<link\b(?![^>]*\bhref\s*=)[^>]*>([\s\S]*?)<\/link>/gi)]
-    .map((match) => decodeXml((match[1] ?? "").trim()));
-  const hrefLinks = [...xml.matchAll(/<link\b[^>]*\bhref\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s"'=<>`]+))[^>]*>/gi)]
-    .map((match) => decodeXml((match[1] ?? match[2] ?? match[3] ?? "").trim()));
+  const textLinks = [...xml.matchAll(/<link\b(?![^>]*\bhref\s*=)[^>]*>([\s\S]*?)<\/link>/gi)].map(
+    (match) => decodeXml((match[1] ?? "").trim()),
+  );
+  const hrefLinks = [
+    ...xml.matchAll(/<link\b[^>]*\bhref\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s"'=<>`]+))[^>]*>/gi),
+  ].map((match) => decodeXml((match[1] ?? match[2] ?? match[3] ?? "").trim()));
   return [...textLinks, ...hrefLinks].filter(Boolean);
 }
 
@@ -307,10 +437,13 @@ function sameOriginUrls(values: string[], baseUrl: URL, pageUrl: URL, limit: num
 }
 
 function uniqueSameOriginUrls(values: string[], pageUrl: URL, limit: number) {
-  return uniqueUrls(values.flatMap((value) => {
-    const url = safeSameOriginUrl(value, pageUrl, pageUrl);
-    return url ? [url] : [];
-  }), limit).map((url) => url.toString());
+  return uniqueUrls(
+    values.flatMap((value) => {
+      const url = safeSameOriginUrl(value, pageUrl, pageUrl);
+      return url ? [url] : [];
+    }),
+    limit,
+  ).map((url) => url.toString());
 }
 
 function safeSameOriginUrl(value: string, baseUrl: URL, pageUrl: URL) {
@@ -325,19 +458,24 @@ function safeSameOriginUrl(value: string, baseUrl: URL, pageUrl: URL) {
 }
 
 function uniqueUrls(urls: URL[], limit: number) {
-  return [...new Map(urls.map((url) => [url.toString(), url])).values()].slice(0, Math.max(0, limit));
+  return [...new Map(urls.map((url) => [url.toString(), url])).values()].slice(
+    0,
+    Math.max(0, limit),
+  );
 }
 
 function htmlAttributeFromTag(tag: string, name: string) {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = tag.match(new RegExp(`\\b${escaped}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>\u0060]+))`, "i"));
+  const match = tag.match(
+    new RegExp(`\\b${escaped}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>\u0060]+))`, "i"),
+  );
   return decodeXml(match?.[1] ?? match?.[2] ?? match?.[3] ?? "") || null;
 }
 
 function decodeXml(value: string) {
   return value
     .replace(/&amp;/gi, "&")
-    .replace(/&quot;/gi, "\"")
+    .replace(/&quot;/gi, '"')
     .replace(/&#39;|&apos;/gi, "'")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">");
@@ -363,8 +501,12 @@ export function findVideoPattern(html: string): {
     if (host === "rutube.ru" && /^\/play\/embed\//.test(url.pathname)) {
       return { playerType: "RUTUBE", embedUrl: url.toString(), confidence: "high" };
     }
-    if ((host === "www.youtube.com" || host === "youtube.com" || host === "www.youtube-nocookie.com") &&
-      /^\/embed\//.test(url.pathname)) {
+    if (
+      (host === "www.youtube.com" ||
+        host === "youtube.com" ||
+        host === "www.youtube-nocookie.com") &&
+      /^\/embed\//.test(url.pathname)
+    ) {
       return { playerType: "YouTube", embedUrl: url.toString(), confidence: "high" };
     }
     if (host === "player.vimeo.com" && /^\/video\//.test(url.pathname)) {
@@ -408,8 +550,12 @@ export function robotsAllows(source: string, path: string) {
   }
   const exact = groups.filter(({ agents }) => agents.includes("embedpartneros-radar"));
   const applicable = exact.length > 0 ? exact : groups.filter(({ agents }) => agents.includes("*"));
-  const matches = applicable.flatMap(({ rules }) => rules)
+  const matches = applicable
+    .flatMap(({ rules }) => rules)
     .filter((rule) => path.startsWith(rule.path))
-    .sort((left, right) => right.path.length - left.path.length || Number(right.allow) - Number(left.allow));
+    .sort(
+      (left, right) =>
+        right.path.length - left.path.length || Number(right.allow) - Number(left.allow),
+    );
   return matches[0]?.allow ?? true;
 }

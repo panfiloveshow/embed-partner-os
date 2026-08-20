@@ -104,9 +104,8 @@ export class ActorIdentityService implements ActorIdentityPort {
 
     const rawPermissions = user.permissions.map(({ permission }) => permission);
     const role = parseRole(rawPermissions) ?? "observer";
-    const permissions = role === "admin"
-      ? [...actorPermissions]
-      : rawPermissions.filter(isActorPermission);
+    const permissions =
+      role === "admin" ? [...actorPermissions] : rawPermissions.filter(isActorPermission);
     return {
       subject,
       userId: user.id,
@@ -163,7 +162,9 @@ export class AccessControlGuard implements CanActivate {
     permission: ActorPermission,
     request: ActorRequest,
   ) {
-    this.logger.warn(`${actor.subject} denied ${permission} for ${request.method} ${request.originalUrl}`);
+    this.logger.warn(
+      `${actor.subject} denied ${permission} for ${request.method} ${request.originalUrl}`,
+    );
     if (process.env.PERSISTENCE_MODE !== "postgres") return;
     try {
       await this.prisma.auditLog.create({
@@ -184,14 +185,18 @@ export class AccessControlGuard implements CanActivate {
         },
       });
     } catch (error) {
-      this.logger.error("Failed to append access denial audit", error instanceof Error ? error.stack : String(error));
+      this.logger.error(
+        "Failed to append access denial audit",
+        error instanceof Error ? error.stack : String(error),
+      );
     }
   }
 }
 
 function metadata<T>(key: string, context: ExecutionContext): T | undefined {
-  return Reflect.getMetadata(key, context.getHandler())
-    ?? Reflect.getMetadata(key, context.getClass());
+  return (
+    Reflect.getMetadata(key, context.getHandler()) ?? Reflect.getMetadata(key, context.getClass())
+  );
 }
 
 export async function resolveRequestSubject(
@@ -285,10 +290,12 @@ function scopeFor(role: ActorRole): SessionPayload["scope"]["mode"] {
 }
 
 function initialsFor(displayName: string) {
-  return displayName
-    .trim()
-    .split(/\s+/u)
-    .slice(0, 2)
-    .map((part) => part[0]?.toLocaleUpperCase("ru-RU") ?? "")
-    .join("") || "?";
+  return (
+    displayName
+      .trim()
+      .split(/\s+/u)
+      .slice(0, 2)
+      .map((part) => part[0]?.toLocaleUpperCase("ru-RU") ?? "")
+      .join("") || "?"
+  );
 }

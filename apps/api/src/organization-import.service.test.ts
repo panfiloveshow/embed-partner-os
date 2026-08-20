@@ -5,13 +5,15 @@ import { TodayService } from "./today.service.js";
 describe("OrganizationImportService", () => {
   it("previews, resolves conflicts and commits every row idempotently", async () => {
     const service = new OrganizationImportService(new TodayService(), fixedClock);
-    const preview = await service.preview(csv([
-      "organization_name,domain,segment,source",
-      "Новый партнёр,new-partner.ru,Новости,Пилот",
-      "Медиа Новости,medianovosti.ru,Обновлённый сегмент,Таблица",
-      "Медиа Новости,media-news-group.ru,Медиа,Таблица",
-      "Без домена,,Медиа,Таблица",
-    ]));
+    const preview = await service.preview(
+      csv([
+        "organization_name,domain,segment,source",
+        "Новый партнёр,new-partner.ru,Новости,Пилот",
+        "Медиа Новости,medianovosti.ru,Обновлённый сегмент,Таблица",
+        "Медиа Новости,media-news-group.ru,Медиа,Таблица",
+        "Без домена,,Медиа,Таблица",
+      ]),
+    );
 
     expect(preview).toMatchObject({
       status: "preview",
@@ -42,10 +44,9 @@ describe("OrganizationImportService", () => {
 
   it("cancels a preview without applying any row", async () => {
     const service = new OrganizationImportService(new TodayService(), fixedClock);
-    const preview = await service.preview(csv([
-      "organization_name;domain;source",
-      "Новый партнёр;new-partner.ru;Пилот",
-    ]));
+    const preview = await service.preview(
+      csv(["organization_name;domain;source", "Новый партнёр;new-partner.ru;Пилот"]),
+    );
 
     const cancelled = await service.cancel(preview.id, "import-cancel-key-0001");
 

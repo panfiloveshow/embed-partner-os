@@ -23,34 +23,40 @@ describe("opportunity SLA monitor", () => {
   });
 
   it("escalates a prolonged incident once", async () => {
-    const store = fakeStore([candidate({
-      activeIncident: {
-        id: "incident-1",
-        activityMarkerAt: new Date("2026-08-10T09:00:00.000Z"),
-        ownerNotifiedAt: new Date("2026-08-17T09:00:00.000Z"),
-        escalatedAt: null,
-      },
-    })]);
+    const store = fakeStore([
+      candidate({
+        activeIncident: {
+          id: "incident-1",
+          activityMarkerAt: new Date("2026-08-10T09:00:00.000Z"),
+          ownerNotifiedAt: new Date("2026-08-17T09:00:00.000Z"),
+          escalatedAt: null,
+        },
+      }),
+    ]);
     const monitor = new OpportunitySlaMonitorService(store, () => NOW);
 
     const result = await monitor.runBatch();
 
     expect(result.escalated).toBe(1);
-    expect(store.escalateIncident).toHaveBeenCalledWith(expect.objectContaining({
-      incidentId: "incident-1",
-    }));
+    expect(store.escalateIncident).toHaveBeenCalledWith(
+      expect.objectContaining({
+        incidentId: "incident-1",
+      }),
+    );
   });
 
   it("resolves the old incident when new activity changes the marker", async () => {
-    const store = fakeStore([candidate({
-      lastInteractionAt: new Date("2026-08-20T08:00:00.000Z"),
-      activeIncident: {
-        id: "incident-1",
-        activityMarkerAt: new Date("2026-08-10T09:00:00.000Z"),
-        ownerNotifiedAt: new Date("2026-08-17T09:00:00.000Z"),
-        escalatedAt: null,
-      },
-    })]);
+    const store = fakeStore([
+      candidate({
+        lastInteractionAt: new Date("2026-08-20T08:00:00.000Z"),
+        activeIncident: {
+          id: "incident-1",
+          activityMarkerAt: new Date("2026-08-10T09:00:00.000Z"),
+          ownerNotifiedAt: new Date("2026-08-17T09:00:00.000Z"),
+          escalatedAt: null,
+        },
+      }),
+    ]);
     const monitor = new OpportunitySlaMonitorService(store, () => NOW);
 
     const result = await monitor.runBatch();

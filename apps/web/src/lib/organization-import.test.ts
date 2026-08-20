@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { OrganizationImportJob, OrganizationImportRow } from "@embed-os/contracts";
-import { buildImportCommand, importRowMessage, unresolvedImportRows } from "./organization-import.js";
+import {
+  buildImportCommand,
+  importRowMessage,
+  unresolvedImportRows,
+} from "./organization-import.js";
 
 function row(
   rowNo: number,

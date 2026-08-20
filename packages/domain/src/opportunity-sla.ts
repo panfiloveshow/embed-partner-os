@@ -26,9 +26,7 @@ export interface OpportunitySlaEvaluation {
   escalationDueAt: Date;
 }
 
-export function evaluateOpportunitySla(
-  input: OpportunitySlaInput,
-): OpportunitySlaEvaluation {
+export function evaluateOpportunitySla(input: OpportunitySlaInput): OpportunitySlaEvaluation {
   validDate(input.now, "SLA clock");
   validDate(input.createdAt, "Opportunity creation time");
   positiveInteger(input.thresholdDays, "SLA threshold");
@@ -39,9 +37,7 @@ export function evaluateOpportunitySla(
     input.lastInteractionAt,
     input.lastStageChangeAt,
   );
-  const thresholdReachedAt = new Date(
-    activityMarkerAt.getTime() + input.thresholdDays * DAY_MS,
-  );
+  const thresholdReachedAt = new Date(activityMarkerAt.getTime() + input.thresholdDays * DAY_MS);
   const violationAgeDays = Math.max(
     0,
     Math.floor((input.now.getTime() - thresholdReachedAt.getTime()) / DAY_MS),
@@ -85,10 +81,7 @@ export function evaluateOpportunitySla(
 }
 
 function latestDate(first: Date, ...values: Array<Date | null>) {
-  return values.reduce<Date>(
-    (latest, value) => value && value > latest ? value : latest,
-    first,
-  );
+  return values.reduce<Date>((latest, value) => (value && value > latest ? value : latest), first);
 }
 
 function validDate(value: Date, label: string) {

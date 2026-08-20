@@ -44,21 +44,12 @@ export function resolveExportActor(
 ) {
   const nodeEnv = config.nodeEnv ?? process.env.NODE_ENV;
   const authMode = config.authMode ?? process.env.AUTH_MODE;
-  const trustedIdentityHeader = config.trustedIdentityHeader
-    ?? process.env.TRUSTED_IDENTITY_HEADER;
-  if (
-    nodeEnv === "production" &&
-    authMode !== "oidc_jwt" &&
-    trustedIdentityHeader !== "true"
-  ) {
+  const trustedIdentityHeader = config.trustedIdentityHeader ?? process.env.TRUSTED_IDENTITY_HEADER;
+  if (nodeEnv === "production" && authMode !== "oidc_jwt" && trustedIdentityHeader !== "true") {
     throw new ExportIdentityConfigurationError();
   }
   const subject = rawSubject?.trim();
-  if (
-    !subject ||
-    subject.length > 200 ||
-    !/^[a-zA-Z0-9][a-zA-Z0-9:._@/-]*$/.test(subject)
-  ) {
+  if (!subject || subject.length > 200 || !/^[a-zA-Z0-9][a-zA-Z0-9:._@/-]*$/.test(subject)) {
     throw new ExportAuthenticationRequiredError();
   }
   return subject;
@@ -129,10 +120,12 @@ function csvCell(value: string | number | null | undefined) {
 }
 
 function integrationLabel(status: PartnerIntegrationStatus) {
-  return ({
-    not_started: "Не начата",
-    planned: "Планируется",
-    active: "Активна",
-    issue: "Проблема",
-  } as const)[status];
+  return (
+    {
+      not_started: "Не начата",
+      planned: "Планируется",
+      active: "Активна",
+      issue: "Проблема",
+    } as const
+  )[status];
 }

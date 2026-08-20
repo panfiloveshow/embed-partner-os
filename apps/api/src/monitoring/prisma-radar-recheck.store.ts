@@ -12,10 +12,7 @@ export class PrismaRadarRecheckStore implements RadarRecheckStore {
       where: {
         AND: [
           {
-            OR: [
-              { status: "READY" },
-              { status: "DEFERRED", deferUntil: { lte: now } },
-            ],
+            OR: [{ status: "READY" }, { status: "DEFERRED", deferUntil: { lte: now } }],
           },
           { evidence: { none: { detectedAt: { gte: checkedSince } } } },
         ],

@@ -25,9 +25,5 @@ export function assertLaterDeadline(currentDueAt: string | Date, nextDueAt: stri
 }
 
 function rescheduleError(fieldErrors: Record<string, string>) {
-  return new DomainRuleError(
-    "TSK-005",
-    "Перенос срока требует новую дату и причину",
-    fieldErrors,
-  );
+  return new DomainRuleError("TSK-005", "Перенос срока требует новую дату и причину", fieldErrors);
 }

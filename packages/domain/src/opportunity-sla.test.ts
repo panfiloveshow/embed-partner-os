@@ -13,10 +13,12 @@ const BASE = {
 
 describe("opportunity SLA", () => {
   it("opens one incident when the stage threshold is reached", () => {
-    expect(evaluateOpportunitySla({
-      ...BASE,
-      now: new Date("2026-08-15T09:00:00.000Z"),
-    })).toMatchObject({
+    expect(
+      evaluateOpportunitySla({
+        ...BASE,
+        now: new Date("2026-08-15T09:00:00.000Z"),
+      }),
+    ).toMatchObject({
       action: "open",
       activityMarkerAt: new Date("2026-08-10T09:00:00.000Z"),
       thresholdReachedAt: new Date("2026-08-15T09:00:00.000Z"),
@@ -25,16 +27,18 @@ describe("opportunity SLA", () => {
   });
 
   it("does not duplicate an active incident before escalation is due", () => {
-    expect(evaluateOpportunitySla({
-      ...BASE,
-      now: new Date("2026-08-17T09:00:00.000Z"),
-      activeIncident: {
-        id: "incident-1",
-        activityMarkerAt: new Date("2026-08-10T09:00:00.000Z"),
-        ownerNotifiedAt: new Date("2026-08-15T09:00:00.000Z"),
-        escalatedAt: null,
-      },
-    }).action).toBe("none");
+    expect(
+      evaluateOpportunitySla({
+        ...BASE,
+        now: new Date("2026-08-17T09:00:00.000Z"),
+        activeIncident: {
+          id: "incident-1",
+          activityMarkerAt: new Date("2026-08-10T09:00:00.000Z"),
+          ownerNotifiedAt: new Date("2026-08-15T09:00:00.000Z"),
+          escalatedAt: null,
+        },
+      }).action,
+    ).toBe("none");
   });
 
   it("escalates only once after a prolonged violation", () => {
@@ -49,13 +53,15 @@ describe("opportunity SLA", () => {
       },
     };
     expect(evaluateOpportunitySla(input).action).toBe("escalate");
-    expect(evaluateOpportunitySla({
-      ...input,
-      activeIncident: {
-        ...input.activeIncident,
-        escalatedAt: new Date("2026-08-18T09:00:00.000Z"),
-      },
-    }).action).toBe("none");
+    expect(
+      evaluateOpportunitySla({
+        ...input,
+        activeIncident: {
+          ...input.activeIncident,
+          escalatedAt: new Date("2026-08-18T09:00:00.000Z"),
+        },
+      }).action,
+    ).toBe("none");
   });
 
   it("resolves the incident after activity or leaving the active state", () => {
@@ -65,17 +71,21 @@ describe("opportunity SLA", () => {
       ownerNotifiedAt: new Date("2026-08-15T09:00:00.000Z"),
       escalatedAt: null,
     };
-    expect(evaluateOpportunitySla({
-      ...BASE,
-      now: new Date("2026-08-18T09:00:00.000Z"),
-      lastInteractionAt: new Date("2026-08-18T08:00:00.000Z"),
-      activeIncident,
-    }).action).toBe("resolve");
-    expect(evaluateOpportunitySla({
-      ...BASE,
-      status: "WAITING",
-      now: new Date("2026-08-18T09:00:00.000Z"),
-      activeIncident,
-    }).action).toBe("resolve");
+    expect(
+      evaluateOpportunitySla({
+        ...BASE,
+        now: new Date("2026-08-18T09:00:00.000Z"),
+        lastInteractionAt: new Date("2026-08-18T08:00:00.000Z"),
+        activeIncident,
+      }).action,
+    ).toBe("resolve");
+    expect(
+      evaluateOpportunitySla({
+        ...BASE,
+        status: "WAITING",
+        now: new Date("2026-08-18T09:00:00.000Z"),
+        activeIncident,
+      }).action,
+    ).toBe("resolve");
   });
 });

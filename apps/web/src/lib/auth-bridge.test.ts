@@ -12,7 +12,9 @@ describe("web authentication bridge", () => {
     const getAccessToken = vi.fn(async () => "renewed.jwt.value");
     const provider = bridgeTokenProvider({ getAccessToken });
 
-    await expect(provider.getAccessToken({ forceRefresh: true })).resolves.toBe("renewed.jwt.value");
+    await expect(provider.getAccessToken({ forceRefresh: true })).resolves.toBe(
+      "renewed.jwt.value",
+    );
     expect(getAccessToken).toHaveBeenCalledWith({ forceRefresh: true });
   });
 });

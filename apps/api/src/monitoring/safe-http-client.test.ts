@@ -37,7 +37,8 @@ describe("crawler network safety", () => {
       };
     };
     const client = new SafeHttpClient(
-      async (hostname) => hostname === "partner.example" ? ["93.184.216.34"] : ["169.254.169.254"],
+      async (hostname) =>
+        hostname === "partner.example" ? ["93.184.216.34"] : ["169.254.169.254"],
       requester,
     );
 
@@ -48,9 +49,12 @@ describe("crawler network safety", () => {
   });
 
   it("rejects credentials and non-HTTP protocols before DNS", async () => {
-    const client = new SafeHttpClient(async () => ["93.184.216.34"], async () => {
-      throw new Error("must not request");
-    });
+    const client = new SafeHttpClient(
+      async () => ["93.184.216.34"],
+      async () => {
+        throw new Error("must not request");
+      },
+    );
 
     await expect(client.get("file:///etc/passwd")).rejects.toBeInstanceOf(
       BlockedNetworkTargetError,
@@ -66,12 +70,20 @@ describe("crawler network safety", () => {
   it("pins the validated address for both single and all-address Node lookups", async () => {
     const lookup = createPinnedLookup("93.184.216.34", 4);
 
-    await expect(new Promise((resolve, reject) => lookup("partner.example", { all: false },
-      (error, address, family) => error ? reject(error) : resolve({ address, family }))
-    )).resolves.toEqual({ address: "93.184.216.34", family: 4 });
+    await expect(
+      new Promise((resolve, reject) =>
+        lookup("partner.example", { all: false }, (error, address, family) =>
+          error ? reject(error) : resolve({ address, family }),
+        ),
+      ),
+    ).resolves.toEqual({ address: "93.184.216.34", family: 4 });
 
-    await expect(new Promise((resolve, reject) => lookup("partner.example", { all: true },
-      (error, addresses) => error ? reject(error) : resolve(addresses))
-    )).resolves.toEqual([{ address: "93.184.216.34", family: 4 }]);
+    await expect(
+      new Promise((resolve, reject) =>
+        lookup("partner.example", { all: true }, (error, addresses) =>
+          error ? reject(error) : resolve(addresses),
+        ),
+      ),
+    ).resolves.toEqual([{ address: "93.184.216.34", family: 4 }]);
   });
 });

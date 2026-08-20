@@ -67,5 +67,7 @@ export function inspectionErrorLabel(errorCode: string | null): string {
     RESPONSE_TOO_LARGE: "ответ страницы превышает допустимый размер",
     VIDEO_PATTERN_NOT_FOUND: "поддерживаемые паттерны видеоплеера не найдены",
   };
-  return errorCode ? labels[errorCode] ?? `техническая причина ${errorCode}` : "причина не определена";
+  return errorCode
+    ? (labels[errorCode] ?? `техническая причина ${errorCode}`)
+    : "причина не определена";
 }

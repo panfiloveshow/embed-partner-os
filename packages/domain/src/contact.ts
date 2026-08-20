@@ -121,7 +121,10 @@ function normalizeEmail(value: unknown) {
   const email = optionalText(value, "email", 320)?.toLowerCase();
   if (!email) return undefined;
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    throw contactValidationError({ email: "Укажите корректный email" }, "Некорректный email контакта");
+    throw contactValidationError(
+      { email: "Укажите корректный email" },
+      "Некорректный email контакта",
+    );
   }
   return email;
 }
@@ -193,11 +196,7 @@ function contactValidationError(
   fieldErrors: Record<string, string>,
   message = "Контакт должен содержать имя, роль и хотя бы один рабочий канал",
 ) {
-  return new DomainRuleError(
-    "PRT-005",
-    message,
-    fieldErrors,
-  );
+  return new DomainRuleError("PRT-005", message, fieldErrors);
 }
 
 function linkRequiredText(value: unknown, field: string, maxLength: number) {

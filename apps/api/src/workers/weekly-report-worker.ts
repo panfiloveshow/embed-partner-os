@@ -20,13 +20,15 @@ async function bootstrap() {
   try {
     do {
       const snapshot = await scheduler.runLatestDue();
-      console.log(JSON.stringify({
-        event: "weekly-report.generated",
-        snapshotId: snapshot.id,
-        periodStart: snapshot.periodStart,
-        revision: snapshot.revision,
-        dataAsOf: snapshot.dataAsOf,
-      }));
+      console.log(
+        JSON.stringify({
+          event: "weekly-report.generated",
+          snapshotId: snapshot.id,
+          periodStart: snapshot.periodStart,
+          revision: snapshot.revision,
+          dataAsOf: snapshot.dataAsOf,
+        }),
+      );
       if (process.env.WEEKLY_REPORT_RUN_ONCE === "1") break;
 
       const dueAt = nextWeeklyReportDue(new Date());

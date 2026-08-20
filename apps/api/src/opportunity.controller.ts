@@ -10,10 +10,7 @@ import {
   Post,
 } from "@nestjs/common";
 import { ApiHeader, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
-import type {
-  FunnelPayload,
-  OpportunityStageTransitionResult,
-} from "@embed-os/contracts";
+import type { FunnelPayload, OpportunityStageTransitionResult } from "@embed-os/contracts";
 import { parseIdempotencyKey } from "./application/idempotency.js";
 import { OPPORTUNITY_PORT, type OpportunityPort } from "./opportunity.port.js";
 import { RequirePermission } from "./auth/access-control.js";

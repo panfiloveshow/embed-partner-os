@@ -8,13 +8,16 @@ describe("organization import", () => {
   it("parses quoted CSV, normalizes domains and classifies every row", async () => {
     const parsed = await parseOrganizationImportFile({
       fileName: "partners.csv",
-      buffer: Buffer.from([
-        "organization_name,domain,segment,source,notes",
-        '"Новый медиа, ООО",https://www.new-media.ru/video,Новости,Пилот,"важный, партнёр"',
-        "Медиа Новости,www.medianovosti.ru,Медиа,Таблица,Обновить сегмент",
-        "Медиа Новости,another-domain.ru,Медиа,Таблица,Проверить дубль",
-        "Битая строка,,Медиа,Таблица,",
-      ].join("\n"), "utf8"),
+      buffer: Buffer.from(
+        [
+          "organization_name,domain,segment,source,notes",
+          '"Новый медиа, ООО",https://www.new-media.ru/video,Новости,Пилот,"важный, партнёр"',
+          "Медиа Новости,www.medianovosti.ru,Медиа,Таблица,Обновить сегмент",
+          "Медиа Новости,another-domain.ru,Медиа,Таблица,Проверить дубль",
+          "Битая строка,,Медиа,Таблица,",
+        ].join("\n"),
+        "utf8",
+      ),
     });
 
     const rows = classifyOrganizationImportRows(parsed.rows, [
@@ -43,11 +46,14 @@ describe("organization import", () => {
   it("marks a repeated domain inside one file as a non-creatable conflict", async () => {
     const parsed = await parseOrganizationImportFile({
       fileName: "partners.csv",
-      buffer: Buffer.from([
-        "organization_name;domain;source",
-        "Первый;example.ru;Таблица",
-        "Второй;www.example.ru;Таблица",
-      ].join("\n"), "utf8"),
+      buffer: Buffer.from(
+        [
+          "organization_name;domain;source",
+          "Первый;example.ru;Таблица",
+          "Второй;www.example.ru;Таблица",
+        ].join("\n"),
+        "utf8",
+      ),
     });
 
     const rows = classifyOrganizationImportRows(parsed.rows, []);

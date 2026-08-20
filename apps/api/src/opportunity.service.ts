@@ -54,30 +54,33 @@ export class OpportunityService implements OpportunityPort {
   async list(): Promise<FunnelPayload> {
     const today = this.today.getToday();
     const generatedAt = this.clock();
-    const opportunities = uniqueOpportunities(today.actions).map((action): FunnelOpportunity => ({
-      id: action.opportunityId,
-      version: action.opportunityVersion,
-      processVersion: action.processVersion,
-      organizationId: action.organizationId,
-      organizationName: action.organizationName,
-      domain: action.domain,
-      type: "EMBED",
-      stageCode: action.stageCode as OpportunityStageCode,
-      stageLabel: action.stageLabel,
-      status: action.opportunityStatus,
-      partnerScore: action.partnerScore ?? 0,
-      owner: { id: today.currentUser.id, name: action.ownerName },
-      nextAction: action.dueAt
-        ? { id: action.id, title: action.title, dueAt: action.dueAt }
-        : null,
-      lastInteractionAt: action.lastInteraction?.occurredAt ?? null,
-      stageAgeDays: null,
-      riskFlags: riskFlagsForAction(action, generatedAt),
-    })).sort((left, right) =>
-      left.stageCode.localeCompare(right.stageCode) ||
-      right.partnerScore - left.partnerScore ||
-      left.organizationName.localeCompare(right.organizationName, "ru")
-    );
+    const opportunities = uniqueOpportunities(today.actions)
+      .map((action): FunnelOpportunity => ({
+        id: action.opportunityId,
+        version: action.opportunityVersion,
+        processVersion: action.processVersion,
+        organizationId: action.organizationId,
+        organizationName: action.organizationName,
+        domain: action.domain,
+        type: "EMBED",
+        stageCode: action.stageCode as OpportunityStageCode,
+        stageLabel: action.stageLabel,
+        status: action.opportunityStatus,
+        partnerScore: action.partnerScore ?? 0,
+        owner: { id: today.currentUser.id, name: action.ownerName },
+        nextAction: action.dueAt
+          ? { id: action.id, title: action.title, dueAt: action.dueAt }
+          : null,
+        lastInteractionAt: action.lastInteraction?.occurredAt ?? null,
+        stageAgeDays: null,
+        riskFlags: riskFlagsForAction(action, generatedAt),
+      }))
+      .sort(
+        (left, right) =>
+          left.stageCode.localeCompare(right.stageCode) ||
+          right.partnerScore - left.partnerScore ||
+          left.organizationName.localeCompare(right.organizationName, "ru"),
+      );
     const stageCounts = countStages(opportunities);
 
     return {
@@ -85,8 +88,9 @@ export class OpportunityService implements OpportunityPort {
       teamName: today.teamName,
       total: opportunities.length,
       truncated: false,
-      processVersions: [...new Set(opportunities.map(({ processVersion }) => processVersion))]
-        .sort((left, right) => left - right),
+      processVersions: [...new Set(opportunities.map(({ processVersion }) => processVersion))].sort(
+        (left, right) => left - right,
+      ),
       stageCounts,
       opportunities,
     };
@@ -119,9 +123,12 @@ export class OpportunityService implements OpportunityPort {
     const now = this.clock();
     assertLifecycleDates(command, now);
     const stageData = { ...current.stageData, ...(command.stageData ?? {}) };
-    const placements = command.toStageCode === "S9"
-      ? (await this.placements.list()).filter((placement) => placement.opportunityId === opportunityId)
-      : [];
+    const placements =
+      command.toStageCode === "S9"
+        ? (await this.placements.list()).filter(
+            (placement) => placement.opportunityId === opportunityId,
+          )
+        : [];
     const activePlacements = placements.filter(({ businessStatus }) => businessStatus === "active");
     assertOpportunityStageReady(command.toStageCode, stageData, {
       primaryDomain: current.primaryDomain,
@@ -133,10 +140,11 @@ export class OpportunityService implements OpportunityPort {
       latestInteraction: current.latestInteraction,
       hasActivePlacement: activePlacements.length > 0,
       hasLaunchedPlacement: activePlacements.some(({ launchedAt }) => launchedAt !== null),
-      hasHealthyMonitoredPlacement: activePlacements.some((placement) =>
-        placement.healthStatus === "healthy" &&
-        placement.launchedAt !== null &&
-        placement.lastCheckAt !== null,
+      hasHealthyMonitoredPlacement: activePlacements.some(
+        (placement) =>
+          placement.healthStatus === "healthy" &&
+          placement.launchedAt !== null &&
+          placement.lastCheckAt !== null,
       ),
       hasPlacementOwner: activePlacements.some(({ ownerId }) => ownerId.length > 0),
     });

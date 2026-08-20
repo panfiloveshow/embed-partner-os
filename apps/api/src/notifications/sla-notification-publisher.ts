@@ -1,10 +1,7 @@
 import type { OutboxEnvelope, OutboxPublisher } from "../outbox/outbox-relay.service.js";
 import { signedWebhookHeaders } from "../outbox/webhook-signature.js";
 
-export const SLA_NOTIFICATION_EVENTS = [
-  "opportunity.stale",
-  "opportunity.sla_escalated",
-] as const;
+export const SLA_NOTIFICATION_EVENTS = ["opportunity.stale", "opportunity.sla_escalated"] as const;
 
 export interface SlaNotificationPublisherConfig {
   webhookUrl: string;

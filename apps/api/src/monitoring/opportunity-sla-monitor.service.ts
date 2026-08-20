@@ -86,20 +86,24 @@ export class OpportunitySlaMonitorService {
           result.opened += 1;
         }
       } else if (evaluation.action === "escalate" && candidate.activeIncident) {
-        if (await this.store.escalateIncident({
-          candidate,
-          incidentId: candidate.activeIncident.id,
-          evaluation,
-          occurredAt: now,
-        })) {
+        if (
+          await this.store.escalateIncident({
+            candidate,
+            incidentId: candidate.activeIncident.id,
+            evaluation,
+            occurredAt: now,
+          })
+        ) {
           result.escalated += 1;
         }
       } else if (evaluation.action === "resolve" && candidate.activeIncident) {
-        if (await this.store.resolveIncident({
-          candidate,
-          incidentId: candidate.activeIncident.id,
-          occurredAt: now,
-        })) {
+        if (
+          await this.store.resolveIncident({
+            candidate,
+            incidentId: candidate.activeIncident.id,
+            occurredAt: now,
+          })
+        ) {
           result.resolved += 1;
         }
       }

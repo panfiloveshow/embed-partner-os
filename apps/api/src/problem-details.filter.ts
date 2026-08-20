@@ -214,19 +214,18 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       exception instanceof OrganizationNotFoundError ||
       exception instanceof ContactNotFoundError ||
       exception instanceof PlacementNotFoundError ||
-      exception instanceof PlacementContextNotFoundError
-      || exception instanceof OpportunityNotFoundError
-      || exception instanceof OrganizationImportNotFoundError
-      || exception instanceof RadarCandidateNotFoundError
-      || exception instanceof PartnerNotFoundError
-      || exception instanceof AccessUserNotFoundError
+      exception instanceof PlacementContextNotFoundError ||
+      exception instanceof OpportunityNotFoundError ||
+      exception instanceof OrganizationImportNotFoundError ||
+      exception instanceof RadarCandidateNotFoundError ||
+      exception instanceof PartnerNotFoundError ||
+      exception instanceof AccessUserNotFoundError
     ) {
       status = HttpStatus.NOT_FOUND;
       title = "Объект не найден";
       detail = exception.message;
       code =
-        exception instanceof OrganizationNotFoundError ||
-        exception instanceof ContactNotFoundError
+        exception instanceof OrganizationNotFoundError || exception instanceof ContactNotFoundError
           ? exception.code
           : exception instanceof PlacementNotFoundError ||
               exception instanceof PlacementContextNotFoundError
@@ -241,7 +240,7 @@ export class ProblemDetailsFilter implements ExceptionFilter {
                     ? exception.code
                     : exception instanceof AccessUserNotFoundError
                       ? exception.code
-          : "NOT_FOUND";
+                      : "NOT_FOUND";
     } else if (exception instanceof AuthenticationRequiredError) {
       status = HttpStatus.UNAUTHORIZED;
       title = "Требуется аутентификация";

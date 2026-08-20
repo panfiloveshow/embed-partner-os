@@ -14,16 +14,37 @@ import {
 } from "lucide-react";
 import type { ActorPermission, ActorRole, SessionPayload } from "@embed-os/contracts";
 
-export type AppPage = "today" | "partners" | "funnel" | "radar" | "placements" | "reports" | "settings";
+export type AppPage =
+  "today" | "partners" | "funnel" | "radar" | "placements" | "reports" | "settings";
 
 const navigation = [
   { id: "today" as const, label: "Сегодня", icon: Home, permission: "today.read" as const },
-  { id: "partners" as const, label: "Партнёры", icon: Building2, permission: "partners.read" as const },
-  { id: "funnel" as const, label: "Воронка", icon: Filter, permission: "opportunities.read" as const },
+  {
+    id: "partners" as const,
+    label: "Партнёры",
+    icon: Building2,
+    permission: "partners.read" as const,
+  },
+  {
+    id: "funnel" as const,
+    label: "Воронка",
+    icon: Filter,
+    permission: "opportunities.read" as const,
+  },
   { id: "radar" as const, label: "Радар", icon: Radar, permission: "radar.read" as const },
-  { id: "placements" as const, label: "Размещения", icon: ClipboardCheck, permission: "placements.read" as const },
+  {
+    id: "placements" as const,
+    label: "Размещения",
+    icon: ClipboardCheck,
+    permission: "placements.read" as const,
+  },
   { id: "reports" as const, label: "Отчёты", icon: BarChart3, permission: "reports.view" as const },
-  { id: "settings" as const, label: "Настройки", icon: Settings, permission: "system.admin" as const },
+  {
+    id: "settings" as const,
+    label: "Настройки",
+    icon: Settings,
+    permission: "system.admin" as const,
+  },
 ];
 
 const roleLabels: Record<ActorRole, string> = {
@@ -57,7 +78,10 @@ export function Sidebar({ session, activePage, onNavigate, onLogout }: SidebarPr
     session.role === "admin" || session.permissions.includes(permission);
   const accessLabel = `${roleLabels[session.role]} · ${scopeLabels[session.scope.mode]}`;
   return (
-    <aside className={mobileOpen ? "sidebar sidebar-mobile-open" : "sidebar"} aria-label="Основная навигация">
+    <aside
+      className={mobileOpen ? "sidebar sidebar-mobile-open" : "sidebar"}
+      aria-label="Основная навигация"
+    >
       <div className="brand-block">
         <div className="rutube-wordmark">
           RUTUBE<span aria-hidden="true">●</span>
@@ -76,25 +100,27 @@ export function Sidebar({ session, activePage, onNavigate, onLogout }: SidebarPr
       </div>
 
       <nav className="nav-list">
-        {navigation.filter(({ permission }) => can(permission)).map(({ id, label, icon: Icon }) => {
-          const active = id === activePage;
-          return (
-          <button
-            className={active ? "nav-item nav-item-active" : "nav-item"}
-            type="button"
-            key={label}
-            aria-label={label}
-            aria-current={active ? "page" : undefined}
-            onClick={() => {
-              if (id) onNavigate(id);
-              setMobileOpen(false);
-            }}
-          >
-            <Icon size={18} strokeWidth={1.8} aria-hidden="true" />
-            <span>{label}</span>
-          </button>
-          );
-        })}
+        {navigation
+          .filter(({ permission }) => can(permission))
+          .map(({ id, label, icon: Icon }) => {
+            const active = id === activePage;
+            return (
+              <button
+                className={active ? "nav-item nav-item-active" : "nav-item"}
+                type="button"
+                key={label}
+                aria-label={label}
+                aria-current={active ? "page" : undefined}
+                onClick={() => {
+                  if (id) onNavigate(id);
+                  setMobileOpen(false);
+                }}
+              >
+                <Icon size={18} strokeWidth={1.8} aria-hidden="true" />
+                <span>{label}</span>
+              </button>
+            );
+          })}
       </nav>
 
       <div className="sidebar-footer">

@@ -5,11 +5,7 @@ import type {
 } from "@embed-os/contracts";
 import { DomainRuleError } from "./task-completion.js";
 
-const EMBED_TYPES = new Set<RegisterPlacementCommand["embedType"]>([
-  "video",
-  "live",
-  "playlist",
-]);
+const EMBED_TYPES = new Set<RegisterPlacementCommand["embedType"]>(["video", "live", "playlist"]);
 const ENVIRONMENTS = new Set<RegisterPlacementCommand["environment"]>([
   "production",
   "staging",
@@ -21,7 +17,8 @@ const BUSINESS_STATUSES = new Set<RegisterPlacementCommand["businessStatus"]>([
   "paused",
   "ended",
 ]);
-const ISO_WITH_TIMEZONE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/;
+const ISO_WITH_TIMEZONE =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/;
 
 export function parseRegisterPlacementCommand(input: unknown): RegisterPlacementCommand & {
   urlPattern: string;
@@ -78,9 +75,10 @@ export function parseUpdatePlacementCommand(input: unknown): UpdatePlacementComm
     changedFields += 1;
   }
   if (Object.hasOwn(input, "launchedAt")) {
-    command.launchedAt = input.launchedAt === null || input.launchedAt === ""
-      ? null
-      : optionalDate(input.launchedAt, "launchedAt") ?? null;
+    command.launchedAt =
+      input.launchedAt === null || input.launchedAt === ""
+        ? null
+        : (optionalDate(input.launchedAt, "launchedAt") ?? null);
     changedFields += 1;
   }
   if (changedFields === 0) {
@@ -114,7 +112,11 @@ function normalizedHttpUrl(value: unknown): string {
 
 function optionalDate(value: unknown, field: string): string | undefined {
   if (value === undefined || value === null || value === "") return undefined;
-  if (typeof value !== "string" || !ISO_WITH_TIMEZONE.test(value) || Number.isNaN(Date.parse(value))) {
+  if (
+    typeof value !== "string" ||
+    !ISO_WITH_TIMEZONE.test(value) ||
+    Number.isNaN(Date.parse(value))
+  ) {
     throw placementError({ [field]: "Укажите ISO 8601 дату и время с часовым поясом" });
   }
   return new Date(value).toISOString();

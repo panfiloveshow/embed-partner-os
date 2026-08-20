@@ -8,10 +8,12 @@ import {
 
 describe("SLA notification publisher", () => {
   it("routes the first warning to the opportunity owner", () => {
-    expect(buildSlaNotificationMessage(event("opportunity.stale"), {
-      publicAppUrl: "https://embed-os.example.test",
-      escalationRecipients: ["lead@example.test"],
-    })).toMatchObject({
+    expect(
+      buildSlaNotificationMessage(event("opportunity.stale"), {
+        publicAppUrl: "https://embed-os.example.test",
+        escalationRecipients: ["lead@example.test"],
+      }),
+    ).toMatchObject({
       type: "opportunity.sla.warning",
       recipients: ["anna@example.test"],
       subject: "Требуется реакция по SLA · Медиа",
@@ -20,10 +22,12 @@ describe("SLA notification publisher", () => {
   });
 
   it("routes a prolonged violation to the configured team lead once", () => {
-    expect(buildSlaNotificationMessage(event("opportunity.sla_escalated"), {
-      publicAppUrl: "https://embed-os.example.test",
-      escalationRecipients: ["lead@example.test", "lead@example.test"],
-    })).toMatchObject({
+    expect(
+      buildSlaNotificationMessage(event("opportunity.sla_escalated"), {
+        publicAppUrl: "https://embed-os.example.test",
+        escalationRecipients: ["lead@example.test", "lead@example.test"],
+      }),
+    ).toMatchObject({
       type: "opportunity.sla.escalated",
       recipients: ["lead@example.test"],
       subject: "Эскалация SLA · Медиа",
@@ -32,12 +36,15 @@ describe("SLA notification publisher", () => {
 
   it("uses the outbox id as the delivery idempotency key", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 202 }));
-    const publisher = new SlaNotificationWebhookPublisher({
-      webhookUrl: "https://notify.example.test/v1/messages",
-      publicAppUrl: "https://embed-os.example.test",
-      escalationRecipients: ["lead@example.test"],
-      webhookSecret: "sla-webhook-secret-with-at-least-32-characters",
-    }, fetcher);
+    const publisher = new SlaNotificationWebhookPublisher(
+      {
+        webhookUrl: "https://notify.example.test/v1/messages",
+        publicAppUrl: "https://embed-os.example.test",
+        escalationRecipients: ["lead@example.test"],
+        webhookSecret: "sla-webhook-secret-with-at-least-32-characters",
+      },
+      fetcher,
+    );
 
     await publisher.publish(event("opportunity.stale"));
 
@@ -47,10 +54,11 @@ describe("SLA notification publisher", () => {
     const timestamp = headers.get("X-Embed-Timestamp");
     expect(headers.get("Idempotency-Key")).toBe("event-sla-1");
     expect(headers.get("X-Embed-Message-Id")).toBe("event-sla-1");
-    expect(headers.get("X-Embed-Signature")).toBe(`sha256=${createHmac(
-      "sha256",
-      "sla-webhook-secret-with-at-least-32-characters",
-    ).update(`${timestamp}.event-sla-1.${body}`).digest("hex")}`);
+    expect(headers.get("X-Embed-Signature")).toBe(
+      `sha256=${createHmac("sha256", "sla-webhook-secret-with-at-least-32-characters")
+        .update(`${timestamp}.event-sla-1.${body}`)
+        .digest("hex")}`,
+    );
   });
 });
 

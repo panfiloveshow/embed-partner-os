@@ -61,9 +61,7 @@ export function parseCompleteTaskCommand(input: unknown): CompleteTaskCommand {
 
   if (input.next.mode === "close") {
     const neverReturn = input.next.neverReturn === true;
-    const returnAt = neverReturn
-      ? undefined
-      : requiredDate(input.next.returnAt, "next.returnAt");
+    const returnAt = neverReturn ? undefined : requiredDate(input.next.returnAt, "next.returnAt");
 
     return {
       contactId,
@@ -85,18 +83,14 @@ export function parseCompleteTaskCommand(input: unknown): CompleteTaskCommand {
 
 function requiredContactId(value: unknown) {
   if (typeof value !== "string" || value.trim().length === 0) {
-    throw new DomainRuleError(
-      "TSK-008",
-      "Выберите контакт для фиксации взаимодействия",
-      { contactId: "Выберите контакт, связанный с организацией" },
-    );
+    throw new DomainRuleError("TSK-008", "Выберите контакт для фиксации взаимодействия", {
+      contactId: "Выберите контакт, связанный с организацией",
+    });
   }
   if (value.trim().length > 200) {
-    throw new DomainRuleError(
-      "TSK-008",
-      "Некорректный идентификатор контакта",
-      { contactId: "Идентификатор контакта слишком длинный" },
-    );
+    throw new DomainRuleError("TSK-008", "Некорректный идентификатор контакта", {
+      contactId: "Идентификатор контакта слишком длинный",
+    });
   }
   return value.trim();
 }
@@ -106,11 +100,9 @@ function requiredInteractionType(value: unknown): ManualInteractionType {
     typeof value !== "string" ||
     !manualInteractionTypes.includes(value as ManualInteractionType)
   ) {
-    throw new DomainRuleError(
-      "TSK-008",
-      "Выберите тип взаимодействия для фиксации контакта",
-      { interactionType: "Выберите письмо, звонок, встречу, мессенджер или заметку" },
-    );
+    throw new DomainRuleError("TSK-008", "Выберите тип взаимодействия для фиксации контакта", {
+      interactionType: "Выберите письмо, звонок, встречу, мессенджер или заметку",
+    });
   }
   return value as ManualInteractionType;
 }
