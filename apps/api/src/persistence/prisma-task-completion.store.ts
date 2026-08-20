@@ -8,6 +8,10 @@ import type {
   NewTaskRecord,
   OpportunityCompletionPatch,
 } from "../application/task-completion.service.js";
+import {
+  completeIdempotency as completeIdempotencyRecord,
+  reserveIdempotency as reserveIdempotencyRecord,
+} from "./idempotency-gateway.js";
 
 type PrismaTransaction = Prisma.TransactionClient;
 
@@ -34,41 +38,25 @@ class PrismaCompletionTransaction implements CompletionTransaction {
     createdAt: Date;
     expiresAt: Date;
   }): Promise<IdempotencyReservation> {
-    const inserted = await this.transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-      INSERT INTO "idempotency_record" (
-        "id", "actor_id", "operation", "request_key", "request_hash", "created_at", "expires_at"
-      ) VALUES (
-        ${input.id}::uuid,
-        ${input.actorId}::uuid,
-        ${input.operation},
-        ${input.key},
-        ${input.requestHash},
-        ${input.createdAt},
-        ${input.expiresAt}
-      )
-      ON CONFLICT ("actor_id", "operation", "request_key") DO NOTHING
-      RETURNING "id"
-    `);
-    if (inserted.length === 1) {
+    const reservation = await reserveIdempotencyRecord(this.transaction, {
+      recordId: input.id,
+      actorId: input.actorId,
+      operation: input.operation,
+      requestKey: input.key,
+      requestHash: input.requestHash,
+      now: input.createdAt,
+      expiresAt: input.expiresAt,
+    });
+    if (reservation.state === "reserved") {
       return { state: "reserved", recordId: input.id };
     }
-
-    const existing = await this.transaction.idempotencyRecord.findUnique({
-      where: {
-        actorId_operation_requestKey: {
-          actorId: input.actorId,
-          operation: input.operation,
-          requestKey: input.key,
-        },
-      },
-    });
-    if (!existing) {
+    if (reservation.state === "missing") {
       throw new Error("Idempotency reservation disappeared after a uniqueness conflict");
     }
     return {
       state: "existing",
-      requestHash: existing.requestHash,
-      result: parseCompletionResult(existing.responseJson),
+      requestHash: reservation.requestHash,
+      result: parseCompletionResult(reservation.responseJson),
     };
   }
 
@@ -77,17 +65,12 @@ class PrismaCompletionTransaction implements CompletionTransaction {
     result: CompletionResult;
     completedAt: Date;
   }): Promise<void> {
-    const updated = await this.transaction.idempotencyRecord.updateMany({
-      where: { id: input.recordId, responseJson: { equals: Prisma.DbNull } },
-      data: {
-        responseStatus: 200,
-        responseJson: toJson(input.result),
-        completedAt: input.completedAt,
-      },
+    await completeIdempotencyRecord(this.transaction, {
+      recordId: input.recordId,
+      responseStatus: 200,
+      responseJson: toJson(input.result),
+      completedAt: input.completedAt,
     });
-    if (updated.count !== 1) {
-      throw new Error("Idempotency reservation could not be completed");
-    }
   }
 
   async getTask(taskId: string): Promise<CompletionTaskRecord | null> {

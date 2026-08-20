@@ -3,11 +3,7 @@ import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma, type ReportSnapshot } from "@prisma/client";
 import type { WeeklyReportPayload, WeeklyReportSnapshot } from "@embed-os/contracts";
 import { parseGenerateWeeklyReportCommand, weeklyReportPeriod } from "@embed-os/domain";
-import {
-  IdempotencyConflictError,
-  IdempotencyInProgressError,
-  weeklyReportRequestHash,
-} from "../application/idempotency.js";
+import { IdempotencyInProgressError, weeklyReportRequestHash } from "../application/idempotency.js";
 import {
   buildWeeklyReportPayload,
   weeklyReportChecksum,
@@ -15,6 +11,7 @@ import {
 } from "../application/weekly-report.js";
 import { buildWeeklyReportPublishedEventPayload } from "../reporting/report-digest.js";
 import type { ReportPort } from "../report.port.js";
+import { completeIdempotency, reserveOrReplay } from "./idempotency-gateway.js";
 import { PersistenceActorService, requireActorTeam } from "./persistence-actor.service.js";
 import { PrismaService } from "./prisma.service.js";
 
@@ -46,38 +43,18 @@ export class PostgresReportService implements ReportPort {
         const teamId = requireActorTeam(actor);
         const teamName = actor.teamName ?? "Без команды";
 
-        const inserted = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-          INSERT INTO "idempotency_record" (
-            "id", "actor_id", "operation", "request_key", "request_hash", "created_at", "expires_at"
-          ) VALUES (
-            ${reservationId}::uuid,
-            ${actor.id}::uuid,
-            ${"report.weekly.generate"},
-            ${idempotencyKey},
-            ${requestHash},
-            ${now},
-            ${new Date(now.getTime() + 24 * 60 * 60 * 1_000)}
-          )
-          ON CONFLICT ("actor_id", "operation", "request_key") DO NOTHING
-          RETURNING "id"
-        `);
-        if (inserted.length === 0) {
-          const existingRequest = await transaction.idempotencyRecord.findUnique({
-            where: {
-              actorId_operation_requestKey: {
-                actorId: actor.id,
-                operation: "report.weekly.generate",
-                requestKey: idempotencyKey,
-              },
-            },
-          });
-          if (!existingRequest) throw new IdempotencyInProgressError(idempotencyKey);
-          if (existingRequest.requestHash !== requestHash) {
-            throw new IdempotencyConflictError(idempotencyKey);
-          }
-          const replay = parseSnapshot(existingRequest.responseJson);
-          if (!replay) throw new IdempotencyInProgressError(idempotencyKey);
-          return replay;
+        const replay = await reserveOrReplay(transaction, {
+          recordId: reservationId,
+          actorId: actor.id,
+          operation: "report.weekly.generate",
+          requestKey: idempotencyKey,
+          requestHash,
+          now,
+        });
+        if (replay !== null) {
+          const parsed = parseSnapshot(replay);
+          if (!parsed) throw new IdempotencyInProgressError(idempotencyKey);
+          return parsed;
         }
 
         await transaction.$executeRaw(Prisma.sql`
@@ -97,7 +74,12 @@ export class PostgresReportService implements ReportPort {
         });
         if (exact) {
           const response = mapSnapshot(exact);
-          await completeIdempotency(transaction, reservationId, response, now);
+          await completeIdempotency(transaction, {
+            recordId: reservationId,
+            responseStatus: 201,
+            responseJson: toJson(response),
+            completedAt: now,
+          });
           return response;
         }
 
@@ -175,7 +157,12 @@ export class PostgresReportService implements ReportPort {
             occurredAt: now,
           },
         });
-        await completeIdempotency(transaction, reservationId, response, now);
+        await completeIdempotency(transaction, {
+          recordId: reservationId,
+          responseStatus: 201,
+          responseJson: toJson(response),
+          completedAt: now,
+        });
         return response;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -298,25 +285,6 @@ async function loadWeeklySource(
       escalatedAt: incident.escalatedAt!,
     })),
   };
-}
-
-async function completeIdempotency(
-  transaction: Prisma.TransactionClient,
-  reservationId: string,
-  response: WeeklyReportSnapshot,
-  completedAt: Date,
-) {
-  const completed = await transaction.idempotencyRecord.updateMany({
-    where: { id: reservationId, responseJson: { equals: Prisma.DbNull } },
-    data: {
-      responseStatus: 201,
-      responseJson: toJson(response),
-      completedAt,
-    },
-  });
-  if (completed.count !== 1) {
-    throw new Error("Weekly report idempotency reservation could not be completed");
-  }
 }
 
 function mapSnapshot(record: SnapshotRecord): WeeklyReportSnapshot {

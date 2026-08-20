@@ -4,6 +4,7 @@ import { NestFactory } from "@nestjs/core";
 import { AppModule } from "../app.module.js";
 import { PrismaRadarRecheckStore } from "../monitoring/prisma-radar-recheck.store.js";
 import { RadarRecheckScheduler } from "../monitoring/radar-recheck-scheduler.js";
+import { deleteExpiredIdempotencyRecords } from "../persistence/idempotency-gateway.js";
 import { PrismaService } from "../persistence/prisma.service.js";
 import { RADAR_PORT, type RadarPort } from "../radar.port.js";
 
@@ -14,8 +15,9 @@ async function bootstrap() {
   const intervalHours = integerSetting("RADAR_RECHECK_INTERVAL_HOURS", 168, 1, 24 * 90);
   const pollMs = integerSetting("RADAR_RECHECK_POLL_MS", 60 * 60_000, 10_000, 24 * 60 * 60_000);
   const batchSize = integerSetting("RADAR_RECHECK_BATCH_SIZE", 25, 1, 100);
+  const prisma = app.get(PrismaService);
   const scheduler = new RadarRecheckScheduler(
-    new PrismaRadarRecheckStore(app.get(PrismaService)),
+    new PrismaRadarRecheckStore(prisma),
     app.get<RadarPort>(RADAR_PORT),
   );
 
@@ -25,6 +27,10 @@ async function bootstrap() {
       if (result.selected > 0) {
         console.log(JSON.stringify({ event: "radar-recheck.batch", ...result }));
       }
+      const purged = await purgeExpiredIdempotencyRecords(prisma);
+      if (purged > 0) {
+        console.log(JSON.stringify({ event: "idempotency.expired-purged", deleted: purged }));
+      }
       if (process.env.RADAR_RECHECK_RUN_ONCE === "1") break;
       await wait(pollMs, undefined, { signal: abort.signal });
     } while (!abort.signal.aborted);
@@ -33,6 +39,23 @@ async function bootstrap() {
   } finally {
     await app.close();
   }
+}
+
+const IDEMPOTENCY_PURGE_BATCH_SIZE = 1_000;
+
+/** Deletes expired idempotency reservations in batches of 1000. */
+async function purgeExpiredIdempotencyRecords(prisma: PrismaService) {
+  let total = 0;
+  for (;;) {
+    const deleted = await deleteExpiredIdempotencyRecords(
+      prisma,
+      new Date(),
+      IDEMPOTENCY_PURGE_BATCH_SIZE,
+    );
+    total += deleted;
+    if (deleted < IDEMPOTENCY_PURGE_BATCH_SIZE) break;
+  }
+  return total;
 }
 
 function integerSetting(name: string, fallback: number, min: number, max: number) {

@@ -24,10 +24,8 @@ import {
   type ExistingImportOrganization,
   type OrganizationImportFile,
 } from "../application/organization-import.js";
-import {
-  IdempotencyConflictError,
-  IdempotencyInProgressError,
-} from "../application/idempotency.js";
+import { IdempotencyInProgressError } from "../application/idempotency.js";
+import { completeIdempotency, reserveOrReplay } from "./idempotency-gateway.js";
 import type { OrganizationImportPort } from "../organization-import.port.js";
 import {
   OrganizationImportNotFoundError,
@@ -128,11 +126,11 @@ export class PostgresOrganizationImportService implements OrganizationImportPort
       async (transaction) => {
         const actor = await this.actors.current(transaction);
         const teamId = requireActorTeam(actor);
-        const replay = await reserveIdempotency(transaction, {
-          id: reservationId,
+        const replay = await reserveOrReplay(transaction, {
+          recordId: reservationId,
           actorId: actor.id,
           operation: `organization-import.commit:${jobId}`,
-          idempotencyKey,
+          requestKey: idempotencyKey,
           requestHash,
           now,
         });
@@ -386,7 +384,12 @@ export class PostgresOrganizationImportService implements OrganizationImportPort
           },
           appliedRows,
         );
-        await completeIdempotency(transaction, reservationId, response, now);
+        await completeIdempotency(transaction, {
+          recordId: reservationId,
+          responseStatus: 200,
+          responseJson: toJson(response),
+          completedAt: now,
+        });
         return response;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -399,11 +402,11 @@ export class PostgresOrganizationImportService implements OrganizationImportPort
     return this.prisma.$transaction(
       async (transaction) => {
         const actor = await this.actors.current(transaction);
-        const replay = await reserveIdempotency(transaction, {
-          id: reservationId,
+        const replay = await reserveOrReplay(transaction, {
+          recordId: reservationId,
           actorId: actor.id,
           operation: `organization-import.cancel:${jobId}`,
-          idempotencyKey,
+          requestKey: idempotencyKey,
           requestHash: hashCommand({ action: "cancel" }),
           now,
         });
@@ -433,7 +436,12 @@ export class PostgresOrganizationImportService implements OrganizationImportPort
           occurredAt: now,
         });
         const response = mapJob(updated);
-        await completeIdempotency(transaction, reservationId, response, now);
+        await completeIdempotency(transaction, {
+          recordId: reservationId,
+          responseStatus: 200,
+          responseJson: toJson(response),
+          completedAt: now,
+        });
         return response;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -584,61 +592,6 @@ async function recordJobEvent(
       payload: toJson({ importJobId: input.jobId, ...asRecord(input.payload) }),
       occurredAt: input.occurredAt,
     },
-  });
-}
-
-async function reserveIdempotency(
-  transaction: Prisma.TransactionClient,
-  input: {
-    id: string;
-    actorId: string;
-    operation: string;
-    idempotencyKey: string;
-    requestHash: string;
-    now: Date;
-  },
-): Promise<Prisma.JsonValue | null> {
-  const inserted = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-    INSERT INTO "idempotency_record" (
-      "id", "actor_id", "operation", "request_key", "request_hash", "created_at", "expires_at"
-    ) VALUES (
-      ${input.id}::uuid,
-      ${input.actorId}::uuid,
-      ${input.operation},
-      ${input.idempotencyKey},
-      ${input.requestHash},
-      ${input.now},
-      ${new Date(input.now.getTime() + 24 * 60 * 60 * 1_000)}
-    )
-    ON CONFLICT ("actor_id", "operation", "request_key") DO NOTHING
-    RETURNING "id"
-  `);
-  if (inserted.length > 0) return null;
-  const existing = await transaction.idempotencyRecord.findUnique({
-    where: {
-      actorId_operation_requestKey: {
-        actorId: input.actorId,
-        operation: input.operation,
-        requestKey: input.idempotencyKey,
-      },
-    },
-  });
-  if (!existing) throw new IdempotencyInProgressError(input.idempotencyKey);
-  if (existing.requestHash !== input.requestHash)
-    throw new IdempotencyConflictError(input.idempotencyKey);
-  if (existing.responseJson === null) throw new IdempotencyInProgressError(input.idempotencyKey);
-  return existing.responseJson;
-}
-
-async function completeIdempotency(
-  transaction: Prisma.TransactionClient,
-  reservationId: string,
-  response: OrganizationImportJob,
-  now: Date,
-) {
-  await transaction.idempotencyRecord.update({
-    where: { id: reservationId },
-    data: { responseStatus: 200, responseJson: toJson(response), completedAt: now },
   });
 }
 

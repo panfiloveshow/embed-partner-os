@@ -17,6 +17,7 @@ import {
   parseIdempotencyKey,
   taskRescheduleRequestHash,
 } from "../application/idempotency.js";
+import { completeIdempotency, reserveIdempotency } from "./idempotency-gateway.js";
 import {
   ConcurrencyConflictError,
   TaskNotFoundError,
@@ -236,34 +237,19 @@ export class PostgresTodayService implements TodayPort {
     await this.prisma.$transaction(async (transaction) => {
       const actor = await this.actors.current(transaction);
       const reservationId = randomUUID();
-      const inserted = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-        INSERT INTO "idempotency_record" (
-          "id", "actor_id", "operation", "request_key", "request_hash", "created_at", "expires_at"
-        ) VALUES (
-          ${reservationId}::uuid,
-          ${actor.id}::uuid,
-          ${operation},
-          ${idempotencyKey},
-          ${requestHash},
-          ${occurredAt},
-          ${new Date(occurredAt.getTime() + 24 * 60 * 60 * 1_000)}
-        )
-        ON CONFLICT ("actor_id", "operation", "request_key") DO NOTHING
-        RETURNING "id"
-      `);
-      if (inserted.length === 0) {
-        const replay = await transaction.idempotencyRecord.findUnique({
-          where: {
-            actorId_operation_requestKey: {
-              actorId: actor.id,
-              operation,
-              requestKey: idempotencyKey,
-            },
-          },
-        });
-        if (!replay) throw new Error("Idempotency reservation disappeared");
-        if (replay.requestHash !== requestHash) throw new IdempotencyConflictError(idempotencyKey);
-        if (replay.responseJson === null) throw new IdempotencyInProgressError(idempotencyKey);
+      const reservation = await reserveIdempotency(transaction, {
+        recordId: reservationId,
+        actorId: actor.id,
+        operation,
+        requestKey: idempotencyKey,
+        requestHash,
+        now: occurredAt,
+      });
+      if (reservation.state !== "reserved") {
+        if (reservation.state === "missing") throw new Error("Idempotency reservation disappeared");
+        if (reservation.requestHash !== requestHash)
+          throw new IdempotencyConflictError(idempotencyKey);
+        if (reservation.responseJson === null) throw new IdempotencyInProgressError(idempotencyKey);
         return;
       }
 
@@ -308,13 +294,11 @@ export class PostgresTodayService implements TodayPort {
           occurredAt,
         },
       });
-      await transaction.idempotencyRecord.update({
-        where: { id: reservationId },
-        data: {
-          responseStatus: 200,
-          responseJson: { taskId: task.id, dueAt: command.dueAt, version: nextVersion },
-          completedAt: occurredAt,
-        },
+      await completeIdempotency(transaction, {
+        recordId: reservationId,
+        responseStatus: 200,
+        responseJson: { taskId: task.id, dueAt: command.dueAt, version: nextVersion },
+        completedAt: occurredAt,
       });
     });
     return this.getToday();

@@ -16,13 +16,13 @@ import {
   parseUpdatePlacementCommand,
 } from "@embed-os/domain";
 import {
-  IdempotencyConflictError,
   IdempotencyInProgressError,
   placementArchiveRequestHash,
   placementCheckRequestHash,
   placementRequestHash,
   placementUpdateRequestHash,
 } from "../application/idempotency.js";
+import { completeIdempotency, reserveOrReplay } from "./idempotency-gateway.js";
 import type { L0CheckObservation } from "../monitoring/l0-embed-checker.js";
 import { L0_CHECKER, type L0Checker } from "../monitoring/l0-checker.port.js";
 import type { PlacementPort } from "../placement.port.js";
@@ -64,11 +64,11 @@ export class PostgresPlacementService implements PlacementPort {
     return this.prisma.$transaction(
       async (transaction) => {
         const actor = await this.actors.current(transaction);
-        const replay = await reserveIdempotency(transaction, {
-          reservationId,
+        const replay = await reserveOrReplay(transaction, {
+          recordId: reservationId,
           actorId: actor.id,
           operation: "placement.register",
-          idempotencyKey,
+          requestKey: idempotencyKey,
           requestHash,
           now,
         });
@@ -148,7 +148,12 @@ export class PostgresPlacementService implements PlacementPort {
             occurredAt: now,
           },
         });
-        await completeIdempotency(transaction, reservationId, response, now);
+        await completeIdempotency(transaction, {
+          recordId: reservationId,
+          responseStatus: 201,
+          responseJson: toJson(response),
+          completedAt: now,
+        });
         return response;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -167,11 +172,11 @@ export class PostgresPlacementService implements PlacementPort {
     return this.prisma.$transaction(
       async (transaction) => {
         const actor = await this.actors.current(transaction);
-        const replay = await reserveIdempotency(transaction, {
-          reservationId,
+        const replay = await reserveOrReplay(transaction, {
+          recordId: reservationId,
           actorId: actor.id,
           operation: `placement.update:${placementId}`,
-          idempotencyKey,
+          requestKey: idempotencyKey,
           requestHash,
           now,
         });
@@ -258,7 +263,12 @@ export class PostgresPlacementService implements PlacementPort {
           },
           occurredAt: now,
         });
-        await completeIdempotency(transaction, reservationId, response, now, 200);
+        await completeIdempotency(transaction, {
+          recordId: reservationId,
+          responseStatus: 200,
+          responseJson: toJson(response),
+          completedAt: now,
+        });
         return response;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -277,11 +287,11 @@ export class PostgresPlacementService implements PlacementPort {
     return this.prisma.$transaction(
       async (transaction) => {
         const actor = await this.actors.current(transaction);
-        const replay = await reserveIdempotency(transaction, {
-          reservationId,
+        const replay = await reserveOrReplay(transaction, {
+          recordId: reservationId,
           actorId: actor.id,
           operation: `placement.archive:${placementId}`,
-          idempotencyKey,
+          requestKey: idempotencyKey,
           requestHash,
           now,
         });
@@ -334,7 +344,12 @@ export class PostgresPlacementService implements PlacementPort {
           payload: { placementId, reason: command.reason },
           occurredAt: now,
         });
-        await completeIdempotency(transaction, reservationId, response, now, 200);
+        await completeIdempotency(transaction, {
+          recordId: reservationId,
+          responseStatus: 200,
+          responseJson: toJson(response),
+          completedAt: now,
+        });
         return response;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -362,11 +377,11 @@ export class PostgresPlacementService implements PlacementPort {
     // A short transaction reserves the idempotency key BEFORE the external
     // HTTP check, so a concurrent replay never repeats the network call.
     const replay = await this.prisma.$transaction((transaction) =>
-      reserveIdempotency(transaction, {
-        reservationId,
+      reserveOrReplay(transaction, {
+        recordId: reservationId,
         actorId: actor.id,
         operation,
-        idempotencyKey,
+        requestKey: idempotencyKey,
         requestHash,
         now,
       }),
@@ -572,7 +587,12 @@ export class PostgresPlacementService implements PlacementPort {
           },
           occurredAt: observation.checkedAt,
         });
-        await completeIdempotency(transaction, reservationId, response, observation.checkedAt);
+        await completeIdempotency(transaction, {
+          recordId: reservationId,
+          responseStatus: 201,
+          responseJson: toJson(response),
+          completedAt: observation.checkedAt,
+        });
         return response;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -781,67 +801,6 @@ async function syncOpportunityTechnicalRisk(
   await transaction.opportunity.update({
     where: { id: opportunityId },
     data: { technicalRisk: remainingRisk > 0 },
-  });
-}
-
-async function reserveIdempotency(
-  transaction: Prisma.TransactionClient,
-  input: {
-    reservationId: string;
-    actorId: string;
-    operation: string;
-    idempotencyKey: string;
-    requestHash: string;
-    now: Date;
-  },
-): Promise<Prisma.JsonValue | null> {
-  const inserted = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-    INSERT INTO "idempotency_record" (
-      "id", "actor_id", "operation", "request_key", "request_hash", "created_at", "expires_at"
-    ) VALUES (
-      ${input.reservationId}::uuid,
-      ${input.actorId}::uuid,
-      ${input.operation},
-      ${input.idempotencyKey},
-      ${input.requestHash},
-      ${input.now},
-      ${new Date(input.now.getTime() + 24 * 60 * 60 * 1_000)}
-    )
-    ON CONFLICT ("actor_id", "operation", "request_key") DO NOTHING
-    RETURNING "id"
-  `);
-  if (inserted.length > 0) return null;
-  const existing = await transaction.idempotencyRecord.findUnique({
-    where: {
-      actorId_operation_requestKey: {
-        actorId: input.actorId,
-        operation: input.operation,
-        requestKey: input.idempotencyKey,
-      },
-    },
-  });
-  if (!existing) throw new IdempotencyInProgressError(input.idempotencyKey);
-  if (existing.requestHash !== input.requestHash) {
-    throw new IdempotencyConflictError(input.idempotencyKey);
-  }
-  if (existing.responseJson === null) throw new IdempotencyInProgressError(input.idempotencyKey);
-  return existing.responseJson;
-}
-
-async function completeIdempotency(
-  transaction: Prisma.TransactionClient,
-  reservationId: string,
-  response: PlacementView | PlacementCheckResult,
-  completedAt: Date,
-  responseStatus = 201,
-) {
-  await transaction.idempotencyRecord.update({
-    where: { id: reservationId },
-    data: {
-      responseStatus,
-      responseJson: toJson(response),
-      completedAt,
-    },
   });
 }
 

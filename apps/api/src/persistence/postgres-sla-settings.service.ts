@@ -7,12 +7,9 @@ import {
   processSchemaWithSla,
   slaSettingsFromProcessDefinition,
 } from "@embed-os/domain";
-import {
-  IdempotencyConflictError,
-  IdempotencyInProgressError,
-  slaSettingsRequestHash,
-} from "../application/idempotency.js";
+import { IdempotencyInProgressError, slaSettingsRequestHash } from "../application/idempotency.js";
 import type { SlaSettingsPort } from "../sla-settings.port.js";
+import { completeIdempotency, reserveOrReplay } from "./idempotency-gateway.js";
 import { SlaSettingsVersionConflictError } from "../sla-settings.service.js";
 import { PrismaService } from "./prisma.service.js";
 
@@ -54,37 +51,18 @@ export class PostgresSlaSettingsService implements SlaSettingsPort {
 
     return this.prisma.$transaction(
       async (transaction) => {
-        const inserted = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-        INSERT INTO "idempotency_record" (
-          "id", "actor_id", "operation", "request_key", "request_hash", "created_at", "expires_at"
-        ) VALUES (
-          ${reservationId}::uuid,
-          ${actorId}::uuid,
-          ${"settings.sla.update"},
-          ${idempotencyKey},
-          ${requestHash},
-          ${now},
-          ${new Date(now.getTime() + 24 * 60 * 60 * 1_000)}
-        )
-        ON CONFLICT ("actor_id", "operation", "request_key") DO NOTHING
-        RETURNING "id"
-      `);
-        if (inserted.length === 0) {
-          const existing = await transaction.idempotencyRecord.findUnique({
-            where: {
-              actorId_operation_requestKey: {
-                actorId,
-                operation: "settings.sla.update",
-                requestKey: idempotencyKey,
-              },
-            },
-          });
-          if (!existing) throw new IdempotencyInProgressError(idempotencyKey);
-          if (existing.requestHash !== requestHash)
-            throw new IdempotencyConflictError(idempotencyKey);
-          const replay = parseResponse(existing.responseJson);
-          if (!replay) throw new IdempotencyInProgressError(idempotencyKey);
-          return replay;
+        const replay = await reserveOrReplay(transaction, {
+          recordId: reservationId,
+          actorId,
+          operation: "settings.sla.update",
+          requestKey: idempotencyKey,
+          requestHash,
+          now,
+        });
+        if (replay !== null) {
+          const parsed = parseResponse(replay);
+          if (!parsed) throw new IdempotencyInProgressError(idempotencyKey);
+          return parsed;
         }
 
         await transaction.$executeRaw(Prisma.sql`
@@ -167,17 +145,12 @@ export class PostgresSlaSettingsService implements SlaSettingsPort {
             occurredAt: now,
           },
         });
-        const completed = await transaction.idempotencyRecord.updateMany({
-          where: { id: reservationId, responseJson: { equals: Prisma.DbNull } },
-          data: {
-            responseStatus: 200,
-            responseJson: toJson(response),
-            completedAt: now,
-          },
+        await completeIdempotency(transaction, {
+          recordId: reservationId,
+          responseStatus: 200,
+          responseJson: toJson(response),
+          completedAt: now,
         });
-        if (completed.count !== 1) {
-          throw new Error("SLA settings idempotency reservation could not be completed");
-        }
         return response;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },

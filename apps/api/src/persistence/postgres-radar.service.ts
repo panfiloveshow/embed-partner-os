@@ -26,10 +26,8 @@ import {
   parseRadarDecisionCommand,
   parseRadarScoreAdjustmentCommand,
 } from "@embed-os/domain";
-import {
-  IdempotencyConflictError,
-  IdempotencyInProgressError,
-} from "../application/idempotency.js";
+import { IdempotencyInProgressError } from "../application/idempotency.js";
+import { completeIdempotency, reserveOrReplay } from "./idempotency-gateway.js";
 import {
   RADAR_INSPECTOR,
   type RadarInspectionObservation,
@@ -101,11 +99,11 @@ export class PostgresRadarService implements RadarPort {
       async (transaction) => {
         const actor = await this.actors.current(transaction);
         const teamId = requireActorTeam(actor);
-        const replay = await reserveIdempotency(transaction, {
-          reservationId,
+        const replay = await reserveOrReplay(transaction, {
+          recordId: reservationId,
           actorId: actor.id,
           operation: "radar.create",
-          idempotencyKey,
+          requestKey: idempotencyKey,
           requestHash,
           now,
         });
@@ -159,7 +157,12 @@ export class PostgresRadarService implements RadarPort {
         });
         const response = mapCandidate(created);
         await recordMutation(transaction, actor.id, response, "radar.candidate-created", now);
-        await completeIdempotency(transaction, reservationId, response, now, 201);
+        await completeIdempotency(transaction, {
+          recordId: reservationId,
+          responseStatus: 201,
+          responseJson: toJson(response),
+          completedAt: now,
+        });
         return response;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -235,11 +238,11 @@ export class PostgresRadarService implements RadarPort {
     // A short transaction reserves the idempotency key BEFORE the external
     // HTTP inspection, so a concurrent replay never repeats the network call.
     const replay = await this.prisma.$transaction((transaction) =>
-      reserveIdempotency(transaction, {
-        reservationId,
+      reserveOrReplay(transaction, {
+        recordId: reservationId,
         actorId: actor.id,
         operation: `radar.inspect:${candidateId}`,
-        idempotencyKey,
+        requestKey: idempotencyKey,
         requestHash,
         now,
       }),
@@ -318,7 +321,12 @@ export class PostgresRadarService implements RadarPort {
         });
         const response = mapCandidate(updated);
         await recordMutation(transaction, actor.id, response, "radar.candidate-inspected", now);
-        await completeIdempotency(transaction, reservationId, response, now);
+        await completeIdempotency(transaction, {
+          recordId: reservationId,
+          responseStatus: 200,
+          responseJson: toJson(response),
+          completedAt: now,
+        });
         return response;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -358,11 +366,11 @@ export class PostgresRadarService implements RadarPort {
     return this.prisma.$transaction(
       async (transaction) => {
         const actor = await this.actors.current(transaction);
-        const replay = await reserveIdempotency(transaction, {
-          reservationId,
+        const replay = await reserveOrReplay(transaction, {
+          recordId: reservationId,
           actorId: actor.id,
           operation: `radar.decide:${candidateId}`,
-          idempotencyKey,
+          requestKey: idempotencyKey,
           requestHash,
           now,
         });
@@ -418,7 +426,12 @@ export class PostgresRadarService implements RadarPort {
           `radar.candidate-${command.decision}`,
           now,
         );
-        await completeIdempotency(transaction, reservationId, response, now);
+        await completeIdempotency(transaction, {
+          recordId: reservationId,
+          responseStatus: 200,
+          responseJson: toJson(response),
+          completedAt: now,
+        });
         return response;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -437,11 +450,11 @@ export class PostgresRadarService implements RadarPort {
     return this.prisma.$transaction(
       async (transaction) => {
         const actor = await this.actors.current(transaction);
-        const replay = await reserveIdempotency(transaction, {
-          reservationId,
+        const replay = await reserveOrReplay(transaction, {
+          recordId: reservationId,
           actorId: actor.id,
           operation: `radar.score:${candidateId}`,
-          idempotencyKey,
+          requestKey: idempotencyKey,
           requestHash,
           now,
         });
@@ -471,7 +484,12 @@ export class PostgresRadarService implements RadarPort {
         });
         const response = mapCandidate(updated);
         await recordMutation(transaction, actor.id, response, "radar.score-adjusted", now);
-        await completeIdempotency(transaction, reservationId, response, now);
+        await completeIdempotency(transaction, {
+          recordId: reservationId,
+          responseStatus: 200,
+          responseJson: toJson(response),
+          completedAt: now,
+        });
         return response;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
@@ -761,62 +779,6 @@ function scoreSnapshotData(score: RadarScore) {
     factorsJson: toJson(score.factors),
     calculatedAt: new Date(score.calculatedAt),
   };
-}
-
-async function reserveIdempotency(
-  transaction: Prisma.TransactionClient,
-  input: {
-    reservationId: string;
-    actorId: string;
-    operation: string;
-    idempotencyKey: string;
-    requestHash: string;
-    now: Date;
-  },
-) {
-  const inserted = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-    INSERT INTO "idempotency_record" (
-      "id", "actor_id", "operation", "request_key", "request_hash", "created_at", "expires_at"
-    ) VALUES (
-      ${input.reservationId}::uuid,
-      ${input.actorId}::uuid,
-      ${input.operation},
-      ${input.idempotencyKey},
-      ${input.requestHash},
-      ${input.now},
-      ${new Date(input.now.getTime() + 24 * 60 * 60 * 1_000)}
-    )
-    ON CONFLICT ("actor_id", "operation", "request_key") DO NOTHING
-    RETURNING "id"
-  `);
-  if (inserted.length > 0) return null;
-  const existing = await transaction.idempotencyRecord.findUnique({
-    where: {
-      actorId_operation_requestKey: {
-        actorId: input.actorId,
-        operation: input.operation,
-        requestKey: input.idempotencyKey,
-      },
-    },
-  });
-  if (!existing) throw new IdempotencyInProgressError(input.idempotencyKey);
-  if (existing.requestHash !== input.requestHash)
-    throw new IdempotencyConflictError(input.idempotencyKey);
-  if (existing.responseJson === null) throw new IdempotencyInProgressError(input.idempotencyKey);
-  return existing.responseJson;
-}
-
-async function completeIdempotency(
-  transaction: Prisma.TransactionClient,
-  reservationId: string,
-  response: RadarCandidate,
-  now: Date,
-  status = 200,
-) {
-  await transaction.idempotencyRecord.update({
-    where: { id: reservationId },
-    data: { responseStatus: status, responseJson: toJson(response), completedAt: now },
-  });
 }
 
 async function recordMutation(

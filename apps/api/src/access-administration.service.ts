@@ -19,6 +19,7 @@ import {
   IdempotencyConflictError,
   IdempotencyInProgressError,
 } from "./application/idempotency.js";
+import { completeIdempotency, reserveOrReplay } from "./persistence/idempotency-gateway.js";
 import { PrismaService } from "./persistence/prisma.service.js";
 
 const TEAM_ID = "00000000-0000-4000-8000-000000000002";
@@ -282,37 +283,18 @@ export class AccessAdministrationService {
     return this.prisma
       .$transaction(
         async (transaction) => {
-          const inserted = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-        INSERT INTO "idempotency_record" (
-          "id", "actor_id", "operation", "request_key", "request_hash", "created_at", "expires_at"
-        ) VALUES (
-          ${reservationId}::uuid,
-          ${actorId}::uuid,
-          ${"settings.access.user.create"},
-          ${idempotencyKey},
-          ${requestHash},
-          ${now},
-          ${new Date(now.getTime() + 24 * 60 * 60 * 1_000)}
-        )
-        ON CONFLICT ("actor_id", "operation", "request_key") DO NOTHING
-        RETURNING "id"
-      `);
-          if (inserted.length === 0) {
-            const existing = await transaction.idempotencyRecord.findUnique({
-              where: {
-                actorId_operation_requestKey: {
-                  actorId,
-                  operation: "settings.access.user.create",
-                  requestKey: idempotencyKey,
-                },
-              },
-            });
-            if (!existing) throw new IdempotencyInProgressError(idempotencyKey);
-            if (existing.requestHash !== requestHash)
-              throw new IdempotencyConflictError(idempotencyKey);
-            const replay = parseAccessUserResponse(existing.responseJson);
-            if (!replay) throw new IdempotencyInProgressError(idempotencyKey);
-            return replay;
+          const replay = await reserveOrReplay(transaction, {
+            recordId: reservationId,
+            actorId,
+            operation: "settings.access.user.create",
+            requestKey: idempotencyKey,
+            requestHash,
+            now,
+          });
+          if (replay !== null) {
+            const parsed = parseAccessUserResponse(replay);
+            if (!parsed) throw new IdempotencyInProgressError(idempotencyKey);
+            return parsed;
           }
 
           const duplicate = await transaction.user.findFirst({
@@ -379,9 +361,11 @@ export class AccessAdministrationService {
               occurredAt: now,
             },
           });
-          await transaction.idempotencyRecord.update({
-            where: { id: reservationId },
-            data: { responseStatus: 201, responseJson: toJson(response), completedAt: now },
+          await completeIdempotency(transaction, {
+            recordId: reservationId,
+            responseStatus: 201,
+            responseJson: toJson(response),
+            completedAt: now,
           });
           return response;
         },
@@ -406,37 +390,18 @@ export class AccessAdministrationService {
     const now = new Date();
     return this.prisma.$transaction(
       async (transaction) => {
-        const inserted = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-        INSERT INTO "idempotency_record" (
-          "id", "actor_id", "operation", "request_key", "request_hash", "created_at", "expires_at"
-        ) VALUES (
-          ${reservationId}::uuid,
-          ${actorId}::uuid,
-          ${"settings.access.user.update"},
-          ${idempotencyKey},
-          ${requestHash},
-          ${now},
-          ${new Date(now.getTime() + 24 * 60 * 60 * 1_000)}
-        )
-        ON CONFLICT ("actor_id", "operation", "request_key") DO NOTHING
-        RETURNING "id"
-      `);
-        if (inserted.length === 0) {
-          const existing = await transaction.idempotencyRecord.findUnique({
-            where: {
-              actorId_operation_requestKey: {
-                actorId,
-                operation: "settings.access.user.update",
-                requestKey: idempotencyKey,
-              },
-            },
-          });
-          if (!existing) throw new IdempotencyInProgressError(idempotencyKey);
-          if (existing.requestHash !== requestHash)
-            throw new IdempotencyConflictError(idempotencyKey);
-          const replay = parseAccessUserResponse(existing.responseJson);
-          if (!replay) throw new IdempotencyInProgressError(idempotencyKey);
-          return replay;
+        const replay = await reserveOrReplay(transaction, {
+          recordId: reservationId,
+          actorId,
+          operation: "settings.access.user.update",
+          requestKey: idempotencyKey,
+          requestHash,
+          now,
+        });
+        if (replay !== null) {
+          const parsed = parseAccessUserResponse(replay);
+          if (!parsed) throw new IdempotencyInProgressError(idempotencyKey);
+          return parsed;
         }
 
         await transaction.$queryRaw(Prisma.sql`
@@ -548,13 +513,11 @@ export class AccessAdministrationService {
             occurredAt: now,
           },
         });
-        await transaction.idempotencyRecord.update({
-          where: { id: reservationId },
-          data: {
-            responseStatus: 200,
-            responseJson: toJson(response),
-            completedAt: now,
-          },
+        await completeIdempotency(transaction, {
+          recordId: reservationId,
+          responseStatus: 200,
+          responseJson: toJson(response),
+          completedAt: now,
         });
         return response;
       },

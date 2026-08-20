@@ -29,13 +29,13 @@ import {
 import {
   contactRequestHash,
   contactStatusRequestHash,
-  IdempotencyConflictError,
   IdempotencyInProgressError,
   linkContactRequestHash,
   mergeContactRequestHash,
   updateContactRequestHash,
 } from "../application/idempotency.js";
 import type { ContactPort } from "../contact.port.js";
+import { completeIdempotency, reserveOrReplay } from "./idempotency-gateway.js";
 import {
   contactScope,
   organizationScope,
@@ -124,39 +124,18 @@ export class PostgresContactService implements ContactPort {
     return this.prisma.$transaction(
       async (transaction) => {
         const actor = await this.actors.current(transaction);
-        const inserted = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-          INSERT INTO "idempotency_record" (
-            "id", "actor_id", "operation", "request_key", "request_hash", "created_at", "expires_at"
-          ) VALUES (
-            ${reservationId}::uuid,
-            ${actor.id}::uuid,
-            ${operation},
-            ${idempotencyKey},
-            ${requestHash},
-            ${now},
-            ${new Date(now.getTime() + 24 * 60 * 60 * 1_000)}
-          )
-          ON CONFLICT ("actor_id", "operation", "request_key") DO NOTHING
-          RETURNING "id"
-        `);
-
-        if (inserted.length === 0) {
-          const existing = await transaction.idempotencyRecord.findUnique({
-            where: {
-              actorId_operation_requestKey: {
-                actorId: actor.id,
-                operation,
-                requestKey: idempotencyKey,
-              },
-            },
-          });
-          if (!existing) throw new IdempotencyInProgressError(idempotencyKey);
-          if (existing.requestHash !== requestHash) {
-            throw new IdempotencyConflictError(idempotencyKey);
-          }
-          const replay = parseContactOption(existing.responseJson);
-          if (!replay) throw new IdempotencyInProgressError(idempotencyKey);
-          return replay;
+        const replay = await reserveOrReplay(transaction, {
+          recordId: reservationId,
+          actorId: actor.id,
+          operation,
+          requestKey: idempotencyKey,
+          requestHash,
+          now,
+        });
+        if (replay !== null) {
+          const parsed = parseContactOption(replay);
+          if (!parsed) throw new IdempotencyInProgressError(idempotencyKey);
+          return parsed;
         }
 
         const organization = await transaction.organization.findFirst({
@@ -273,17 +252,12 @@ export class PostgresContactService implements ContactPort {
             occurredAt: now,
           },
         });
-        const completed = await transaction.idempotencyRecord.updateMany({
-          where: { id: reservationId, responseJson: { equals: Prisma.DbNull } },
-          data: {
-            responseStatus: 201,
-            responseJson: toJson(result),
-            completedAt: now,
-          },
+        await completeIdempotency(transaction, {
+          recordId: reservationId,
+          responseStatus: 201,
+          responseJson: toJson(result),
+          completedAt: now,
         });
-        if (completed.count !== 1) {
-          throw new Error("Contact idempotency reservation could not be completed");
-        }
         return result;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
@@ -305,39 +279,18 @@ export class PostgresContactService implements ContactPort {
     return this.prisma.$transaction(
       async (transaction) => {
         const actor = await this.actors.current(transaction);
-        const inserted = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-          INSERT INTO "idempotency_record" (
-            "id", "actor_id", "operation", "request_key", "request_hash", "created_at", "expires_at"
-          ) VALUES (
-            ${reservationId}::uuid,
-            ${actor.id}::uuid,
-            ${operation},
-            ${idempotencyKey},
-            ${requestHash},
-            ${now},
-            ${new Date(now.getTime() + 24 * 60 * 60 * 1_000)}
-          )
-          ON CONFLICT ("actor_id", "operation", "request_key") DO NOTHING
-          RETURNING "id"
-        `);
-
-        if (inserted.length === 0) {
-          const existing = await transaction.idempotencyRecord.findUnique({
-            where: {
-              actorId_operation_requestKey: {
-                actorId: actor.id,
-                operation,
-                requestKey: idempotencyKey,
-              },
-            },
-          });
-          if (!existing) throw new IdempotencyInProgressError(idempotencyKey);
-          if (existing.requestHash !== requestHash) {
-            throw new IdempotencyConflictError(idempotencyKey);
-          }
-          const replay = parseContactOption(existing.responseJson);
-          if (!replay) throw new IdempotencyInProgressError(idempotencyKey);
-          return replay;
+        const replay = await reserveOrReplay(transaction, {
+          recordId: reservationId,
+          actorId: actor.id,
+          operation,
+          requestKey: idempotencyKey,
+          requestHash,
+          now,
+        });
+        if (replay !== null) {
+          const parsed = parseContactOption(replay);
+          if (!parsed) throw new IdempotencyInProgressError(idempotencyKey);
+          return parsed;
         }
 
         await transaction.$executeRaw(Prisma.sql`
@@ -433,17 +386,12 @@ export class PostgresContactService implements ContactPort {
             occurredAt: now,
           },
         });
-        const completed = await transaction.idempotencyRecord.updateMany({
-          where: { id: reservationId, responseJson: { equals: Prisma.DbNull } },
-          data: {
-            responseStatus: 201,
-            responseJson: toJson(result),
-            completedAt: now,
-          },
+        await completeIdempotency(transaction, {
+          recordId: reservationId,
+          responseStatus: 201,
+          responseJson: toJson(result),
+          completedAt: now,
         });
-        if (completed.count !== 1) {
-          throw new Error("Contact link idempotency reservation could not be completed");
-        }
         return result;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
@@ -464,39 +412,18 @@ export class PostgresContactService implements ContactPort {
     return this.prisma.$transaction(
       async (transaction) => {
         const actor = await this.actors.current(transaction);
-        const inserted = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-          INSERT INTO "idempotency_record" (
-            "id", "actor_id", "operation", "request_key", "request_hash", "created_at", "expires_at"
-          ) VALUES (
-            ${reservationId}::uuid,
-            ${actor.id}::uuid,
-            ${operation},
-            ${idempotencyKey},
-            ${requestHash},
-            ${now},
-            ${new Date(now.getTime() + 24 * 60 * 60 * 1_000)}
-          )
-          ON CONFLICT ("actor_id", "operation", "request_key") DO NOTHING
-          RETURNING "id"
-        `);
-
-        if (inserted.length === 0) {
-          const existing = await transaction.idempotencyRecord.findUnique({
-            where: {
-              actorId_operation_requestKey: {
-                actorId: actor.id,
-                operation,
-                requestKey: idempotencyKey,
-              },
-            },
-          });
-          if (!existing) throw new IdempotencyInProgressError(idempotencyKey);
-          if (existing.requestHash !== requestHash) {
-            throw new IdempotencyConflictError(idempotencyKey);
-          }
-          const replay = parseMergeContactResult(existing.responseJson);
-          if (!replay) throw new IdempotencyInProgressError(idempotencyKey);
-          return replay;
+        const replay = await reserveOrReplay(transaction, {
+          recordId: reservationId,
+          actorId: actor.id,
+          operation,
+          requestKey: idempotencyKey,
+          requestHash,
+          now,
+        });
+        if (replay !== null) {
+          const parsed = parseMergeContactResult(replay);
+          if (!parsed) throw new IdempotencyInProgressError(idempotencyKey);
+          return parsed;
         }
 
         if (sourceContactId === command.targetContactId) {
@@ -648,17 +575,12 @@ export class PostgresContactService implements ContactPort {
             occurredAt: now,
           },
         });
-        const completed = await transaction.idempotencyRecord.updateMany({
-          where: { id: reservationId, responseJson: { equals: Prisma.DbNull } },
-          data: {
-            responseStatus: 200,
-            responseJson: toJson(result),
-            completedAt: now,
-          },
+        await completeIdempotency(transaction, {
+          recordId: reservationId,
+          responseStatus: 200,
+          responseJson: toJson(result),
+          completedAt: now,
         });
-        if (completed.count !== 1) {
-          throw new Error("Contact merge idempotency reservation could not be completed");
-        }
         return result;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
@@ -914,49 +836,26 @@ export class PostgresContactService implements ContactPort {
     return this.prisma.$transaction(
       async (transaction) => {
         const actor = await this.actors.current(transaction);
-        const inserted = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-        INSERT INTO "idempotency_record" (
-          "id", "actor_id", "operation", "request_key", "request_hash", "created_at", "expires_at"
-        ) VALUES (
-          ${reservationId}::uuid,
-          ${actor.id}::uuid,
-          ${operation},
-          ${idempotencyKey},
-          ${requestHash},
-          ${now},
-          ${new Date(now.getTime() + 24 * 60 * 60 * 1_000)}
-        )
-        ON CONFLICT ("actor_id", "operation", "request_key") DO NOTHING
-        RETURNING "id"
-      `);
-        if (inserted.length === 0) {
-          const existing = await transaction.idempotencyRecord.findUnique({
-            where: {
-              actorId_operation_requestKey: {
-                actorId: actor.id,
-                operation,
-                requestKey: idempotencyKey,
-              },
-            },
-          });
-          if (!existing) throw new IdempotencyInProgressError(idempotencyKey);
-          if (existing.requestHash !== requestHash)
-            throw new IdempotencyConflictError(idempotencyKey);
-          const replay = parseContactRegistryItem(existing.responseJson);
-          if (!replay) throw new IdempotencyInProgressError(idempotencyKey);
-          return replay;
+        const replay = await reserveOrReplay(transaction, {
+          recordId: reservationId,
+          actorId: actor.id,
+          operation,
+          requestKey: idempotencyKey,
+          requestHash,
+          now,
+        });
+        if (replay !== null) {
+          const parsed = parseContactRegistryItem(replay);
+          if (!parsed) throw new IdempotencyInProgressError(idempotencyKey);
+          return parsed;
         }
         const result = await mutate(transaction, now, actor);
-        const completed = await transaction.idempotencyRecord.updateMany({
-          where: { id: reservationId, responseJson: { equals: Prisma.DbNull } },
-          data: {
-            responseStatus: 200,
-            responseJson: toJson(result),
-            completedAt: now,
-          },
+        await completeIdempotency(transaction, {
+          recordId: reservationId,
+          responseStatus: 200,
+          responseJson: toJson(result),
+          completedAt: now,
         });
-        if (completed.count !== 1)
-          throw new Error("Contact mutation reservation could not be completed");
         return result;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
