@@ -630,7 +630,7 @@ export interface RadarResearchCoverage {
 }
 
 export interface RadarPriorityInsight {
-  code: "reach" | "publishing" | "video" | "contact" | "timing";
+  code: "reach" | "publishing" | "video" | "player" | "contact" | "timing";
   label: string;
   explanation: string;
   confidence: RadarConfidence;
@@ -693,6 +693,20 @@ export interface RadarResearch {
   changeSignals?: RadarChangeSignal[];
 }
 
+/** How a video player was observed on the page. */
+export type RadarPlayerDetectionMethod = "static" | "rendered";
+
+export interface RadarDetectedPlayer {
+  /** Stable vendor id from the player signature catalog, e.g. "rutube". */
+  vendor: string;
+  /** Human-readable vendor name, e.g. "RUTUBE" or "VK Видео". */
+  label: string;
+  /** True when the vendor is a competing video hosting (not RUTUBE and not a generic self-hosted player). */
+  competitor: boolean;
+  via: RadarPlayerDetectionMethod;
+  sampleUrl?: string | null;
+}
+
 export interface RadarEvidence {
   id: string;
   pageUrl: string;
@@ -705,6 +719,10 @@ export interface RadarEvidence {
   playerFound: boolean;
   embedUrl: string | null;
   errorCode: string | null;
+  /** Players recognized by the signature catalog (static HTML and/or headless render). */
+  detectedPlayers?: RadarDetectedPlayer[];
+  /** Derived: at least one detected player belongs to a competing video hosting. */
+  competitorPlayerDetected?: boolean;
 }
 
 export interface RadarScoreFactor {

@@ -1,14 +1,22 @@
 import type {
   RadarConfidence,
+  RadarDetectedPlayer,
   RadarEvidenceStatus,
   RadarResearchCoverage,
 } from "@embed-os/contracts";
 import {
+  enrichRadarResearchWithDetectedPlayers,
   extractRadarPageFeatures,
   findRadarResearchLinks,
   mergeRadarPageExtractions,
   type RadarPageFeatureExtraction,
 } from "./radar-feature-extractor.js";
+import {
+  detectPlayersInHtml,
+  toRadarDetectedPlayers,
+  type PlayerDetection,
+} from "./player-signatures.js";
+import type { RadarPageRenderer } from "./radar-page-renderer.js";
 import type { RadarTrafficProvider } from "./radar-traffic-provider.js";
 import {
   BlockedNetworkTargetError,
@@ -26,6 +34,9 @@ export const RADAR_INSPECTOR = Symbol("RADAR_INSPECTOR");
  */
 const RADAR_MAX_RESPONSE_BYTES = 1024 * 1024;
 
+/** Budget: the L1 renderer receives at most this many candidate URLs. */
+const RADAR_L1_MAX_PAGES = 3;
+
 export interface RadarInspectionObservation {
   pageUrl: string;
   status: RadarEvidenceStatus;
@@ -38,6 +49,10 @@ export interface RadarInspectionObservation {
   embedUrl: string | null;
   errorCode: string | null;
   featureExtraction?: RadarPageFeatureExtraction | null;
+  /** Players recognized by the signature catalog across the inspected pages. */
+  detectedPlayers?: RadarDetectedPlayer[];
+  /** Derived: at least one detected player is a competing video hosting. */
+  competitorPlayerDetected?: boolean;
 }
 
 export interface RadarInspector {
@@ -53,6 +68,7 @@ export class RadarPageInspector implements RadarInspector {
     private readonly http: RadarHttpReader = new SafeHttpClient(),
     private readonly clock: () => Date = () => new Date(),
     private readonly trafficProvider: RadarTrafficProvider | null = null,
+    private readonly renderer: RadarPageRenderer | null = null,
   ) {}
 
   async inspect(pageUrl: string): Promise<RadarInspectionObservation> {
@@ -128,6 +144,8 @@ export class RadarPageInspector implements RadarInspector {
         );
       }
       const html = page.body.toString("utf8");
+      const staticDetections = new Map<string, PlayerDetection>();
+      addDetections(staticDetections, detectPlayersInHtml(html, page.url));
       const extractions = [extractRadarPageFeatures(html, page.url, checkedAt)];
       const robotsSource =
         robots.status >= 200 && robots.status < 300 ? robots.body.toString("utf8") : "";
@@ -166,11 +184,9 @@ export class RadarPageInspector implements RadarInspector {
                 linkedPage.status < 300 &&
                 (!linkedType || /text\/html|application\/xhtml\+xml/i.test(linkedType))
               ) {
-                return extractRadarPageFeatures(
-                  linkedPage.body.toString("utf8"),
-                  linkedPage.url,
-                  checkedAt,
-                );
+                const linkedHtml = linkedPage.body.toString("utf8");
+                addDetections(staticDetections, detectPlayersInHtml(linkedHtml, linkedPage.url));
+                return extractRadarPageFeatures(linkedHtml, linkedPage.url, checkedAt);
               }
             } catch {
               // A secondary research page must not invalidate the primary page inspection.
@@ -210,31 +226,13 @@ export class RadarPageInspector implements RadarInspector {
           }
         }
         const extraction = mergeRadarPageExtractions(extractions, trafficEstimate, coverage);
-        const player = findVideoPattern(html);
-        if (!player) {
-          return this.observation(
-            page.url.toString(),
-            checkedAt,
-            "not_found",
-            null,
-            "medium",
-            page.status,
-            null,
-            "VIDEO_PATTERN_NOT_FOUND",
-            extraction,
-          );
-        }
-        return this.observation(
+        // Fresh RSS articles are the most likely places to carry an embedded
+        // player; without a feed we fall back to the checked business pages.
+        const l1Candidates = [
           page.url.toString(),
-          checkedAt,
-          "found",
-          player.playerType,
-          player.confidence,
-          page.status,
-          player.embedUrl,
-          null,
-          extraction,
-        );
+          ...(feedUrls.length > 0 ? feedUrls : pageCandidates),
+        ];
+        return this.finalize(page, checkedAt, html, extraction, staticDetections, l1Candidates);
       }
       let trafficEstimate = null;
       if (this.trafficProvider) {
@@ -248,31 +246,9 @@ export class RadarPageInspector implements RadarInspector {
         }
       }
       const extraction = mergeRadarPageExtractions(extractions, trafficEstimate);
-      const player = findVideoPattern(html);
-      if (!player) {
-        return this.observation(
-          page.url.toString(),
-          checkedAt,
-          "not_found",
-          null,
-          "medium",
-          page.status,
-          null,
-          "VIDEO_PATTERN_NOT_FOUND",
-          extraction,
-        );
-      }
-      return this.observation(
+      return this.finalize(page, checkedAt, html, extraction, staticDetections, [
         page.url.toString(),
-        checkedAt,
-        "found",
-        player.playerType,
-        player.confidence,
-        page.status,
-        player.embedUrl,
-        null,
-        extraction,
-      );
+      ]);
     } catch (error) {
       if (error instanceof BlockedNetworkTargetError) {
         return this.observation(
@@ -304,6 +280,83 @@ export class RadarPageInspector implements RadarInspector {
           : "NETWORK_ERROR";
       return this.observation(pageUrl, checkedAt, "unknown", null, "low", null, null, code);
     }
+  }
+
+  /**
+   * Shared tail of an inspection: applies the signature catalog to the static
+   * result, escalates to the L1 headless renderer when static analysis found
+   * nothing, and produces the final observation.
+   */
+  private async finalize(
+    page: SafeHttpResponse,
+    checkedAt: Date,
+    html: string,
+    baseExtraction: RadarPageFeatureExtraction,
+    staticDetections: Map<string, PlayerDetection>,
+    l1Candidates: string[],
+  ): Promise<RadarInspectionObservation> {
+    const legacyPlayer = findVideoPattern(html);
+    const detectedPlayers: RadarDetectedPlayer[] = toRadarDetectedPlayers(
+      [...staticDetections.values()],
+      "static",
+    );
+    // L1 runs only when the cheap static pass found no video patterns at all:
+    // the page is reachable, so an empty result may simply mean a JS-inserted
+    // player. Disabled with RADAR_L1_ENABLED=0 or without a renderer binding.
+    if (
+      !legacyPlayer &&
+      staticDetections.size === 0 &&
+      this.renderer &&
+      process.env.RADAR_L1_ENABLED !== "0"
+    ) {
+      try {
+        const targets = [...new Set(l1Candidates)].slice(0, RADAR_L1_MAX_PAGES);
+        const rendered = await this.renderer.render(targets, { maxPages: RADAR_L1_MAX_PAGES });
+        const renderedDetections = new Map<string, PlayerDetection>();
+        for (const result of rendered) {
+          if (result.ok) addDetections(renderedDetections, result.players);
+        }
+        detectedPlayers.push(
+          ...toRadarDetectedPlayers([...renderedDetections.values()], "rendered"),
+        );
+      } catch {
+        // L1 is best-effort: a renderer failure never invalidates the L0 result.
+      }
+    }
+    const extraction = enrichRadarResearchWithDetectedPlayers(baseExtraction, detectedPlayers);
+    // The catalog names the vendor precisely, so it wins over the legacy
+    // generic "Embed player" heuristic; specific legacy matches stay intact.
+    const catalogPlayer = playerFromDetections(detectedPlayers);
+    const player =
+      legacyPlayer && legacyPlayer.playerType !== "Embed player"
+        ? legacyPlayer
+        : (catalogPlayer ?? legacyPlayer);
+    if (!player) {
+      return this.observation(
+        page.url.toString(),
+        checkedAt,
+        "not_found",
+        null,
+        "medium",
+        page.status,
+        null,
+        "VIDEO_PATTERN_NOT_FOUND",
+        extraction,
+        detectedPlayers,
+      );
+    }
+    return this.observation(
+      page.url.toString(),
+      checkedAt,
+      "found",
+      player.playerType,
+      player.confidence,
+      page.status,
+      player.embedUrl,
+      null,
+      extraction,
+      detectedPlayers,
+    );
   }
 
   private async readSitemapPages(sitemaps: URL[], pageUrl: URL, robotsSource: string) {
@@ -381,6 +434,7 @@ export class RadarPageInspector implements RadarInspector {
     embedUrl: string | null,
     errorCode: string | null,
     featureExtraction: RadarPageFeatureExtraction | null = null,
+    detectedPlayers: RadarDetectedPlayer[] = [],
   ): RadarInspectionObservation {
     return {
       pageUrl,
@@ -394,8 +448,39 @@ export class RadarPageInspector implements RadarInspector {
       embedUrl,
       errorCode,
       featureExtraction,
+      detectedPlayers,
+      competitorPlayerDetected: detectedPlayers.some(({ competitor }) => competitor),
     };
   }
+}
+
+function addDetections(target: Map<string, PlayerDetection>, detections: PlayerDetection[]) {
+  for (const detection of detections) {
+    if (!target.has(detection.vendor)) target.set(detection.vendor, detection);
+  }
+}
+
+/**
+ * Chooses the observation-level player when the legacy primary-page pattern
+ * missed but the catalog matched. Competitor iframes carry the strongest
+ * signal (a working third-party embed), then any iframe, then the rest.
+ */
+function playerFromDetections(detectedPlayers: RadarDetectedPlayer[]): {
+  playerType: string;
+  embedUrl: string | null;
+  confidence: RadarConfidence;
+} | null {
+  if (detectedPlayers.length === 0) return null;
+  const rank = (player: RadarDetectedPlayer) =>
+    (player.competitor ? 0 : 2) + (player.sampleUrl ? 0 : 1);
+  const best = [...detectedPlayers].sort((left, right) => rank(left) - rank(right))[0]!;
+  return {
+    playerType: best.label,
+    embedUrl: best.sampleUrl ?? null,
+    // Catalog matches on secondary/rendered pages are strong but indirect
+    // evidence for the primary page, so they never claim "high" on their own.
+    confidence: "medium",
+  };
 }
 
 function findDeclaredSitemaps(robotsSource: string, pageUrl: URL) {

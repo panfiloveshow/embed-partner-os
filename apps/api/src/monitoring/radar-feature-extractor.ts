@@ -3,6 +3,7 @@ import type {
   RadarContactLead,
   RadarConfidence,
   RadarDecisionMakerLead,
+  RadarDetectedPlayer,
   RadarFeatureSignal,
   RadarResearch,
   RadarResearchField,
@@ -221,6 +222,59 @@ export function mergeRadarPageExtractions(
       brief: buildWorkBrief(features, contacts, decisionMakers, videoPages, pageUrl, coverage),
       notes,
       ...(coverage ? { coverage } : {}),
+    },
+  };
+}
+
+/**
+ * Injects the "player already in use" evidence into the work brief. A detected
+ * competitor embed is proven demand, so it leads the "why now" story and the
+ * dossier proposes a migration scenario to the RUTUBE player.
+ */
+export function enrichRadarResearchWithDetectedPlayers(
+  extraction: RadarPageFeatureExtraction,
+  detectedPlayers: RadarDetectedPlayer[],
+): RadarPageFeatureExtraction {
+  if (detectedPlayers.length === 0) return extraction;
+  const labels = [...new Set(detectedPlayers.map(({ label }) => label))];
+  const competitors = [
+    ...new Set(detectedPlayers.filter(({ competitor }) => competitor).map(({ label }) => label)),
+  ];
+  const insight: RadarPriorityInsight =
+    competitors.length > 0
+      ? {
+          code: "player",
+          label: "Уже использует сторонний видеохостинг",
+          explanation: `Сайт уже встраивает ${competitors.join(", ")} — сценарий миграции на RUTUBE-плеер.`,
+          confidence: "high",
+        }
+      : {
+          code: "player",
+          label: "Видеоплеер подтверждён",
+          explanation: `На страницах найден видеоплеер: ${labels.join(", ")}.`,
+          confidence: "medium",
+        };
+  const brief = extraction.research.brief;
+  const priorityInsights = [
+    insight,
+    ...(brief.priorityInsights ?? []).filter(({ code }) => code !== "player"),
+  ];
+  const videoUsage = brief.videoUsage.startsWith("На переданной странице не найдено")
+    ? `Подтверждён видеоплеер (${labels.join(", ")}) — сценарий уже работает на стороне площадки.`
+    : brief.videoUsage;
+  return {
+    ...extraction,
+    research: {
+      ...extraction.research,
+      brief: {
+        ...brief,
+        priorityInsights,
+        videoUsage,
+        whyNow: priorityInsights
+          .slice(0, 3)
+          .map(({ explanation }) => explanation)
+          .join(" "),
+      },
     },
   };
 }

@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   RadarPageInspector,
   findVideoPattern,
   robotsAllows,
   type RadarHttpReader,
 } from "./radar-page-inspector.js";
+import type { PlayerDetection } from "./player-signatures.js";
+import type { RadarPageRenderer, RenderedPageObservation } from "./radar-page-renderer.js";
 
 describe("RadarPageInspector", () => {
   it("honors robots.txt and detects a documented RUTUBE iframe", async () => {
@@ -159,6 +161,152 @@ describe("RadarPageInspector", () => {
     );
   });
 });
+
+describe("RadarPageInspector player signatures and L1 fallback", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("treats a competitor iframe in static HTML as confirmed video", async () => {
+    const reader = staticReader({
+      "https://media.example/": '<iframe src="https://vk.com/video_ext.php?oid=1&id=2"></iframe>',
+    });
+    const renderer = new FakeRenderer([]);
+
+    const observation = await new RadarPageInspector(reader, undefined, null, renderer).inspect(
+      "https://media.example/",
+    );
+
+    expect(observation).toMatchObject({
+      status: "found",
+      playerFound: true,
+      playerType: "VK Видео",
+      competitorPlayerDetected: true,
+    });
+    expect(observation.detectedPlayers).toEqual([
+      expect.objectContaining({ vendor: "vk", via: "static", competitor: true }),
+    ]);
+    // Static analysis succeeded, so the L1 budget is never spent.
+    expect(renderer.calls).toEqual([]);
+    expect(observation.featureExtraction?.research.brief.priorityInsights?.[0]).toMatchObject({
+      code: "player",
+      label: "Уже использует сторонний видеохостинг",
+    });
+    expect(observation.featureExtraction?.research.brief.whyNow).toContain(
+      "сценарий миграции на RUTUBE-плеер",
+    );
+  });
+
+  it("escalates to the headless renderer when static HTML has no video patterns", async () => {
+    const reader = staticReader({
+      "https://media.example/": '<a href="/contacts">Контакты</a>',
+      "https://media.example/contacts": "<p>Пишите нам</p>",
+    });
+    const renderer = new FakeRenderer([
+      {
+        url: "https://media.example/",
+        ok: true,
+        players: [detection("kinescope", "Kinescope", true, "iframe")],
+      },
+    ]);
+
+    const observation = await new RadarPageInspector(reader, undefined, null, renderer).inspect(
+      "https://media.example/",
+    );
+
+    expect(renderer.calls).toHaveLength(1);
+    expect(renderer.calls[0]![0]).toBe("https://media.example/");
+    expect(renderer.calls[0]!.length).toBeLessThanOrEqual(3);
+    expect(observation).toMatchObject({
+      status: "found",
+      playerType: "Kinescope",
+      confidence: "medium",
+      competitorPlayerDetected: true,
+    });
+    expect(observation.detectedPlayers).toEqual([
+      expect.objectContaining({ vendor: "kinescope", via: "rendered" }),
+    ]);
+  });
+
+  it("stays not_found when both static analysis and the renderer see no players", async () => {
+    const reader = staticReader({ "https://media.example/": "<main>Только текст</main>" });
+    const renderer = new FakeRenderer([{ url: "https://media.example/", ok: true, players: [] }]);
+
+    const observation = await new RadarPageInspector(reader, undefined, null, renderer).inspect(
+      "https://media.example/",
+    );
+
+    expect(observation).toMatchObject({
+      status: "not_found",
+      errorCode: "VIDEO_PATTERN_NOT_FOUND",
+      detectedPlayers: [],
+      competitorPlayerDetected: false,
+    });
+  });
+
+  it("skips L1 when RADAR_L1_ENABLED=0", async () => {
+    vi.stubEnv("RADAR_L1_ENABLED", "0");
+    const reader = staticReader({ "https://media.example/": "<main>Только текст</main>" });
+    const renderer = new FakeRenderer([
+      {
+        url: "https://media.example/",
+        ok: true,
+        players: [detection("youtube", "YouTube", true, "iframe")],
+      },
+    ]);
+
+    const observation = await new RadarPageInspector(reader, undefined, null, renderer).inspect(
+      "https://media.example/",
+    );
+
+    expect(renderer.calls).toEqual([]);
+    expect(observation.status).toBe("not_found");
+  });
+
+  it("keeps the L0 result when the renderer itself fails", async () => {
+    const reader = staticReader({ "https://media.example/": "<main>Только текст</main>" });
+    const renderer: RadarPageRenderer = {
+      render: async () => {
+        throw new Error("browser crashed");
+      },
+    };
+
+    const observation = await new RadarPageInspector(reader, undefined, null, renderer).inspect(
+      "https://media.example/",
+    );
+
+    expect(observation).toMatchObject({ status: "not_found", detectedPlayers: [] });
+  });
+});
+
+class FakeRenderer implements RadarPageRenderer {
+  readonly calls: string[][] = [];
+  constructor(private readonly results: RenderedPageObservation[]) {}
+  async render(urls: string[]): Promise<RenderedPageObservation[]> {
+    this.calls.push(urls);
+    return this.results;
+  }
+}
+
+function detection(
+  vendor: string,
+  label: string,
+  competitor: boolean,
+  kind: PlayerDetection["kind"],
+): PlayerDetection {
+  return { vendor, label, competitor, kind };
+}
+
+function staticReader(pages: Record<string, string>): RadarHttpReader {
+  return {
+    async get(url) {
+      return response(
+        url,
+        url.endsWith("/robots.txt") ? "User-agent: *\nAllow: /" : (pages[url] ?? ""),
+      );
+    },
+  };
+}
 
 describe("radar HTML and robots rules", () => {
   it("recognizes supported player patterns without starting playback", () => {

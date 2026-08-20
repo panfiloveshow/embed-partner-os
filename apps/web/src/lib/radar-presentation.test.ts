@@ -30,6 +30,43 @@ describe("radar inspection presentation", () => {
     });
   });
 
+  it("presents a detected competitor hosting as a migration opportunity", () => {
+    const result = inspectionPresentation(
+      evidence({
+        status: "found",
+        playerFound: true,
+        playerType: "VK Видео",
+        detectedPlayers: [
+          { vendor: "vk", label: "VK Видео", competitor: true, via: "static", sampleUrl: null },
+        ],
+        competitorPlayerDetected: true,
+      }),
+    );
+
+    expect(result).toMatchObject({ tone: "confirmed", noticeTone: "success" });
+    expect(result.notice).toContain("VK Видео");
+    expect(result.notice).toContain("сценарий миграции на RUTUBE-плеер");
+  });
+
+  it("never alarms when players were detected alongside a not_found status", () => {
+    const result = inspectionPresentation(
+      evidence({
+        status: "not_found",
+        errorCode: "VIDEO_PATTERN_NOT_FOUND",
+        detectedPlayers: [
+          { vendor: "videojs", label: "Video.js", competitor: false, via: "rendered" },
+        ],
+      }),
+    );
+
+    expect(result).toMatchObject({
+      statusLabel: "Видео найдено",
+      tone: "confirmed",
+      noticeTone: "success",
+    });
+    expect(result.notice).toContain("Video.js");
+  });
+
   it("uses success only when a player is confirmed", () => {
     const result = inspectionPresentation(
       evidence({

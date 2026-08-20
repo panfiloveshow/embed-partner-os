@@ -3052,6 +3052,44 @@ td {
   font-size: 8px;
 }
 
+.radar-player-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 3px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.radar-player-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  color: #34405a;
+  background: #eef1f7;
+  border: 1px solid #d6dce8;
+  border-radius: 99px;
+  font-size: 8px;
+  line-height: 1.5;
+}
+.radar-player-chip b {
+  font-weight: 650;
+}
+.radar-player-chip span {
+  color: #7a8496;
+  font-size: 7px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.radar-player-chip-competitor {
+  color: #6b32f5;
+  background: #f4f0ff;
+  border-color: #d9ccff;
+}
+.radar-player-chip-competitor span {
+  color: #8f6df7;
+}
+
 .radar-duplicate {
   display: flex;
   align-items: center;

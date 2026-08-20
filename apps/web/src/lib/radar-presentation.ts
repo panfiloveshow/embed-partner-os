@@ -14,24 +14,46 @@ export interface RadarInspectionPresentation {
 }
 
 export function inspectionPresentation(evidence: RadarEvidence): RadarInspectionPresentation {
+  const competitors = (evidence.detectedPlayers ?? [])
+    .filter(({ competitor }) => competitor)
+    .map(({ label }) => label);
+
   if (evidence.status === "found") {
     const player = evidence.playerType ?? "video";
     return {
       statusLabel: "Плеер найден",
       tone: "confirmed",
       noticeTone: "success",
-      notice: `Плеер ${player} обнаружен.`,
-      detail: "Плеер подтверждён автоматической проверкой",
+      notice:
+        competitors.length > 0
+          ? `Сайт уже встраивает ${competitors.join(", ")} — сценарий миграции на RUTUBE-плеер.`
+          : `Плеер ${player} обнаружен.`,
+      detail:
+        competitors.length > 0
+          ? `Подтверждён сторонний видеохостинг: ${competitors.join(", ")}`
+          : "Плеер подтверждён автоматической проверкой",
     };
   }
 
   if (evidence.status === "not_found") {
+    // Defensive branch: a detection recorded together with "not_found" must
+    // still read as a positive video signal, not as an alarming failure.
+    if (evidence.detectedPlayers?.length) {
+      const labels = [...new Set(evidence.detectedPlayers.map(({ label }) => label))];
+      return {
+        statusLabel: "Видео найдено",
+        tone: "confirmed",
+        noticeTone: "success",
+        notice: `Найден видеоплеер: ${labels.join(", ")}.`,
+        detail: `Сигнатуры плееров подтверждены: ${labels.join(", ")}`,
+      };
+    }
     return {
       statusLabel: "Плеер не найден",
       tone: "neutral",
       noticeTone: "warning",
-      notice: "Проверка завершена: видеоплеер на странице не найден.",
-      detail: "Страница доступна, но поддерживаемые паттерны видеоплеера не найдены",
+      notice: "Проверка завершена: сигнатуры видеоплееров на сайте не найдены.",
+      detail: "Страница доступна, но сигнатуры видеоплееров не найдены",
     };
   }
 

@@ -10,7 +10,14 @@ import type {
 } from "@embed-os/contracts";
 import { DomainRuleError } from "./task-completion.js";
 
-export const RADAR_SCORE_MODEL_VERSION = "partner-score-v1";
+/**
+ * v2: the player evidence is split into two features — "a video player is
+ * present" (positive) and "a competing video hosting is already embedded"
+ * (strong positive: proven demand). Weight budget stays at 100:
+ * traffic 22 + geography 8 + publishing 8 + topic 10 + video-volume 13 +
+ * player 10 + competitor-player 8 + page-access 3 + cms 3 + contacts 15 = 100.
+ */
+export const RADAR_SCORE_MODEL_VERSION = "partner-score-v2";
 
 export interface RadarScoreInput {
   features: RadarCandidateFeatures;
@@ -206,7 +213,7 @@ export function calculatePartnerScore(input: RadarScoreInput): RadarScore {
       "Оценка охвата",
       "business",
       trafficPoints(input.features.trafficEstimate),
-      24,
+      22,
       trafficExplanation(input.features.trafficEstimate),
     ),
     factor(
@@ -240,7 +247,7 @@ export function calculatePartnerScore(input: RadarScoreInput): RadarScore {
       "Страницы с видео",
       "content",
       videoVolumePoints(input.features.estimatedVideoPagesMax),
-      15,
+      13,
       videoVolumeExplanation(
         input.features.estimatedVideoPagesMin,
         input.features.estimatedVideoPagesMax,
@@ -250,11 +257,17 @@ export function calculatePartnerScore(input: RadarScoreInput): RadarScore {
       "player",
       "Видеоплеер",
       "technical",
-      input.latestEvidence?.playerFound ? 14 : 0,
-      14,
-      input.latestEvidence?.playerFound
-        ? `Обнаружен ${input.latestEvidence.playerType ?? "видеоплеер"}`
-        : "Плеер не подтверждён",
+      input.latestEvidence?.playerFound ? 10 : 0,
+      10,
+      playerExplanation(input.latestEvidence),
+    ),
+    factor(
+      "competitor-player",
+      "Сторонний видеохостинг",
+      "technical",
+      input.latestEvidence?.competitorPlayerDetected ? 8 : 0,
+      8,
+      competitorPlayerExplanation(input.latestEvidence),
     ),
     factor(
       "page-access",
@@ -438,9 +451,9 @@ function factor(
 
 function trafficPoints(estimate: RadarTrafficEstimate | null) {
   const reach = estimate?.maxMonthlyVisits ?? 0;
-  if (reach >= 1_000_000) return 24;
-  if (reach >= 250_000) return 18;
-  if (reach >= 50_000) return 12;
+  if (reach >= 1_000_000) return 22;
+  if (reach >= 250_000) return 17;
+  if (reach >= 50_000) return 11;
   return reach > 0 ? 6 : 0;
 }
 
@@ -473,14 +486,35 @@ function publicationExplanation(value: RadarCandidateFeatures["publicationFreque
 
 function videoVolumePoints(value: number | null) {
   if (value === null) return 0;
-  if (value >= 100) return 15;
-  if (value >= 20) return 10;
-  return value > 0 ? 5 : 0;
+  if (value >= 100) return 13;
+  if (value >= 20) return 9;
+  return value > 0 ? 4 : 0;
 }
 
 function videoVolumeExplanation(min: number | null, max: number | null) {
   if (min === null && max === null) return "Объём страниц с видео не оценён";
   return `Оценочный диапазон: ${min ?? 0}–${max ?? min ?? 0}`;
+}
+
+function playerExplanation(evidence: RadarEvidence | null) {
+  if (!evidence?.playerFound) return "Плеер не подтверждён";
+  const detected = evidence.detectedPlayers ?? [];
+  const labels = [...new Set(detected.map(({ label }) => label))];
+  return labels.length > 0
+    ? `Обнаружен видеоплеер: ${labels.join(", ")}`
+    : `Обнаружен ${evidence.playerType ?? "видеоплеер"}`;
+}
+
+function competitorPlayerExplanation(evidence: RadarEvidence | null) {
+  if (!evidence?.competitorPlayerDetected) return "Сторонний видеохостинг не обнаружен";
+  const competitors = [
+    ...new Set(
+      (evidence.detectedPlayers ?? [])
+        .filter(({ competitor }) => competitor)
+        .map(({ label }) => label),
+    ),
+  ];
+  return `Уже встраивает ${competitors.join(", ") || "сторонний видеохостинг"} — доказанный спрос на видео`;
 }
 
 function evidenceAccessPoints(evidence: RadarEvidence | null) {

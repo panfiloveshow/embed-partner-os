@@ -53,7 +53,7 @@ describe("RadarService", () => {
       evidence: [{ status: "found", playerType: "RUTUBE", confidence: "high" }],
     });
     expect(inspected.score.factors.find(({ code }) => code === "player")).toMatchObject({
-      value: 14,
+      value: 10,
     });
 
     const adjusted = service.adjustScore(

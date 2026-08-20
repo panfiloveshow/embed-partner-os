@@ -49,16 +49,57 @@ describe("radar domain", () => {
       calculatedAt: new Date("2026-08-18T10:00:00.000Z"),
     });
 
-    expect(score).toMatchObject({ total: 100, automaticTotal: 100, priority: "high" });
+    // 92 = 100 minus the competitor-player feature (8): a RUTUBE embed is not
+    // a competing hosting, so proven-demand points are not awarded.
+    expect(score).toMatchObject({
+      total: 92,
+      automaticTotal: 92,
+      priority: "high",
+      modelVersion: "partner-score-v2",
+    });
     expect(
       score.factors
         .filter(({ group }) => group === "business")
         .reduce((sum, factor) => sum + factor.value, 0),
-    ).toBe(40);
+    ).toBe(38);
     expect(score.factors.find(({ code }) => code === "player")).toMatchObject({
-      value: 14,
-      maxValue: 14,
+      value: 10,
+      maxValue: 10,
     });
+    expect(score.factors.find(({ code }) => code === "competitor-player")).toMatchObject({
+      value: 0,
+      maxValue: 8,
+    });
+  });
+
+  it("awards proven-demand points when a competing video hosting is embedded", () => {
+    const score = calculatePartnerScore({
+      features,
+      latestEvidence: {
+        ...evidence,
+        playerType: "VK Видео",
+        detectedPlayers: [
+          { vendor: "vk", label: "VK Видео", competitor: true, via: "static", sampleUrl: null },
+          { vendor: "videojs", label: "Video.js", competitor: false, via: "rendered" },
+        ],
+        competitorPlayerDetected: true,
+      },
+      duplicateOrganization: false,
+      duplicateCandidate: false,
+      calculatedAt: new Date("2026-08-18T10:00:00.000Z"),
+    });
+
+    expect(score).toMatchObject({ total: 100, automaticTotal: 100, priority: "high" });
+    const competitorFactor = score.factors.find(({ code }) => code === "competitor-player");
+    expect(competitorFactor).toMatchObject({ value: 8, maxValue: 8 });
+    expect(competitorFactor?.explanation).toContain("VK Видео");
+    expect(score.factors.find(({ code }) => code === "player")?.explanation).toContain("Video.js");
+    // The weight budget of the whole model stays within 100 points.
+    expect(
+      score.factors
+        .filter(({ maxValue }) => maxValue > 0)
+        .reduce((sum, factor) => sum + factor.maxValue, 0),
+    ).toBe(100);
   });
 
   it("separates duplicate and confidence risks from the positive score", () => {
@@ -75,8 +116,8 @@ describe("radar domain", () => {
       calculatedAt: new Date("2026-08-18T10:00:00.000Z"),
     });
 
-    // 83 positive - 55 automatic risks - 5 documented manual adjustment.
-    expect(score.total).toBe(23);
+    // 79 positive - 55 automatic risks - 5 documented manual adjustment.
+    expect(score.total).toBe(19);
     expect(score.priority).toBe("low");
     expect(score.factors.filter(({ group }) => group === "risk").map(({ value }) => value)).toEqual(
       [-40, -10, -5],

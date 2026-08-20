@@ -798,8 +798,18 @@ function CandidateDetail({
         </dl>
       </div>
 
-      <div className={`radar-evidence radar-evidence-${latestEvidence?.status ?? "empty"}`}>
-        {latestEvidence?.playerFound ? <ShieldCheck size={19} /> : <AlertTriangle size={19} />}
+      <div
+        className={`radar-evidence radar-evidence-${
+          latestEvidence?.status === "not_found" && latestEvidence.detectedPlayers?.length
+            ? "found"
+            : (latestEvidence?.status ?? "empty")
+        }`}
+      >
+        {latestEvidence?.playerFound || latestEvidence?.detectedPlayers?.length ? (
+          <ShieldCheck size={19} />
+        ) : (
+          <AlertTriangle size={19} />
+        )}
         <div>
           <strong>{evidenceLabel(latestEvidence)}</strong>
           <span>
@@ -809,6 +819,24 @@ function CandidateDetail({
                 ? `Метод ${latestEvidence.method} · confidence ${latestEvidence.confidence} · ${latestPresentation?.detail}`
                 : "Запустите L0-проверку публичной страницы"}
           </span>
+          {latestEvidence?.detectedPlayers?.length ? (
+            <ul className="radar-player-chips" aria-label="Обнаруженные видеоплееры">
+              {latestEvidence.detectedPlayers.map((player) => (
+                <li
+                  key={`${player.vendor}:${player.via}`}
+                  className={
+                    player.competitor
+                      ? "radar-player-chip radar-player-chip-competitor"
+                      : "radar-player-chip"
+                  }
+                  title={player.sampleUrl ?? undefined}
+                >
+                  <b>{player.label}</b>
+                  <span>{player.via === "rendered" ? "рендер" : "статика"}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
         {latestEvidence ? <time>{formatDateTime(latestEvidence.detectedAt)}</time> : null}
         {!terminal ? (
@@ -1539,8 +1567,19 @@ function outreachChannelLabel(
 
 function evidenceLabel(evidence: RadarCandidate["evidence"][number] | null) {
   if (!evidence) return "Evidence ещё не собрано";
-  if (evidence.status === "found") return `Плеер ${evidence.playerType ?? "video"} обнаружен`;
-  if (evidence.status === "not_found") return "Паттерны видео не найдены";
+  const competitors = (evidence.detectedPlayers ?? [])
+    .filter(({ competitor }) => competitor)
+    .map(({ label }) => label);
+  if (evidence.status === "found") {
+    return competitors.length > 0
+      ? `Сайт уже встраивает ${competitors.join(", ")}`
+      : `Плеер ${evidence.playerType ?? "video"} обнаружен`;
+  }
+  if (evidence.status === "not_found") {
+    return evidence.detectedPlayers?.length
+      ? `Найден видеоплеер: ${evidence.detectedPlayers.map(({ label }) => label).join(", ")}`
+      : "Сигнатуры видео не найдены";
+  }
   if (evidence.status === "blocked") return "Проверка ограничена правилами сайта";
   return "Результат проверки неопределён";
 }

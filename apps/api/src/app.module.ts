@@ -31,6 +31,8 @@ import { RadarController } from "./radar.controller.js";
 import { RADAR_PORT } from "./radar.port.js";
 import { RadarService } from "./radar.service.js";
 import { RADAR_INSPECTOR, RadarPageInspector } from "./monitoring/radar-page-inspector.js";
+import { RADAR_PAGE_RENDERER, type RadarPageRenderer } from "./monitoring/radar-page-renderer.js";
+import { playwrightPageRendererFromEnvironment } from "./monitoring/playwright-page-renderer.js";
 import { trafficProviderFromEnvironment } from "./monitoring/radar-traffic-provider.js";
 import { PostgresRadarService } from "./persistence/postgres-radar.service.js";
 import { PartnerController } from "./partner.controller.js";
@@ -111,9 +113,16 @@ import { PersistenceActorService } from "./persistence/persistence-actor.service
       useFactory: () => new L0EmbedChecker(),
     },
     {
+      // L1 headless renderer; null when RADAR_L1_ENABLED=0. Tests override
+      // this token to plug in a fake renderer without touching the inspector.
+      provide: RADAR_PAGE_RENDERER,
+      useFactory: () => playwrightPageRendererFromEnvironment(),
+    },
+    {
       provide: RADAR_INSPECTOR,
-      useFactory: () =>
-        new RadarPageInspector(undefined, undefined, trafficProviderFromEnvironment()),
+      inject: [RADAR_PAGE_RENDERER],
+      useFactory: (renderer: RadarPageRenderer | null) =>
+        new RadarPageInspector(undefined, undefined, trafficProviderFromEnvironment(), renderer),
     },
     {
       provide: TODAY_PORT,

@@ -570,6 +570,8 @@ model RadarEvidence {
   playerFound Boolean  @map("player_found")
   embedUrl    String?  @map("embed_url") @db.VarChar(2000)
   errorCode   String?  @map("error_code") @db.VarChar(64)
+  /// Players recognized by the signature catalog: [{vendor,label,competitor,via,sampleUrl}].
+  detectedPlayersJson Json? @map("detected_players")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   candidate RadarCandidate @relation(fields: [candidateId], references: [id], onDelete: Restrict)

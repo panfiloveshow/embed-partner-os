@@ -8,6 +8,7 @@ import type {
   RadarCandidateStatus,
   RadarConfidence,
   RadarDecision,
+  RadarDetectedPlayer,
   RadarEvidenceStatus,
   RadarImportResult,
   RadarPayload,
@@ -331,6 +332,7 @@ export class PostgresRadarService implements RadarPort {
         await lockCandidate(transaction, candidateId);
         const current = await findCandidate(transaction, candidateId, actor);
         assertMutable(current);
+        const detectedPlayers = observation.detectedPlayers ?? [];
         const evidence = {
           id: randomUUID(),
           pageUrl: observation.pageUrl,
@@ -343,6 +345,10 @@ export class PostgresRadarService implements RadarPort {
           playerFound: observation.playerFound,
           embedUrl: observation.embedUrl,
           errorCode: observation.errorCode,
+          detectedPlayers,
+          competitorPlayerDetected:
+            observation.competitorPlayerDetected ??
+            detectedPlayers.some(({ competitor }) => competitor),
         } as const;
         const currentFeatures = parseFeatures(current.featuresJson);
         const features = observation.featureExtraction
@@ -383,6 +389,7 @@ export class PostgresRadarService implements RadarPort {
                 playerFound: evidence.playerFound,
                 embedUrl: evidence.embedUrl,
                 errorCode: evidence.errorCode,
+                detectedPlayersJson: toJson(evidence.detectedPlayers),
               },
             },
             scoreSnapshots: { create: scoreSnapshotData(score) },
@@ -813,6 +820,7 @@ function mapCandidate(candidate: DbRadarCandidate): RadarCandidate {
 }
 
 function mapEvidence(evidence: DbRadarCandidate["evidence"][number]) {
+  const detectedPlayers = parseDetectedPlayers(evidence.detectedPlayersJson);
   return {
     id: evidence.id,
     pageUrl: evidence.pageUrl,
@@ -825,7 +833,34 @@ function mapEvidence(evidence: DbRadarCandidate["evidence"][number]) {
     playerFound: evidence.playerFound,
     embedUrl: evidence.embedUrl,
     errorCode: evidence.errorCode,
+    detectedPlayers,
+    competitorPlayerDetected: detectedPlayers.some(({ competitor }) => competitor),
   };
+}
+
+function parseDetectedPlayers(value: Prisma.JsonValue | null): RadarDetectedPlayer[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (typeof item !== "object" || item === null || Array.isArray(item)) return [];
+    const record = item as Record<string, unknown>;
+    if (
+      typeof record.vendor !== "string" ||
+      typeof record.label !== "string" ||
+      typeof record.competitor !== "boolean" ||
+      (record.via !== "static" && record.via !== "rendered")
+    ) {
+      return [];
+    }
+    return [
+      {
+        vendor: record.vendor,
+        label: record.label,
+        competitor: record.competitor,
+        via: record.via,
+        sampleUrl: typeof record.sampleUrl === "string" ? record.sampleUrl : null,
+      },
+    ];
+  });
 }
 
 function scoreColumns(score: RadarScore) {
