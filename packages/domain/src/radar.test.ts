@@ -137,6 +137,40 @@ describe("radar domain", () => {
     ).toThrow();
   });
 
+  it("требует структурированную причину только при отклонении", () => {
+    expect(() =>
+      parseRadarDecisionCommand({ version: 1, decision: "reject", reason: "Не подходит" }),
+    ).toThrow("Для отклонения нужна структурированная причина");
+    expect(() =>
+      parseRadarDecisionCommand({
+        version: 1,
+        decision: "reject",
+        reason: "Не подходит",
+        reasonCode: "spam",
+      }),
+    ).toThrow("Недопустимая причина отказа");
+    expect(
+      parseRadarDecisionCommand({
+        version: 1,
+        decision: "reject",
+        reason: "Сайт давно не обновлялся",
+        reasonCode: "dead_site",
+      }),
+    ).toMatchObject({ decision: "reject", reasonCode: "dead_site" });
+    expect(
+      parseRadarDecisionCommand({
+        version: 1,
+        decision: "defer",
+        reason: "Позже",
+        deferUntil: "2026-09-01T10:00:00.000Z",
+        reasonCode: "low_traffic",
+      }),
+    ).toMatchObject({ decision: "defer", reasonCode: "low_traffic" });
+    expect(
+      parseRadarDecisionCommand({ version: 1, decision: "accept", reason: "Целевой контент" }),
+    ).not.toHaveProperty("reasonCode");
+  });
+
   it("отсеивает технические поддомены", () => {
     expect(() => normalizeRadarTarget("https://staging.media.example/story")).toThrow(
       "Технический поддомен исключён из Радара",

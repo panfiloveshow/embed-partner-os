@@ -1,12 +1,14 @@
-import type {
-  CreateRadarCandidateCommand,
-  RadarCandidateDecisionCommand,
-  RadarCandidateFeatures,
-  RadarEvidence,
-  RadarScore,
-  RadarScoreAdjustmentCommand,
-  RadarScoreFactor,
-  RadarTrafficEstimate,
+import {
+  radarRejectReasonCodes,
+  type CreateRadarCandidateCommand,
+  type RadarCandidateDecisionCommand,
+  type RadarCandidateFeatures,
+  type RadarEvidence,
+  type RadarRejectReasonCode,
+  type RadarScore,
+  type RadarScoreAdjustmentCommand,
+  type RadarScoreFactor,
+  type RadarTrafficEstimate,
 } from "@embed-os/contracts";
 import { DomainRuleError } from "./task-completion.js";
 
@@ -164,6 +166,7 @@ export function parseRadarDecisionCommand(input: unknown): RadarCandidateDecisio
     });
   }
   const reason = requiredText(input.reason, "reason", 1_000);
+  const reasonCode = parseRejectReasonCode(input.reasonCode, decision === "reject");
   const comment = optionalText(input.comment, "comment", 1_000);
   const deferUntil = optionalDate(input.deferUntil, "deferUntil");
   const mergeTargetId = optionalText(input.mergeTargetId, "mergeTargetId", 100);
@@ -181,10 +184,38 @@ export function parseRadarDecisionCommand(input: unknown): RadarCandidateDecisio
     version,
     decision,
     reason,
+    ...(reasonCode ? { reasonCode } : {}),
     ...(comment ? { comment } : {}),
     ...(deferUntil ? { deferUntil } : {}),
     ...(mergeTargetId ? { mergeTargetId } : {}),
   };
+}
+
+/**
+ * Structured decision reason: required for reject (score calibration relies
+ * on it), optional for accept/defer/merge. The free-text reason stays as is.
+ */
+function parseRejectReasonCode(
+  value: unknown,
+  required: boolean,
+): RadarRejectReasonCode | undefined {
+  if (value === undefined || value === null || value === "") {
+    if (required) {
+      throw validation("Для отклонения нужна структурированная причина", {
+        reasonCode: "Выберите причину отказа из списка",
+      });
+    }
+    return undefined;
+  }
+  if (
+    typeof value !== "string" ||
+    !radarRejectReasonCodes.includes(value as RadarRejectReasonCode)
+  ) {
+    throw validation("Недопустимая причина отказа", {
+      reasonCode: `Используйте одно из значений: ${radarRejectReasonCodes.join(", ")}`,
+    });
+  }
+  return value as RadarRejectReasonCode;
 }
 
 export function parseRadarScoreAdjustmentCommand(input: unknown): RadarScoreAdjustmentCommand {

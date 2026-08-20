@@ -745,13 +745,31 @@ export interface RadarScore {
   calculatedAt: string;
 }
 
+/** Structured rejection reasons used to calibrate the Partner Score model. */
+export const radarRejectReasonCodes = [
+  "no_video_editorial",
+  "competitor_exclusive",
+  "dead_site",
+  "low_traffic",
+  "irrelevant_topic",
+  "other",
+] as const;
+
+export type RadarRejectReasonCode = (typeof radarRejectReasonCodes)[number];
+
 export interface RadarDecision {
   id: string;
   decision: "accept" | "defer" | "reject" | "merge";
   reason: string;
+  /** Required for reject, optional for other decisions. */
+  reasonCode: RadarRejectReasonCode | null;
   comment: string | null;
   deferUntil: string | null;
   mergeTargetId: string | null;
+  /** Partner Score total captured at the moment of the decision. */
+  scoreAtDecision: number | null;
+  /** Score formula version active at the moment of the decision. */
+  formulaVersion: string | null;
   decidedAt: string;
   decidedBy: { id: string; name: string };
 }
@@ -829,6 +847,8 @@ export interface RadarCandidateDecisionCommand {
   version: number;
   decision: "accept" | "defer" | "reject" | "merge";
   reason: string;
+  /** Structured reason: required for reject, optional otherwise. */
+  reasonCode?: RadarRejectReasonCode;
   comment?: string;
   deferUntil?: string;
   mergeTargetId?: string;

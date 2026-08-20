@@ -606,9 +606,14 @@ model RadarDecision {
   actorId       String    @map("actor_id") @db.Uuid
   decision      String    @db.VarChar(24)
   reason        String    @db.VarChar(1000)
+  /// Structured reason (required for reject): calibration of Partner Score.
+  reasonCode    String?   @map("reason_code") @db.VarChar(64)
   comment       String?   @db.VarChar(1000)
   deferUntil    DateTime? @map("defer_until") @db.Timestamptz(6)
   mergeTargetId String?   @map("merge_target_id") @db.Uuid
+  /// Partner Score total and formula version fixed at decision time.
+  scoreAtDecision Int?    @map("score_at_decision")
+  formulaVersion  String? @map("formula_version") @db.VarChar(64)
   decidedAt     DateTime  @map("decided_at") @db.Timestamptz(6)
 
   candidate   RadarCandidate  @relation(fields: [candidateId], references: [id], onDelete: Restrict)

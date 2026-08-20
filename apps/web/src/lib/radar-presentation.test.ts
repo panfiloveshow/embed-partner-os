@@ -1,8 +1,23 @@
 import { describe, expect, it } from "vitest";
+import { radarRejectReasonCodes } from "@embed-os/contracts";
 import type { RadarCandidate } from "@embed-os/contracts";
-import { inspectionPresentation } from "./radar-presentation";
+import {
+  inspectionPresentation,
+  rejectReasonLabel,
+  rejectReasonLabels,
+} from "./radar-presentation";
 
 type Evidence = RadarCandidate["evidence"][number];
+
+describe("radar reject reason labels", () => {
+  it("has a Russian label for every structured reason code", () => {
+    for (const code of radarRejectReasonCodes) {
+      expect(rejectReasonLabels[code]).toBeTruthy();
+      expect(rejectReasonLabel(code)).toBe(rejectReasonLabels[code]);
+    }
+    expect(rejectReasonLabel(null)).toBeNull();
+  });
+});
 
 describe("radar inspection presentation", () => {
   it("does not present a network failure as a successful verification", () => {

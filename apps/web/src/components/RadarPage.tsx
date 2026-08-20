@@ -19,13 +19,15 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import type {
-  CreateRadarCandidateCommand,
-  RadarCandidate,
-  RadarCandidateDecisionCommand,
-  RadarCandidateStatus,
-  RadarFeatureSignal,
-  RadarScoreFactor,
+import {
+  radarRejectReasonCodes,
+  type CreateRadarCandidateCommand,
+  type RadarCandidate,
+  type RadarCandidateDecisionCommand,
+  type RadarCandidateStatus,
+  type RadarFeatureSignal,
+  type RadarRejectReasonCode,
+  type RadarScoreFactor,
 } from "@embed-os/contracts";
 import {
   ApiError,
@@ -36,7 +38,12 @@ import {
   inspectRadarCandidate,
   importRadarCandidates,
 } from "../lib/api";
-import { inspectionPresentation, type RadarMessageTone } from "../lib/radar-presentation";
+import {
+  inspectionPresentation,
+  rejectReasonLabel,
+  rejectReasonLabels,
+  type RadarMessageTone,
+} from "../lib/radar-presentation";
 import { messageFor } from "../lib/problem";
 import { createIdempotencyKey, mutationKey, type MutationKeyState } from "../lib/idempotency";
 import { formatDate as formatDateOnly, formatDateTime } from "../lib/format";
@@ -706,6 +713,7 @@ function CandidateDetail({
   onOpenToday: (opportunityId: string) => void;
 }) {
   const [reason, setReason] = useState("");
+  const [rejectReasonCode, setRejectReasonCode] = useState<RadarRejectReasonCode | "">("");
   const [deferUntil, setDeferUntil] = useState("");
   const [mergeTargetId, setMergeTargetId] = useState("");
   const [adjustment, setAdjustment] = useState(String(candidate.score.manualAdjustment));
@@ -721,9 +729,12 @@ function CandidateDetail({
     .size;
   const terminal = terminalStatuses.has(candidate.status);
   const busy = busyAction?.endsWith(candidate.id) ?? false;
+  const lastDecision = candidate.decisions.at(-1) ?? null;
+  const lastDecisionReasonLabel = rejectReasonLabel(lastDecision?.reasonCode ?? null);
 
   useEffect(() => {
     setReason("");
+    setRejectReasonCode("");
     setDeferUntil("");
     setMergeTargetId("");
     setAdjustment(String(candidate.score.manualAdjustment));
@@ -741,6 +752,7 @@ function CandidateDetail({
       version: candidate.version,
       decision,
       reason: reason.trim(),
+      ...(decision === "reject" && rejectReasonCode ? { reasonCode: rejectReasonCode } : {}),
       ...(decision === "defer" && deferUntil
         ? { deferUntil: new Date(deferUntil).toISOString() }
         : {}),
@@ -1016,6 +1028,22 @@ function CandidateDetail({
                   ))}
               </select>
             </label>
+            <label>
+              <span>Причина отказа</span>
+              <select
+                value={rejectReasonCode}
+                onChange={(event) =>
+                  setRejectReasonCode(event.target.value as RadarRejectReasonCode | "")
+                }
+              >
+                <option value="">Выберите причину</option>
+                {radarRejectReasonCodes.map((code) => (
+                  <option key={code} value={code}>
+                    {rejectReasonLabels[code]}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
           <div className="radar-decision-actions">
             <button
@@ -1051,7 +1079,7 @@ function CandidateDetail({
             <button
               className="button button-danger-outline"
               type="button"
-              disabled={busy || !reason.trim()}
+              disabled={busy || !reason.trim() || !rejectReasonCode}
               onClick={() => command("reject")}
             >
               Отклонить
@@ -1099,7 +1127,13 @@ function CandidateDetail({
         <div className="radar-terminal-summary">
           <Check size={16} />
           <span>{decisionNotice(candidate)}</span>
-          {candidate.decisions.at(-1) ? <small>{candidate.decisions.at(-1)?.reason}</small> : null}
+          {lastDecision ? (
+            <small>
+              {lastDecisionReasonLabel
+                ? `${lastDecisionReasonLabel} — ${lastDecision.reason}`
+                : lastDecision.reason}
+            </small>
+          ) : null}
           {candidate.status === "accepted" && candidate.acceptedOpportunityId ? (
             <button
               className="button button-primary"

@@ -1,4 +1,18 @@
-import type { RadarCandidate } from "@embed-os/contracts";
+import type { RadarCandidate, RadarRejectReasonCode } from "@embed-os/contracts";
+
+/** Russian labels for structured rejection reasons (Partner Score feedback). */
+export const rejectReasonLabels: Record<RadarRejectReasonCode, string> = {
+  no_video_editorial: "Нет видеоредакции",
+  competitor_exclusive: "Эксклюзив у конкурента",
+  dead_site: "Мёртвый сайт",
+  low_traffic: "Низкий трафик",
+  irrelevant_topic: "Нерелевантная тематика",
+  other: "Другое",
+};
+
+export function rejectReasonLabel(code: RadarRejectReasonCode | null): string | null {
+  return code ? (rejectReasonLabels[code] ?? code) : null;
+}
 
 export type RadarMessageTone = "error" | "success" | "warning";
 export type RadarInspectionTone = "confirmed" | "neutral" | "warning";

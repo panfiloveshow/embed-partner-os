@@ -1426,6 +1426,71 @@ describe("Today HTTP contract", () => {
     );
   });
 
+  it("отклонение кандидата требует reasonCode и фиксирует score на момент решения", async () => {
+    const created = await request(app.getHttpServer())
+      .post("/api/v1/radar/candidates")
+      .set("Idempotency-Key", "test-key-radar-reject-create-01")
+      .send({
+        name: "Отклоняемый сайт",
+        url: "https://reject-media.example/news",
+        source: "Ручной поиск",
+        topic: "Новости",
+      })
+      .expect(201);
+
+    const invalid = await request(app.getHttpServer())
+      .post(`/api/v1/radar/candidates/${created.body.id}/decisions`)
+      .set("Idempotency-Key", "test-key-radar-reject-0001")
+      .send({
+        version: created.body.version,
+        decision: "reject",
+        reason: "Видеоконтента нет",
+      })
+      .expect(422);
+    expect(invalid.body).toMatchObject({
+      code: "RADAR_VALIDATION_FAILED",
+      fieldErrors: { reasonCode: expect.any(String) },
+    });
+
+    const rejected = await request(app.getHttpServer())
+      .post(`/api/v1/radar/candidates/${created.body.id}/decisions`)
+      .set("Idempotency-Key", "test-key-radar-reject-0002")
+      .send({
+        version: created.body.version,
+        decision: "reject",
+        reason: "Видеоконтента нет",
+        reasonCode: "no_video_editorial",
+      })
+      .expect(200);
+    expect(rejected.body).toMatchObject({
+      status: "rejected",
+      rejectionReason: "Видеоконтента нет",
+      decisions: [
+        {
+          decision: "reject",
+          reasonCode: "no_video_editorial",
+          scoreAtDecision: created.body.score.total,
+          formulaVersion: "partner-score-v2",
+        },
+      ],
+    });
+
+    // The stored decision (radar_decision columns in postgres mode) is
+    // visible again through the queue view.
+    const queue = await request(app.getHttpServer()).get("/api/v1/radar/candidates").expect(200);
+    const listed = queue.body.candidates.find(
+      (candidate: { id: string }) => candidate.id === created.body.id,
+    );
+    expect(listed.decisions).toEqual([
+      expect.objectContaining({
+        decision: "reject",
+        reasonCode: "no_video_editorial",
+        scoreAtDecision: created.body.score.total,
+        formulaVersion: "partner-score-v2",
+      }),
+    ]);
+  });
+
   it("загружает очередь Радара из CSV с построчным протоколом", async () => {
     const imported = await request(app.getHttpServer())
       .post("/api/v1/radar/candidates/import")

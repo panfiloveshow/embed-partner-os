@@ -88,6 +88,43 @@ describe("RadarService", () => {
     });
   });
 
+  it("отклонение требует reasonCode и фиксирует score на момент решения", async () => {
+    const service = new RadarService(new TodayService(), new FoundInspector(), fixedClock);
+    const created = service.create(candidateCommand(), "radar-create-key-0030");
+    const inspected = await service.inspect(created.id, "radar-check-key-0030");
+
+    expect(() =>
+      service.decide(
+        created.id,
+        { version: inspected.version, decision: "reject", reason: "Нет видеоконтента" },
+        "radar-decision-key-0030",
+      ),
+    ).toThrow("Для отклонения нужна структурированная причина");
+
+    const rejected = service.decide(
+      created.id,
+      {
+        version: inspected.version,
+        decision: "reject",
+        reason: "Нет видеоконтента",
+        reasonCode: "no_video_editorial",
+      },
+      "radar-decision-key-0031",
+    );
+    expect(rejected).toMatchObject({
+      status: "rejected",
+      rejectionReason: "Нет видеоконтента",
+      decisions: [
+        {
+          decision: "reject",
+          reasonCode: "no_video_editorial",
+          scoreAtDecision: inspected.score.total,
+          formulaVersion: "partner-score-v2",
+        },
+      ],
+    });
+  });
+
   it("принятие создаёт организацию, возможность и первую задачу", async () => {
     const today = new TodayService();
     const service = new RadarService(today, new FoundInspector(), fixedClock);

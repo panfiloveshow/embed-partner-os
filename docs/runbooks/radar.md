@@ -58,10 +58,22 @@ Score раскрывается по группам и факторам. Ручн
 
 - `accept` требует evidence и отсутствия дубля активной Organization;
 - `defer` требует `deferUntil`;
-- `reject` сохраняет причину и комментарий;
+- `reject` сохраняет свободный текст причины, комментарий и обязательный структурированный код `reasonCode`: `no_video_editorial`, `competitor_exclusive`, `dead_site`, `low_traffic`, `irrelevant_topic`, `other` (для остальных решений код опционален; без него `reject` отклоняется как `422 RADAR_VALIDATION_FAILED` с `fieldErrors.reasonCode`);
 - `merge` требует другого существующего кандидата.
 
+Каждое решение дополнительно фиксирует `scoreAtDecision` (итоговый Partner Score, который менеджер видел в момент решения) и `formulaVersion` (актуальная версия формулы, сейчас `partner-score-v2`) — в PostgreSQL это колонки `radar_decision.score_at_decision` и `radar_decision.formula_version`. Это основа обратной связи по исходам: решения менеджеров можно сопоставлять с предсказаниями score.
+
 После `accept` в одной транзакции создаются Organization, Domain, Opportunity S0 и первая Task «Исследовать кандидата из Радара».
+
+Отложенные кандидаты возвращаются в работу автоматически: worker `radar-recheck` включает в плановую выборку кандидатов `DEFERRED` с наступившим `defer_until`, повторная инспекция переводит их обратно в `READY` (с записью в audit log и outbox), после чего они снова видны в очереди как активные.
+
+## Калибровочный отчёт
+
+```bash
+npm run radar:calibration
+```
+
+Скрипт `apps/api/scripts/radar-calibration.ts` работает только с PostgreSQL (`DATABASE_URL`, по умолчанию локальный compose на `127.0.0.1:55432`) и читает решения с заполненным `score_at_decision`. В stdout печатаются три таблицы: решения и доля `accept` по бакетам score (0-19/20-39/40-59/60-79/80-100), распределение `reason_code` среди `reject` и доля принятых кандидатов, дошедших до Placement. Связь кандидат → организация идёт через `accepted_organization_id` (создаётся транзакцией `accept`); для старых записей без колонки используется fallback по совпадению домена. При менее чем 30 решениях отчёт явно предупреждает, что данных мало для выводов. Никакого ML — только счётчики.
 
 ## API
 

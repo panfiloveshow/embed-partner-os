@@ -347,9 +347,14 @@ export class RadarService implements RadarPort {
           id: `radar-decision-${randomUUID()}`,
           decision: command.decision,
           reason: command.reason,
+          reasonCode: command.reasonCode ?? null,
           comment: command.comment ?? null,
           deferUntil: command.deferUntil ?? null,
           mergeTargetId: command.mergeTargetId ?? null,
+          // Score feedback loop: the decision keeps the score and formula
+          // version that the manager actually saw at decision time.
+          scoreAtDecision: candidate.score.total,
+          formulaVersion: candidate.score.modelVersion,
           decidedAt: now.toISOString(),
           decidedBy: { id: "user-anna", name: "Анна Соколова" },
         };

@@ -1,21 +1,23 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { Prisma, TaskStatus } from "@prisma/client";
-import type {
-  RadarCandidate,
-  RadarCandidateDecisionCommand,
-  RadarCandidateFeatures,
-  RadarCandidateStatus,
-  RadarConfidence,
-  RadarDecision,
-  RadarDetectedPlayer,
-  RadarEvidenceStatus,
-  RadarImportResult,
-  RadarPayload,
-  RadarPriority,
-  RadarResearch,
-  RadarScore,
-  RadarScoreFactor,
+import {
+  radarRejectReasonCodes,
+  type RadarCandidate,
+  type RadarCandidateDecisionCommand,
+  type RadarCandidateFeatures,
+  type RadarCandidateStatus,
+  type RadarConfidence,
+  type RadarDecision,
+  type RadarDetectedPlayer,
+  type RadarEvidenceStatus,
+  type RadarImportResult,
+  type RadarPayload,
+  type RadarPriority,
+  type RadarRejectReasonCode,
+  type RadarResearch,
+  type RadarScore,
+  type RadarScoreFactor,
 } from "@embed-os/contracts";
 import {
   calculatePartnerScore,
@@ -487,9 +489,15 @@ export class PostgresRadarService implements RadarPort {
                 actorId: actor.id,
                 decision: command.decision.toUpperCase(),
                 reason: command.reason,
+                reasonCode: command.reasonCode ?? null,
                 comment: command.comment ?? null,
                 deferUntil: command.deferUntil ? new Date(command.deferUntil) : null,
                 mergeTargetId: command.mergeTargetId ?? null,
+                // Score feedback loop: fix the score and formula version the
+                // manager saw at decision time — the calibration report reads
+                // these columns instead of guessing from snapshots.
+                scoreAtDecision: current.scoreTotal,
+                formulaVersion: current.scoreModelVersion,
                 decidedAt: now,
               },
             },
@@ -800,9 +808,12 @@ function mapCandidate(candidate: DbRadarCandidate): RadarCandidate {
       id: decision.id,
       decision: decisionType(decision.decision),
       reason: decision.reason,
+      reasonCode: rejectReasonCode(decision.reasonCode),
       comment: decision.comment,
       deferUntil: decision.deferUntil?.toISOString() ?? null,
       mergeTargetId: decision.mergeTargetId,
+      scoreAtDecision: decision.scoreAtDecision,
+      formulaVersion: decision.formulaVersion,
       decidedAt: decision.decidedAt.toISOString(),
       decidedBy: { id: decision.actor.id, name: decision.actor.displayName },
     })),
@@ -1033,6 +1044,12 @@ function confidence(value: string): RadarConfidence {
 function priority(value: string): RadarPriority {
   const normalized = value.toLocaleLowerCase("en-US");
   return normalized === "high" || normalized === "medium" ? normalized : "low";
+}
+
+function rejectReasonCode(value: string | null): RadarRejectReasonCode | null {
+  return value && radarRejectReasonCodes.includes(value as RadarRejectReasonCode)
+    ? (value as RadarRejectReasonCode)
+    : null;
 }
 
 function decisionType(value: string): RadarDecision["decision"] {
