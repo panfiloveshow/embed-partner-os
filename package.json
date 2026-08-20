@@ -1,0 +1,35 @@
+{
+  "name": "embed-partner-os",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build:packages": "npm run build -w @embed-os/contracts && npm run build -w @embed-os/domain",
+    "dev": "npm run build:packages && concurrently -n api,web -c magenta,cyan \"npm run dev -w @embed-os/api\" \"npm run dev -w @embed-os/web\"",
+    "worker:placement-monitor": "npm run worker:placement-monitor -w @embed-os/api",
+    "worker:weekly-report": "npm run worker:weekly-report -w @embed-os/api",
+    "worker:report-digest": "npm run worker:report-digest -w @embed-os/api",
+    "worker:opportunity-sla": "npm run worker:opportunity-sla -w @embed-os/api",
+    "worker:sla-notification": "npm run worker:sla-notification -w @embed-os/api",
+    "worker:radar-recheck": "npm run worker:radar-recheck -w @embed-os/api",
+    "build": "npm run build:packages && npm run build -w @embed-os/api && npm run build -w @embed-os/web",
+    "db:validate": "npm run prisma:validate -w @embed-os/api",
+    "db:generate": "npm run prisma:generate -w @embed-os/api",
+    "db:migrate": "npm run db:migrate:deploy -w @embed-os/api",
+    "db:seed": "npm run db:seed -w @embed-os/api",
+    "test": "npm run build:packages && npm run test --workspaces --if-present",
+    "typecheck": "npm run build:packages && npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

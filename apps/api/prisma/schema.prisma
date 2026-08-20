@@ -1,0 +1,677 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum OpportunityStatus {
+  ACTIVE
+  WAITING
+  PAUSED
+  CLOSED
+}
+
+enum TaskStatus {
+  OPEN
+  COMPLETED
+  CANCELLED
+}
+
+model Team {
+  id        String   @id @db.Uuid
+  name      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  users           User[]
+  organizationGroups OrganizationGroup[]
+  reportSnapshots ReportSnapshot[]
+  importJobs      ImportJob[]
+  radarCandidates RadarCandidate[]
+
+  @@map("team")
+}
+
+model User {
+  id              String     @id @db.Uuid
+  externalSubject String     @unique @map("external_subject")
+  teamId          String?    @map("team_id") @db.Uuid
+  displayName     String     @map("display_name")
+  email           String     @unique
+  status          UserStatus @default(ACTIVE)
+  timezone        String     @default("Europe/Moscow")
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  version         Int        @default(1)
+
+  team                   Team?               @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  organizationsOwned     Organization[]      @relation("OrganizationOwner")
+  opportunitiesOwned     Opportunity[]       @relation("OpportunityOwner")
+  tasksOwned             Task[]              @relation("TaskOwner")
+  interactionsAuthored   Interaction[]       @relation("InteractionAuthor")
+  stageHistory           StageHistory[]      @relation("StageActor")
+  auditLogs              AuditLog[]          @relation("AuditActor")
+  idempotencyRecords     IdempotencyRecord[] @relation("IdempotencyActor")
+  reportsGenerated       ReportSnapshot[]    @relation("ReportGenerator")
+  placementsOwned        Placement[]         @relation("PlacementOwner")
+  technicalAlertsOwned   Alert[]             @relation("AlertOwner")
+  importJobsCreated      ImportJob[]         @relation("ImportActor")
+  radarCandidatesCreated RadarCandidate[]    @relation("RadarCandidateCreator")
+  radarDecisionsMade     RadarDecision[]     @relation("RadarDecisionActor")
+  permissions            UserPermission[]
+
+  @@index([teamId, status])
+  @@map("user_account")
+}
+
+model UserPermission {
+  userId     String    @map("user_id") @db.Uuid
+  permission String    @db.VarChar(100)
+  source     String    @db.VarChar(100)
+  grantedAt  DateTime  @default(now()) @map("granted_at") @db.Timestamptz(6)
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@id([userId, permission])
+  @@index([permission, revokedAt])
+  @@map("user_permission")
+}
+
+model Organization {
+  id         String    @id @db.Uuid
+  groupId    String?   @map("group_id") @db.Uuid
+  name       String
+  legalName  String?   @map("legal_name")
+  segment    String?
+  ownerId    String?   @map("owner_id") @db.Uuid
+  status     String    @default("ACTIVE")
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  version    Int       @default(1)
+
+  group                    OrganizationGroup?    @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  owner                    User?                 @relation("OrganizationOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  domains                  Domain[]
+  contactLinks             ContactOrganization[]
+  opportunities            Opportunity[]
+  placements               Placement[]
+  radarDuplicateCandidates RadarCandidate[]      @relation("RadarDuplicateOrganization")
+  radarAcceptedCandidates  RadarCandidate[]      @relation("RadarAcceptedOrganization")
+
+  @@index([ownerId, status])
+  @@index([groupId, status])
+  @@index([name])
+  @@map("organization")
+}
+
+model OrganizationGroup {
+  id         String    @id @db.Uuid
+  teamId     String    @map("team_id") @db.Uuid
+  name       String
+  status     String    @default("ACTIVE")
+  archivedAt DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  version    Int       @default(1)
+
+  team          Team           @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  organizations Organization[]
+
+  @@index([teamId, status, name])
+  @@map("organization_group")
+}
+
+model Domain {
+  id             String    @id @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  hostNormalized String    @map("host_normalized")
+  isPrimary      Boolean   @default(false) @map("is_primary")
+  source         String
+  verifiedAt     DateTime? @map("verified_at") @db.Timestamptz(6)
+  archivedAt     DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId])
+  @@index([hostNormalized])
+  @@map("domain")
+}
+
+model Contact {
+  id           String    @id @db.Uuid
+  fullName     String    @map("full_name")
+  email        String?
+  phone        String?
+  messenger    String?
+  source       String
+  verifiedAt   DateTime? @map("verified_at") @db.Timestamptz(6)
+  restrictions Json      @default("{}")
+  mergedIntoId String?   @map("merged_into_id") @db.Uuid
+  mergedAt     DateTime? @map("merged_at") @db.Timestamptz(6)
+  mergeReason  String?   @map("merge_reason")
+  archivedAt   DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  version      Int       @default(1)
+
+  organizationLinks ContactOrganization[]
+  interactions      Interaction[]
+  mergedInto        Contact?              @relation("ContactMerge", fields: [mergedIntoId], references: [id], onDelete: Restrict)
+  mergedContacts    Contact[]             @relation("ContactMerge")
+
+  @@index([fullName])
+  @@index([email])
+  @@index([phone])
+  @@index([messenger])
+  @@index([mergedIntoId])
+  @@index([archivedAt])
+  @@map("contact")
+}
+
+model ContactOrganization {
+  id             String    @id @db.Uuid
+  contactId      String    @map("contact_id") @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  role           String
+  department     String?
+  isPrimary      Boolean   @default(false) @map("is_primary")
+  validFrom      DateTime  @default(now()) @map("valid_from") @db.Timestamptz(6)
+  validTo        DateTime? @map("valid_to") @db.Timestamptz(6)
+
+  contact      Contact      @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([contactId, validTo])
+  @@index([organizationId, validTo, isPrimary])
+  @@map("contact_organization")
+}
+
+model ProcessDefinition {
+  id          String    @id @db.Uuid
+  version     Int       @unique
+  status      String
+  schemaJson  Json      @map("schema_json")
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  opportunities Opportunity[]
+
+  @@map("process_definition")
+}
+
+model Opportunity {
+  id             String            @id @db.Uuid
+  organizationId String            @map("organization_id") @db.Uuid
+  processVersion Int               @map("process_version")
+  ownerId        String            @map("owner_id") @db.Uuid
+  type           String
+  stageCode      String            @map("stage_code")
+  stageLabel     String            @map("stage_label")
+  status         OpportunityStatus @default(ACTIVE)
+  score          Int               @default(0)
+  stageData      Json              @default("{}") @map("stage_data")
+  nextTaskId     String?           @unique @map("next_task_id") @db.Uuid
+  waitingReason  String?           @map("waiting_reason")
+  waitingFor     String?           @map("waiting_for")
+  reviewAt       DateTime?         @map("review_at") @db.Timestamptz(6)
+  closeReason    String?           @map("close_reason")
+  closeComment   String?           @map("close_comment")
+  returnAt       DateTime?         @map("return_at") @db.Timestamptz(6)
+  technicalRisk  Boolean           @default(false) @map("technical_risk")
+  archivedAt     DateTime?         @map("archived_at") @db.Timestamptz(6)
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  version        Int               @default(1)
+
+  organization            Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  processDefinition       ProcessDefinition @relation(fields: [processVersion], references: [version], onDelete: Restrict)
+  owner                   User              @relation("OpportunityOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  tasks                   Task[]            @relation("OpportunityTasks")
+  nextTask                Task?             @relation("OpportunityNextTask", fields: [nextTaskId], references: [id], onDelete: SetNull)
+  interactions            Interaction[]
+  stageHistory            StageHistory[]
+  placements              Placement[]
+  radarAcceptedCandidates RadarCandidate[]  @relation("RadarAcceptedOpportunity")
+  slaIncidents            OpportunitySlaIncident[]
+
+  @@index([organizationId, status])
+  @@index([ownerId, status, stageCode])
+  @@index([reviewAt])
+  @@map("opportunity")
+}
+
+model Task {
+  id              String     @id @db.Uuid
+  opportunityId   String     @map("opportunity_id") @db.Uuid
+  ownerId         String     @map("owner_id") @db.Uuid
+  type            String
+  title           String     @db.VarChar(200)
+  dueAt           DateTime   @map("due_at") @db.Timestamptz(6)
+  priorityScore   Int        @default(0) @map("priority_score")
+  priorityReasons Json       @default("[]") @map("priority_reasons")
+  status          TaskStatus @default(OPEN)
+  outcome         String?
+  completedAt     DateTime?  @map("completed_at") @db.Timestamptz(6)
+  source          String
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  version         Int        @default(1)
+
+  opportunity    Opportunity   @relation("OpportunityTasks", fields: [opportunityId], references: [id], onDelete: Restrict)
+  owner          User          @relation("TaskOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  isNextFor      Opportunity?  @relation("OpportunityNextTask")
+  interactions   Interaction[]
+  technicalAlert Alert?        @relation("AlertTask")
+  opportunitySlaIncident OpportunitySlaIncident? @relation("OpportunitySlaTask")
+
+  @@index([ownerId, status, dueAt])
+  @@index([opportunityId, status, dueAt])
+  @@map("task")
+}
+
+model Interaction {
+  id            String   @id @db.Uuid
+  opportunityId String   @map("opportunity_id") @db.Uuid
+  taskId        String?  @map("task_id") @db.Uuid
+  contactId     String?  @map("contact_id") @db.Uuid
+  authorId      String   @map("author_id") @db.Uuid
+  type          String
+  occurredAt    DateTime @map("occurred_at") @db.Timestamptz(6)
+  summary       String   @db.VarChar(4000)
+  outcome       String
+  source        String
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
+  task        Task?       @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  contact     Contact?    @relation(fields: [contactId], references: [id], onDelete: Restrict)
+  author      User        @relation("InteractionAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([opportunityId, occurredAt])
+  @@index([contactId, occurredAt])
+  @@map("interaction")
+}
+
+model StageHistory {
+  id            String   @id @db.Uuid
+  opportunityId String   @map("opportunity_id") @db.Uuid
+  fromStage     String   @map("from_stage")
+  toStage       String   @map("to_stage")
+  actorId       String   @map("actor_id") @db.Uuid
+  reason        String
+  occurredAt    DateTime @map("occurred_at") @db.Timestamptz(6)
+
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
+  actor       User        @relation("StageActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([opportunityId, occurredAt])
+  @@map("stage_history")
+}
+
+model Placement {
+  id                  String    @id @db.Uuid
+  organizationId      String    @map("organization_id") @db.Uuid
+  opportunityId       String    @map("opportunity_id") @db.Uuid
+  ownerId             String    @map("owner_id") @db.Uuid
+  pageUrl             String    @map("page_url") @db.VarChar(2000)
+  urlPattern          String    @map("url_pattern") @db.VarChar(500)
+  embedType           String    @map("embed_type")
+  environment         String
+  businessStatus      String    @map("business_status")
+  healthStatus        String    @default("unchecked") @map("health_status")
+  launchedAt          DateTime? @map("launched_at") @db.Timestamptz(6)
+  consecutiveFailures Int       @default(0) @map("consecutive_failures")
+  firstFailureAt      DateTime? @map("first_failure_at") @db.Timestamptz(6)
+  lastSuccessAt       DateTime? @map("last_success_at") @db.Timestamptz(6)
+  lastCheckAt         DateTime? @map("last_check_at") @db.Timestamptz(6)
+  nextCheckAt         DateTime? @map("next_check_at") @db.Timestamptz(6)
+  monitorLockedAt     DateTime? @map("monitor_locked_at") @db.Timestamptz(6)
+  monitorLockedBy     String?   @map("monitor_locked_by")
+  monitorAttempts     Int       @default(0) @map("monitor_attempts")
+  monitorJobKey       String?   @map("monitor_job_key") @db.VarChar(200)
+  monitorLastError    String?   @map("monitor_last_error") @db.VarChar(2000)
+  monitorDeadAt       DateTime? @map("monitor_dead_at") @db.Timestamptz(6)
+  archivedAt          DateTime? @map("archived_at") @db.Timestamptz(6)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  version             Int       @default(1)
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  opportunity  Opportunity   @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
+  owner        User          @relation("PlacementOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  healthChecks HealthCheck[]
+  alerts       Alert[]
+
+  @@index([ownerId, businessStatus, nextCheckAt])
+  @@index([businessStatus, archivedAt, monitorDeadAt, nextCheckAt], map: "placement_monitor_due_idx")
+  @@index([monitorLockedAt], map: "placement_monitor_locked_at_idx")
+  @@index([opportunityId, businessStatus, healthStatus])
+  @@index([organizationId, archivedAt])
+  @@map("placement")
+}
+
+model HealthCheck {
+  id              String   @db.Uuid
+  placementId     String   @map("placement_id") @db.Uuid
+  checkedAt       DateTime @map("checked_at") @db.Timestamptz(6)
+  result          String
+  pageHttpStatus  Int?     @map("page_http_status")
+  embedHttpStatus Int?     @map("embed_http_status")
+  playerFound     Boolean  @map("player_found")
+  embedUrl        String?  @map("embed_url") @db.VarChar(2000)
+  evidenceUri     String?  @map("evidence_uri")
+  errorCode       String?  @map("error_code")
+  durationMs      Int      @map("duration_ms")
+  source          String
+  idempotencyKey  String   @map("idempotency_key") @db.VarChar(200)
+  requestHash     String   @map("request_hash") @db.Char(64)
+  detailsJson     Json     @default("{}") @map("details_json")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  placement Placement @relation(fields: [placementId], references: [id], onDelete: Restrict)
+
+  @@id([id, checkedAt])
+  @@index([placementId, checkedAt])
+  @@index([result, checkedAt])
+  @@map("health_check")
+}
+
+model Alert {
+  id              String    @id @db.Uuid
+  placementId     String    @map("placement_id") @db.Uuid
+  ownerId         String    @map("owner_id") @db.Uuid
+  technicalTaskId String?   @unique @map("technical_task_id") @db.Uuid
+  type            String
+  status          String
+  severity        String
+  firstFailureAt  DateTime  @map("first_failure_at") @db.Timestamptz(6)
+  openedAt        DateTime  @map("opened_at") @db.Timestamptz(6)
+  closedAt        DateTime? @map("closed_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  placement     Placement @relation(fields: [placementId], references: [id], onDelete: Restrict)
+  owner         User      @relation("AlertOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  technicalTask Task?     @relation("AlertTask", fields: [technicalTaskId], references: [id], onDelete: SetNull)
+
+  @@index([placementId, status, openedAt])
+  @@index([ownerId, status, openedAt])
+  @@map("alert")
+}
+
+model OpportunitySlaIncident {
+  id                  String    @id @db.Uuid
+  opportunityId       String    @map("opportunity_id") @db.Uuid
+  taskId              String?   @unique @map("task_id") @db.Uuid
+  stageCode           String    @map("stage_code") @db.VarChar(24)
+  activityMarkerAt    DateTime  @map("activity_marker_at") @db.Timestamptz(6)
+  thresholdDays       Int       @map("threshold_days")
+  escalationAfterDays Int       @map("escalation_after_days")
+  status              String    @db.VarChar(16)
+  ownerNotifiedAt     DateTime  @map("owner_notified_at") @db.Timestamptz(6)
+  escalatedAt         DateTime? @map("escalated_at") @db.Timestamptz(6)
+  resolvedAt          DateTime? @map("resolved_at") @db.Timestamptz(6)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  opportunity Opportunity @relation(fields: [opportunityId], references: [id], onDelete: Restrict)
+  task        Task?       @relation("OpportunitySlaTask", fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@unique([opportunityId, activityMarkerAt], map: "opportunity_sla_incident_marker_key")
+  @@index([status, ownerNotifiedAt])
+  @@index([opportunityId, status, createdAt])
+  @@map("opportunity_sla_incident")
+}
+
+model ReportSnapshot {
+  id             String   @id @db.Uuid
+  teamId         String   @map("team_id") @db.Uuid
+  generatedById  String   @map("generated_by_id") @db.Uuid
+  periodStart    DateTime @map("period_start") @db.Timestamptz(6)
+  periodEnd      DateTime @map("period_end") @db.Timestamptz(6)
+  dataAsOf       DateTime @map("data_as_of") @db.Timestamptz(6)
+  revision       Int
+  formulaVersion String   @map("formula_version") @db.VarChar(64)
+  payloadUri     String   @map("payload_uri")
+  checksum       String   @db.Char(64)
+  payload        Json
+  generatedAt    DateTime @default(now()) @map("generated_at") @db.Timestamptz(6)
+
+  team        Team @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  generatedBy User @relation("ReportGenerator", fields: [generatedById], references: [id], onDelete: Restrict)
+
+  @@unique([teamId, periodStart, periodEnd, dataAsOf, formulaVersion], name: "report_snapshot_exact", map: "report_snapshot_exact_key")
+  @@unique([teamId, periodStart, periodEnd, revision], name: "report_snapshot_revision", map: "report_snapshot_revision_key")
+  @@index([teamId, periodStart, revision])
+  @@map("report_snapshot")
+}
+
+model ImportJob {
+  id           String    @id @db.Uuid
+  teamId       String    @map("team_id") @db.Uuid
+  actorId      String    @map("actor_id") @db.Uuid
+  fileName     String    @map("file_name") @db.VarChar(255)
+  format       String    @db.VarChar(16)
+  sourceHash   String    @map("source_hash") @db.Char(64)
+  status       String    @db.VarChar(24)
+  summaryJson  Json      @default("{}") @map("summary_json")
+  warningsJson Json      @default("[]") @map("warnings_json")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  completedAt  DateTime? @map("completed_at") @db.Timestamptz(6)
+
+  team  Team        @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  actor User        @relation("ImportActor", fields: [actorId], references: [id], onDelete: Restrict)
+  rows  ImportRow[]
+
+  @@index([teamId, createdAt])
+  @@index([teamId, sourceHash, status])
+  @@map("import_job")
+}
+
+model ImportRow {
+  id                      String    @id @db.Uuid
+  jobId                   String    @map("job_id") @db.Uuid
+  rowNo                   Int       @map("row_no")
+  valuesJson              Json      @map("values_json")
+  normalizedDomain        String?   @map("normalized_domain")
+  decision                String    @db.VarChar(24)
+  resolvedDecision        String?   @map("resolved_decision") @db.VarChar(24)
+  allowedDecisionsJson    Json      @default("[]") @map("allowed_decisions_json")
+  matchedOrganizationId   String?   @map("matched_organization_id") @db.Uuid
+  matchedOrganizationName String?   @map("matched_organization_name")
+  fieldErrorsJson         Json      @default("{}") @map("field_errors_json")
+  warningsJson            Json      @default("[]") @map("warnings_json")
+  errorCode               String?   @map("error_code") @db.VarChar(64)
+  entityId                String?   @map("entity_id") @db.Uuid
+  appliedAt               DateTime? @map("applied_at") @db.Timestamptz(6)
+  createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  job ImportJob @relation(fields: [jobId], references: [id], onDelete: Restrict)
+
+  @@unique([jobId, rowNo])
+  @@index([jobId, decision])
+  @@index([entityId])
+  @@map("import_row")
+}
+
+model RadarCandidate {
+  id                      String    @id @db.Uuid
+  teamId                  String    @map("team_id") @db.Uuid
+  createdById             String    @map("created_by_id") @db.Uuid
+  name                    String    @db.VarChar(200)
+  source                  String    @db.VarChar(200)
+  inputUrl                String    @map("input_url") @db.VarChar(2000)
+  pageUrl                 String    @map("page_url") @db.VarChar(2000)
+  hostNormalized          String    @map("host_normalized")
+  status                  String    @db.VarChar(24)
+  featuresJson            Json      @default("{}") @map("features_json")
+  scoreTotal              Int       @map("score_total")
+  scoreAutomaticTotal     Int       @map("score_automatic_total")
+  scoreManualAdjustment   Int       @default(0) @map("score_manual_adjustment")
+  scoreManualComment      String?   @map("score_manual_comment") @db.VarChar(1000)
+  scorePriority           String    @map("score_priority") @db.VarChar(16)
+  scoreModelVersion       String    @map("score_model_version") @db.VarChar(64)
+  duplicateOrganizationId String?   @map("duplicate_organization_id") @db.Uuid
+  duplicateCandidateId    String?   @map("duplicate_candidate_id") @db.Uuid
+  deferUntil              DateTime? @map("defer_until") @db.Timestamptz(6)
+  rejectionReason         String?   @map("rejection_reason") @db.VarChar(1000)
+  rejectionComment        String?   @map("rejection_comment") @db.VarChar(1000)
+  mergedIntoCandidateId   String?   @map("merged_into_candidate_id") @db.Uuid
+  acceptedOrganizationId  String?   @map("accepted_organization_id") @db.Uuid
+  acceptedOpportunityId   String?   @map("accepted_opportunity_id") @db.Uuid
+  version                 Int       @default(1)
+  createdAt               DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  team                  Team                 @relation(fields: [teamId], references: [id], onDelete: Restrict)
+  createdBy             User                 @relation("RadarCandidateCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  duplicateOrganization Organization?        @relation("RadarDuplicateOrganization", fields: [duplicateOrganizationId], references: [id], onDelete: SetNull)
+  duplicateCandidate    RadarCandidate?      @relation("RadarCandidateDuplicate", fields: [duplicateCandidateId], references: [id], onDelete: SetNull)
+  candidateDuplicates   RadarCandidate[]     @relation("RadarCandidateDuplicate")
+  mergedIntoCandidate   RadarCandidate?      @relation("RadarCandidateMerge", fields: [mergedIntoCandidateId], references: [id], onDelete: SetNull)
+  mergedCandidates      RadarCandidate[]     @relation("RadarCandidateMerge")
+  acceptedOrganization  Organization?        @relation("RadarAcceptedOrganization", fields: [acceptedOrganizationId], references: [id], onDelete: SetNull)
+  acceptedOpportunity   Opportunity?         @relation("RadarAcceptedOpportunity", fields: [acceptedOpportunityId], references: [id], onDelete: SetNull)
+  evidence              RadarEvidence[]
+  scoreSnapshots        RadarScoreSnapshot[]
+  decisions             RadarDecision[]
+  mergeDecisions        RadarDecision[]      @relation("RadarDecisionMergeTarget")
+
+  @@index([teamId, status, scoreTotal])
+  @@index([teamId, hostNormalized, status])
+  @@index([duplicateOrganizationId])
+  @@index([duplicateCandidateId])
+  @@index([mergedIntoCandidateId])
+  @@map("radar_candidate")
+}
+
+model RadarEvidence {
+  id          String   @id @db.Uuid
+  candidateId String   @map("candidate_id") @db.Uuid
+  pageUrl     String   @map("page_url") @db.VarChar(2000)
+  status      String   @db.VarChar(24)
+  playerType  String?  @map("player_type") @db.VarChar(120)
+  detectedAt  DateTime @map("detected_at") @db.Timestamptz(6)
+  method      String   @db.VarChar(24)
+  confidence  String   @db.VarChar(16)
+  httpStatus  Int?     @map("http_status")
+  playerFound Boolean  @map("player_found")
+  embedUrl    String?  @map("embed_url") @db.VarChar(2000)
+  errorCode   String?  @map("error_code") @db.VarChar(64)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  candidate RadarCandidate @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+
+  @@index([candidateId, detectedAt])
+  @@index([status, detectedAt])
+  @@map("radar_evidence")
+}
+
+model RadarScoreSnapshot {
+  id               String   @id @db.Uuid
+  candidateId      String   @map("candidate_id") @db.Uuid
+  total            Int
+  automaticTotal   Int      @map("automatic_total")
+  manualAdjustment Int      @map("manual_adjustment")
+  manualComment    String?  @map("manual_comment") @db.VarChar(1000)
+  priority         String   @db.VarChar(16)
+  modelVersion     String   @map("model_version") @db.VarChar(64)
+  factorsJson      Json     @map("factors_json")
+  calculatedAt     DateTime @map("calculated_at") @db.Timestamptz(6)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  candidate RadarCandidate @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+
+  @@index([candidateId, calculatedAt])
+  @@map("radar_score_snapshot")
+}
+
+model RadarDecision {
+  id            String    @id @db.Uuid
+  candidateId   String    @map("candidate_id") @db.Uuid
+  actorId       String    @map("actor_id") @db.Uuid
+  decision      String    @db.VarChar(24)
+  reason        String    @db.VarChar(1000)
+  comment       String?   @db.VarChar(1000)
+  deferUntil    DateTime? @map("defer_until") @db.Timestamptz(6)
+  mergeTargetId String?   @map("merge_target_id") @db.Uuid
+  decidedAt     DateTime  @map("decided_at") @db.Timestamptz(6)
+
+  candidate   RadarCandidate  @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+  actor       User            @relation("RadarDecisionActor", fields: [actorId], references: [id], onDelete: Restrict)
+  mergeTarget RadarCandidate? @relation("RadarDecisionMergeTarget", fields: [mergeTargetId], references: [id], onDelete: SetNull)
+
+  @@index([candidateId, decidedAt])
+  @@index([actorId, decidedAt])
+  @@index([mergeTargetId])
+  @@map("radar_decision")
+}
+
+model AuditLog {
+  id         String   @id @db.Uuid
+  actorId    String   @map("actor_id") @db.Uuid
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id") @db.Uuid
+  beforeJson Json?    @map("before_json")
+  afterJson  Json?    @map("after_json")
+  occurredAt DateTime @map("occurred_at") @db.Timestamptz(6)
+
+  actor User @relation("AuditActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([entityType, entityId, occurredAt])
+  @@index([actorId, occurredAt])
+  @@map("audit_log")
+}
+
+model OutboxEvent {
+  id               String    @id @db.Uuid
+  eventType        String    @map("event_type")
+  aggregateType    String    @map("aggregate_type")
+  aggregateId      String    @map("aggregate_id") @db.Uuid
+  aggregateVersion Int       @map("aggregate_version")
+  schemaVersion    Int       @default(1) @map("schema_version")
+  payload          Json
+  occurredAt       DateTime  @map("occurred_at") @db.Timestamptz(6)
+  publishedAt      DateTime? @map("published_at") @db.Timestamptz(6)
+  attempts         Int       @default(0)
+  lastError        String?   @map("last_error")
+  nextAttemptAt    DateTime  @default(now()) @map("next_attempt_at") @db.Timestamptz(6)
+  lockedAt         DateTime? @map("locked_at") @db.Timestamptz(6)
+  lockedBy         String?   @map("locked_by")
+
+  @@unique([aggregateType, aggregateId, aggregateVersion, eventType])
+  @@index([publishedAt, occurredAt])
+  @@index([publishedAt, nextAttemptAt, occurredAt])
+  @@map("outbox_event")
+}
+
+model IdempotencyRecord {
+  id             String    @id @db.Uuid
+  actorId        String    @map("actor_id") @db.Uuid
+  operation      String
+  requestKey     String    @map("request_key") @db.VarChar(200)
+  requestHash    String    @map("request_hash") @db.Char(64)
+  responseStatus Int?      @map("response_status")
+  responseJson   Json?     @map("response_json")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  completedAt    DateTime? @map("completed_at") @db.Timestamptz(6)
+  expiresAt      DateTime  @map("expires_at") @db.Timestamptz(6)
+
+  actor User @relation("IdempotencyActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@unique([actorId, operation, requestKey])
+  @@index([expiresAt])
+  @@map("idempotency_record")
+}

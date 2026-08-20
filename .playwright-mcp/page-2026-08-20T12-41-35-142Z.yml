@@ -1,0 +1,83 @@
+- generic [ref=e6]:
+  - complementary "Основная навигация" [ref=e7]:
+    - generic [ref=e8]:
+      - generic [ref=e9]: RUTUBE●
+      - generic [ref=e10]: Embed Partner OS
+    - navigation [ref=e11]:
+      - button "Сегодня" [ref=e12] [cursor=pointer]
+      - button "Партнёры" [ref=e17] [cursor=pointer]
+      - button "Воронка" [ref=e23] [cursor=pointer]
+      - button "Радар" [active] [ref=e27] [cursor=pointer]
+      - button "Размещения" [ref=e36] [cursor=pointer]
+      - button "Отчёты" [ref=e42] [cursor=pointer]
+      - button "Настройки" [ref=e46] [cursor=pointer]
+    - generic [ref=e52]:
+      - generic "Анна Соколова · Администратор · все данные" [ref=e53]: АС
+      - generic [ref=e54]:
+        - generic [ref=e55]: Анна Соколова
+        - generic [ref=e56]: Администратор · все данные
+      - img "Права проверены сервером" [ref=e57]
+  - main [ref=e722]:
+    - generic [ref=e723]:
+      - generic [ref=e724]:
+        - heading "Радар" [level=1] [ref=e725]
+        - paragraph [ref=e726]: Поиск и квалификация новых партнёров
+      - generic [ref=e727]:
+        - generic [ref=e728]:
+          - generic [ref=e733]: Команда
+          - combobox "Команда" [ref=e734] [cursor=pointer]:
+            - option "Команда внедрения" [selected]
+        - button "Импорт кандидатов CSV или XLSX" [ref=e735]
+        - button "Импорт CSV / XLSX" [ref=e736] [cursor=pointer]
+        - button "Добавить URL" [ref=e740] [cursor=pointer]
+    - region "Очередь кандидатов" [ref=e742]:
+      - generic [ref=e743]:
+        - generic [ref=e744]:
+          - generic [ref=e745]:
+            - strong [ref=e746]: Добавить кандидата
+            - button "Скрыть форму" [ref=e747] [cursor=pointer]
+          - generic [ref=e751]:
+            - generic [ref=e752]: Название сайта
+            - textbox "Название сайта" [ref=e753]:
+              - /placeholder: Например, Городской медиацентр
+          - generic [ref=e754]:
+            - generic [ref=e755]: URL или домен
+            - textbox "URL или домен" [ref=e756]:
+              - /placeholder: example.ru/article
+          - generic [ref=e757]:
+            - generic [ref=e758]: Источник
+            - combobox "Источник" [ref=e759] [cursor=pointer]:
+              - option "Ручной поиск" [selected]
+              - option "Рекомендация"
+              - option "Публичный каталог"
+          - button "Добавить" [ref=e760] [cursor=pointer]
+          - group [ref=e762]:
+            - generic "Данные для Partner Score" [ref=e763] [cursor=pointer]
+            - option "Неизвестно" [selected]
+            - option "Ежедневно"
+            - option "Еженедельно"
+            - option "Ежемесячно"
+            - option "high"
+            - option "medium" [selected]
+            - option "low"
+        - generic [ref=e764]:
+          - generic [ref=e765]:
+            - generic [ref=e769]: Поиск кандидатов
+            - textbox "Поиск кандидатов" [ref=e770]:
+              - /placeholder: Поиск по сайту или домену
+          - generic [ref=e771]:
+            - generic [ref=e772]: Статус
+            - combobox "Статус" [ref=e773] [cursor=pointer]:
+              - option "Все статусы" [selected]
+              - option "Новые"
+              - option "После проверки"
+              - option "Отложены"
+              - option "Приняты"
+              - option "Отклонены"
+              - option "Объединены"
+        - generic [ref=e774]:
+          - strong [ref=e782]: Очередь пуста
+          - paragraph [ref=e783]: Добавьте первую публичную страницу.
+      - generic [ref=e784]:
+        - strong [ref=e788]: Выберите кандидата
+        - paragraph [ref=e789]: Здесь появятся evidence, score и причины оценки.

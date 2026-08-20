@@ -1,0 +1,51 @@
+{
+  "name": "@embed-os/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "worker:placement-monitor": "tsx src/workers/placement-monitor-worker.ts",
+    "worker:weekly-report": "tsx src/workers/weekly-report-worker.ts",
+    "worker:report-digest": "tsx src/workers/report-digest-worker.ts",
+    "worker:opportunity-sla": "tsx src/workers/opportunity-sla-worker.ts",
+    "worker:sla-notification": "tsx src/workers/sla-notification-worker.ts",
+    "worker:radar-recheck": "tsx src/workers/radar-recheck-worker.ts",
+    "build": "npm run prisma:generate && tsc -p tsconfig.json",
+    "prisma:generate": "DATABASE_URL=${DATABASE_URL:-postgresql://embed_os:embed_os@127.0.0.1:5432/embed_os?schema=public} prisma generate",
+    "prisma:validate": "DATABASE_URL=${DATABASE_URL:-postgresql://embed_os:embed_os@127.0.0.1:5432/embed_os?schema=public} prisma validate",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts",
+    "start": "node dist/main.js",
+    "start:placement-monitor-worker": "node dist/workers/placement-monitor-worker.js",
+    "start:weekly-report-worker": "node dist/workers/weekly-report-worker.js",
+    "start:report-digest-worker": "node dist/workers/report-digest-worker.js",
+    "start:opportunity-sla-worker": "node dist/workers/opportunity-sla-worker.js",
+    "start:sla-notification-worker": "node dist/workers/sla-notification-worker.js",
+    "start:radar-recheck-worker": "node dist/workers/radar-recheck-worker.js",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@embed-os/contracts": "*",
+    "@embed-os/domain": "*",
+    "@nestjs/common": "^11.1.6",
+    "@nestjs/core": "^11.1.6",
+    "@nestjs/platform-express": "^11.1.6",
+    "@nestjs/swagger": "^11.2.0",
+    "@prisma/client": "6.19.0",
+    "jose": "^6.2.9",
+    "read-excel-file": "^9.3.5",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "^11.1.6",
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.18.1",
+    "@types/supertest": "^6.0.3",
+    "prisma": "6.19.0",
+    "supertest": "^7.1.4",
+    "tsx": "^4.20.5"
+  }
+}

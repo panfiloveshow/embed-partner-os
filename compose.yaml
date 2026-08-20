@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: embed_os
+      POSTGRES_USER: embed_os
+      POSTGRES_PASSWORD: embed_os
+    ports:
+      - "5432:5432"
+    volumes:
+      - embed-os-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U embed_os -d embed_os"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  embed-os-postgres:
+

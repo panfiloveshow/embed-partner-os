@@ -1,0 +1,193 @@
+- generic [ref=e6]:
+  - complementary "Основная навигация" [ref=e7]:
+    - generic [ref=e8]:
+      - generic [ref=e9]: RUTUBE●
+      - generic [ref=e10]: Embed Partner OS
+    - navigation [ref=e11]:
+      - button "Сегодня" [ref=e12] [cursor=pointer]
+      - button "Партнёры" [ref=e17] [cursor=pointer]
+      - button "Воронка" [ref=e23] [cursor=pointer]
+      - button "Радар" [ref=e27] [cursor=pointer]
+      - button "Размещения" [ref=e36] [cursor=pointer]
+      - button "Отчёты" [ref=e42] [cursor=pointer]
+      - button "Настройки" [ref=e46] [cursor=pointer]
+    - generic [ref=e52]:
+      - generic "Анна Соколова · Администратор · все данные" [ref=e53]: АС
+      - generic [ref=e54]:
+        - generic [ref=e55]: Анна Соколова
+        - generic [ref=e56]: Администратор · все данные
+      - img "Права проверены сервером" [ref=e57]
+  - main [ref=e722]:
+    - generic [ref=e723]:
+      - generic [ref=e724]:
+        - heading "Радар" [level=1] [ref=e725]
+        - paragraph [ref=e726]: Поиск и квалификация новых партнёров
+      - generic [ref=e727]:
+        - generic [ref=e728]:
+          - generic [ref=e733]: Команда
+          - combobox "Команда" [ref=e734] [cursor=pointer]:
+            - option "Команда внедрения" [selected]
+        - button "Импорт кандидатов CSV или XLSX" [ref=e735]
+        - button "Импорт CSV / XLSX" [ref=e736] [cursor=pointer]
+        - button "Добавить URL" [ref=e740] [cursor=pointer]
+    - region "Очередь кандидатов" [ref=e742]:
+      - generic [ref=e743]:
+        - generic [ref=e764]:
+          - generic [ref=e765]:
+            - generic [ref=e769]: Поиск кандидатов
+            - textbox "Поиск кандидатов" [ref=e770]:
+              - /placeholder: Поиск по сайту или домену
+          - generic [ref=e771]:
+            - generic [ref=e772]: Статус
+            - combobox "Статус" [ref=e773] [cursor=pointer]:
+              - option "Все статусы" [selected]
+              - option "Новые"
+              - option "После проверки"
+              - option "Отложены"
+              - option "Приняты"
+              - option "Отклонены"
+              - option "Объединены"
+        - listbox "Кандидаты" [ref=e798]:
+          - option "Sport24 sport24.ru 0 Ручной поиск" [selected] [ref=e799] [cursor=pointer]:
+            - generic [ref=e801]:
+              - strong [ref=e802]: Sport24
+              - generic [ref=e803]: sport24.ru
+            - generic [ref=e804]: "0"
+            - generic [ref=e805]: Ручной поиск
+      - article [ref=e806]:
+        - generic [ref=e807]:
+          - generic [ref=e808]:
+            - heading "Sport24" [level=2] [ref=e809]
+            - link "sport24.ru" [ref=e810] [cursor=pointer]:
+              - /url: https://sport24.ru/
+          - generic [ref=e815]: Новый
+        - generic [ref=e816]:
+          - generic [ref=e817]:
+            - strong [ref=e818]: "0"
+            - generic [ref=e819]: из 100
+          - generic [ref=e820]:
+            - generic [ref=e821]:
+              - term [ref=e822]: Приоритет
+              - definition [ref=e823]: Низкий
+            - generic [ref=e824]:
+              - term [ref=e825]: Авторасчёт
+              - definition [ref=e826]: "0"
+            - generic [ref=e827]:
+              - term [ref=e828]: Корректировка
+              - definition [ref=e829]: "0"
+        - generic [ref=e830]:
+          - generic [ref=e833]:
+            - strong [ref=e834]: Evidence ещё не собрано
+            - generic [ref=e835]: Запустите L0-проверку публичной страницы
+          - button "Проверить" [disabled] [ref=e836]
+        - generic [ref=e842]:
+          - heading "Характеристики сайта" [level=3] [ref=e843]
+          - generic [ref=e844]:
+            - generic [ref=e845]:
+              - term [ref=e846]: Тематика
+              - definition [ref=e847]:
+                - generic [ref=e848]: —
+            - generic [ref=e849]:
+              - term [ref=e850]: Язык
+              - definition [ref=e851]:
+                - generic [ref=e852]: —
+            - generic [ref=e853]:
+              - term [ref=e854]: География
+              - definition [ref=e855]:
+                - generic [ref=e856]: —
+            - generic [ref=e857]:
+              - term [ref=e858]: Публикации
+              - definition [ref=e859]:
+                - generic [ref=e860]: Не определено
+            - generic [ref=e861]:
+              - term [ref=e862]: CMS / технология
+              - definition [ref=e863]:
+                - generic [ref=e864]: —
+            - generic [ref=e865]:
+              - term [ref=e866]: Страницы с видео
+              - definition [ref=e867]:
+                - generic [ref=e868]: —
+            - generic [ref=e869]:
+              - term [ref=e870]: Контакт
+              - definition [ref=e871]:
+                - generic [ref=e872]: Не найден
+            - generic [ref=e873]:
+              - term [ref=e874]: Посещаемость
+              - definition [ref=e875]:
+                - generic [ref=e876]: —
+                - generic [ref=e877]: Similarweb не подключён — цифры не подменяются предположением
+        - generic [ref=e878]:
+          - generic [ref=e879]:
+            - heading "Факторы оценки" [level=3] [ref=e880]
+            - generic [ref=e881]: partner-score-v1
+          - generic [ref=e882]:
+            - generic [ref=e883]:
+              - strong [ref=e884]:
+                - text: Бизнес
+                - generic [ref=e885]: 0 / 40
+              - generic "Оценка охвата отсутствует" [ref=e886]:
+                - generic [ref=e887]: Оценка охвата
+                - generic [ref=e888]: 0 / 24
+              - generic "География не указана" [ref=e889]:
+                - generic [ref=e890]: Целевая география
+                - generic [ref=e891]: 0 / 8
+              - 'generic "Частота публикаций: не определена" [ref=e892]':
+                - generic [ref=e893]: Устойчивость публикаций
+                - generic [ref=e894]: 0 / 8
+            - generic [ref=e895]:
+              - strong [ref=e896]:
+                - text: Контент
+                - generic [ref=e897]: 0 / 25
+              - generic "Тематика не определена" [ref=e898]:
+                - generic [ref=e899]: Контентная тематика
+                - generic [ref=e900]: 0 / 10
+              - generic "Объём страниц с видео не оценён" [ref=e901]:
+                - generic [ref=e902]: Страницы с видео
+                - generic [ref=e903]: 0 / 15
+            - generic [ref=e904]:
+              - strong [ref=e905]:
+                - text: Техника
+                - generic [ref=e906]: 0 / 20
+              - generic "Плеер не подтверждён" [ref=e907]:
+                - generic [ref=e908]: Видеоплеер
+                - generic [ref=e909]: 0 / 14
+              - generic "Страница ещё не проверена" [ref=e910]:
+                - generic [ref=e911]: Доступность страницы
+                - generic [ref=e912]: 0 / 3
+              - generic "Технология не определена" [ref=e913]:
+                - generic [ref=e914]: CMS / технология
+                - generic [ref=e915]: 0 / 3
+            - generic [ref=e916]:
+              - strong [ref=e917]:
+                - text: Контактность
+                - generic [ref=e918]: 0 / 15
+              - generic "Контакт не найден" [ref=e919]:
+                - generic [ref=e920]: Контактность
+                - generic [ref=e921]: 0 / 15
+        - generic [ref=e922]:
+          - generic [ref=e923]:
+            - generic [ref=e924]: Причина решения
+            - textbox "Причина решения" [ref=e925]:
+              - /placeholder: Кратко зафиксируйте обоснование
+          - generic [ref=e926]:
+            - generic [ref=e927]:
+              - generic [ref=e928]: Пересмотреть
+              - textbox "Пересмотреть" [ref=e929]
+            - generic [ref=e930]:
+              - generic [ref=e931]: Объединить с
+              - combobox "Объединить с" [ref=e932] [cursor=pointer]:
+                - option "Выберите кандидата" [selected]
+          - generic [ref=e933]:
+            - button "Принять" [disabled] [ref=e934]
+            - button "Отложить" [disabled] [ref=e937]
+            - button "Объединить" [disabled] [ref=e938]
+            - button "Отклонить" [disabled] [ref=e939]
+          - generic [ref=e940]:
+            - generic [ref=e941]:
+              - generic [ref=e942]: Ручная поправка
+              - spinbutton "Ручная поправка" [ref=e943]: "0"
+            - generic [ref=e944]:
+              - generic [ref=e945]: Комментарий
+              - textbox "Комментарий" [ref=e946]:
+                - /placeholder: Обязателен для ручной поправки
+            - button "Сохранить score" [disabled] [ref=e947]
