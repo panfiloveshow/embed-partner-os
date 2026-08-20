@@ -136,7 +136,7 @@ export class AccessControlGuard implements CanActivate {
   constructor(
     @Inject(ACTOR_IDENTITY) private readonly identities: ActorIdentityPort,
     @Inject(OIDC_TOKEN_VERIFIER) private readonly oidcTokens: OidcTokenVerifierPort,
-    private readonly prisma: PrismaService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {

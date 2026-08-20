@@ -80,7 +80,7 @@ export class PostgresReportService implements ReportPort {
           return replay;
         }
 
-        await transaction.$queryRaw(Prisma.sql`
+        await transaction.$executeRaw(Prisma.sql`
           SELECT pg_advisory_xact_lock(
             hashtextextended(${`weekly-report:${teamId}:${command.periodStart}`}, 0)
           )

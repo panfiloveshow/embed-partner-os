@@ -128,6 +128,23 @@ export class TodayService implements TodayPort, ContactPort {
     };
   }
 
+  /**
+   * Moves every non-closed opportunity of the current process version onto a
+   * newly published ProcessDefinition (SLA settings publication contract).
+   * Returns the number of migrated opportunities.
+   */
+  migrateProcessVersion(fromVersion: number, toVersion: number): number {
+    const migrated = new Set<string>();
+    this.actions = this.actions.map((action) => {
+      if (action.processVersion !== fromVersion || action.opportunityStatus === "CLOSED") {
+        return action;
+      }
+      migrated.add(action.opportunityId);
+      return { ...action, processVersion: toVersion };
+    });
+    return migrated.size;
+  }
+
   getPlacementContext(organizationId: string, opportunityId: string) {
     const action = this.actions.find(
       (candidate) =>

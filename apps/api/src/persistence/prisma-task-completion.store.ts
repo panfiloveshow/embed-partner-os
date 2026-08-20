@@ -165,7 +165,7 @@ class PrismaCompletionTransaction implements CompletionTransaction {
     summary: string;
     outcome: string;
   }): Promise<void> {
-    await this.transaction.$queryRaw(Prisma.sql`
+    await this.transaction.$executeRaw(Prisma.sql`
       SELECT pg_advisory_xact_lock(hashtextextended(${`contact-merge:${input.contactId}`}, 0))
     `);
     const contact = await this.transaction.contact.findUnique({

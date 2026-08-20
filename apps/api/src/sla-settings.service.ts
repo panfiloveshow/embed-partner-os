@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import type { SlaSettingsPayload } from "@embed-os/contracts";
 import {
   defaultSlaThresholds,
@@ -7,6 +7,7 @@ import {
 } from "@embed-os/domain";
 import { IdempotencyConflictError, slaSettingsRequestHash } from "./application/idempotency.js";
 import type { SlaSettingsPort } from "./sla-settings.port.js";
+import { TodayService } from "./today.service.js";
 
 export class SlaSettingsVersionConflictError extends Error {
   readonly code = "SLA_SETTINGS_VERSION_CONFLICT";
@@ -19,6 +20,8 @@ export class SlaSettingsVersionConflictError extends Error {
 
 @Injectable()
 export class SlaSettingsService implements SlaSettingsPort {
+  constructor(@Inject(TodayService) private readonly today: TodayService) {}
+
   private current = slaSettingsFromProcessDefinition({
     id: "memory-process-1",
     version: 1,
@@ -56,14 +59,21 @@ export class SlaSettingsService implements SlaSettingsPort {
     const thresholds = Object.fromEntries(
       this.current.stages.map(({ code }) => [code, command.thresholds[code]]),
     );
+    const nextVersion = this.current.version + 1;
+    // Publishing a new ProcessDefinition migrates every non-closed
+    // opportunity of the current version onto it (requirements baseline).
+    const affectedOpportunities = this.today.migrateProcessVersion(
+      this.current.version,
+      nextVersion,
+    );
     this.current = slaSettingsFromProcessDefinition({
-      id: `memory-process-${this.current.version + 1}`,
-      version: this.current.version + 1,
+      id: `memory-process-${nextVersion}`,
+      version: nextVersion,
       publishedAt: new Date(),
       schema: {
         sla: { escalationAfterDays: command.escalationAfterDays, thresholds },
       },
-      affectedOpportunities: this.current.affectedOpportunities,
+      affectedOpportunities,
     });
     const response = structuredClone(this.current);
     this.idempotency.set(scope, { requestHash, response });

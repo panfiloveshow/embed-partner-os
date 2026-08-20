@@ -87,7 +87,7 @@ export class PostgresSlaSettingsService implements SlaSettingsPort {
           return replay;
         }
 
-        await transaction.$queryRaw(Prisma.sql`
+        await transaction.$executeRaw(Prisma.sql`
         SELECT pg_advisory_xact_lock(hashtextextended(${"settings.sla.publish"}, 0))
       `);
         const current = await transaction.processDefinition.findFirst({

@@ -1,4 +1,5 @@
-import { PrismaClient, TaskStatus, UserStatus } from "@prisma/client";
+import { OpportunityStatus, PrismaClient, TaskStatus, UserStatus } from "@prisma/client";
+import { calculatePriority, type PriorityFactors } from "@embed-os/domain";
 
 const prisma = new PrismaClient();
 const BOOTSTRAP_USER_ID = "00000000-0000-4000-8000-000000000001";
@@ -110,76 +111,319 @@ const PROCESS_SCHEMA = {
   },
 };
 
-const actions = [
+type ActionGroup = "critical" | "today" | "later" | "waiting";
+
+interface SeedActionDefinition {
+  /** 1-based task number matching the in-memory `task-N` fixture ids. */
+  taskNumber: number;
+  organization: string;
+  domain: string;
+  stageCode: string;
+  stageLabel: string;
+  title: string;
+  dueAt: string;
+  group: ActionGroup;
+  factors: PriorityFactors;
+  interactionType: string;
+  interactionSummary: string;
+}
+
+const MOSCOW_UTC_OFFSET_MS = 3 * 60 * 60 * 1_000;
+/** Moscow calendar date the fixture dataset below was authored for. */
+const SEED_ANCHOR_DATE = "2026-08-17";
+
+const seedContactNames = [
+  "Ольга Смирнова",
+  "Алексей Кузнецов",
+  "Мария Попова",
+  "Дмитрий Волков",
+  "Артём Соколов",
+  "Екатерина Лебедева",
+  "Павел Морозов",
+  "Анна Орлова",
+  "Сергей Гришин",
+  "Наталья Белова",
+  "Максим Фролов",
+  "Ирина Власова",
+  "Роман Титов",
+  "Юлия Крылова",
+];
+
+/**
+ * The same demo dataset as the in-memory TodayService fixture: 16 open
+ * actions across 16 organizations. Both persistence modes must serve
+ * identical data so the HTTP contract suite passes against either.
+ */
+const actions: SeedActionDefinition[] = [
   {
+    taskNumber: 1,
     organization: "Медиа Новости",
     domain: "medianovosti.ru",
     stageCode: "S7",
     stageLabel: "Интеграция",
     title: "Ответить на запрос по API",
     dueAt: "2026-08-15T14:00:00+03:00",
-    score: 85,
-    priorityScore: 92,
-    priorityReasons: [
-      { code: "overdue", label: "Просрочка 4 дня" },
-      { code: "inbound", label: "Ответ партнёра" },
-      { code: "partner-potential", label: "Высокий потенциал" },
-    ],
+    group: "critical",
+    factors: {
+      overdueBusinessDays: 4,
+      partnerScore: 85,
+      hasInboundResponse: true,
+      isIntegrationOrPilot: true,
+    },
+    interactionType: "Письмо от партнёра",
+    interactionSummary: "Запросили обновлённую спецификацию API и примеры интеграции",
   },
   {
+    taskNumber: 2,
     organization: "Спорт Онлайн",
     domain: "sport-online.ru",
     stageCode: "S7",
     stageLabel: "Интеграция",
     title: "Предоставить тестовый доступ",
     dueAt: "2026-08-16T12:00:00+03:00",
-    score: 90,
-    priorityScore: 78,
-    priorityReasons: [
-      { code: "technical-risk", label: "Технический риск" },
-      { code: "overdue", label: "Просрочка 2 дня" },
-    ],
+    group: "critical",
+    factors: {
+      overdueBusinessDays: 2,
+      partnerScore: 90,
+      hasCriticalTechnicalAlert: true,
+      isIntegrationOrPilot: true,
+    },
+    interactionType: "Системное событие",
+    interactionSummary: "Две последовательные ошибки проверки тестовой страницы",
   },
   {
+    taskNumber: 3,
     organization: "Городской портал",
     domain: "citymedia.ru",
     stageCode: "S4",
     stageLabel: "Диалог",
     title: "Согласовать условия размещения",
-    dueAt: "2026-08-17T16:00:00+03:00",
-    score: 78,
-    priorityScore: 64,
-    priorityReasons: [
-      { code: "inbound", label: "Ответ партнёра" },
-      { code: "partner-potential", label: "Высокий потенциал" },
-    ],
+    dueAt: "2026-08-16T18:00:00+03:00",
+    group: "critical",
+    factors: {
+      overdueBusinessDays: 1,
+      partnerScore: 78,
+      hasInboundResponse: true,
+      inactiveDays: 9,
+    },
+    interactionType: "Входящее письмо",
+    interactionSummary: "Партнёр готов обсудить финальный формат размещения",
   },
   {
+    taskNumber: 4,
     organization: "Кинообзор",
     domain: "kino-review.ru",
     stageCode: "S7",
     stageLabel: "Интеграция",
     title: "Проверить готовность плеера",
-    dueAt: "2026-08-17T18:00:00+03:00",
-    score: 72,
-    priorityScore: 49,
-    priorityReasons: [
-      { code: "technical-risk", label: "Технический риск" },
-      { code: "partner-potential", label: "Высокий потенциал" },
-    ],
+    dueAt: "2026-08-17T11:00:00+03:00",
+    group: "today",
+    factors: {
+      partnerScore: 72,
+      isIntegrationOrPilot: true,
+      hasCriticalTechnicalAlert: true,
+    },
+    interactionType: "Техническая заметка",
+    interactionSummary: "Тестовая страница опубликована и ждёт проверки",
   },
   {
+    taskNumber: 5,
+    organization: "TechBlog",
+    domain: "techblog.ru",
+    stageCode: "S7",
+    stageLabel: "Интеграция",
+    title: "Согласовать параметры плеера",
+    dueAt: "2026-08-17T13:30:00+03:00",
+    group: "today",
+    factors: {
+      partnerScore: 68,
+      isIntegrationOrPilot: true,
+      hasInboundResponse: true,
+    },
+    interactionType: "Письмо",
+    interactionSummary: "Получен список разрешённых параметров iframe",
+  },
+  {
+    taskNumber: 6,
+    organization: "LifeStyle Media",
+    domain: "lifestyle.media",
+    stageCode: "S5",
+    stageLabel: "Предложение",
+    title: "Отправить коммерческое предложение",
+    dueAt: "2026-08-17T15:00:00+03:00",
+    group: "today",
+    factors: {
+      partnerScore: 81,
+      hasInboundResponse: true,
+    },
+    interactionType: "Звонок",
+    interactionSummary: "Подтверждён интерес к пилоту на новостном разделе",
+  },
+  {
+    taskNumber: 7,
+    organization: "АвтоПортал",
+    domain: "autoportal.ru",
+    stageCode: "S6",
+    stageLabel: "Согласование",
+    title: "Запросить доступ к сайту",
+    dueAt: "2026-08-17T16:00:00+03:00",
+    group: "today",
+    factors: {
+      partnerScore: 66,
+      inactiveDays: 12,
+    },
+    interactionType: "Встреча",
+    interactionSummary: "Техническая команда готовит тестовый контур",
+  },
+  {
+    taskNumber: 8,
+    organization: "Новости Регионов",
+    domain: "regions.news",
+    stageCode: "S3",
+    stageLabel: "Первичный контакт",
+    title: "Подготовить follow-up",
+    dueAt: "2026-08-17T16:30:00+03:00",
+    group: "today",
+    factors: {
+      partnerScore: 59,
+      inactiveDays: 18,
+    },
+    interactionType: "Письмо",
+    interactionSummary: "Первое письмо отправлено четыре дня назад",
+  },
+  {
+    taskNumber: 9,
+    organization: "EduVideo",
+    domain: "eduvideo.ru",
+    stageCode: "S2",
+    stageLabel: "Квалифицирован",
+    title: "Найти технического контакта",
+    dueAt: "2026-08-17T17:00:00+03:00",
+    group: "today",
+    factors: {
+      partnerScore: 74,
+      inactiveDays: 6,
+    },
+    interactionType: "Исследование",
+    interactionSummary: "Найдены редакционный и коммерческий контакты",
+  },
+  {
+    taskNumber: 10,
+    organization: "Деловой обзор",
+    domain: "business-review.ru",
+    stageCode: "S4",
+    stageLabel: "Диалог",
+    title: "Подтвердить встречу",
+    dueAt: "2026-08-17T18:00:00+03:00",
+    group: "today",
+    factors: {
+      partnerScore: 70,
+      hasInboundResponse: true,
+    },
+    interactionType: "Календарь",
+    interactionSummary: "Партнёр предложил два слота для встречи",
+  },
+  {
+    taskNumber: 11,
     organization: "Travel Guide",
     domain: "travelguide.ru",
     stageCode: "S4",
     stageLabel: "Диалог",
     title: "Договориться о встрече",
     dueAt: "2026-08-19T12:00:00+03:00",
-    score: 64,
-    priorityScore: 16,
-    priorityReasons: [{ code: "partner-potential", label: "Высокий потенциал" }],
+    group: "later",
+    factors: {
+      partnerScore: 64,
+      inactiveDays: 9,
+    },
+    interactionType: "Звонок",
+    interactionSummary: "Контакт попросил вернуться после планёрки",
+  },
+  {
+    taskNumber: 12,
+    organization: "Музыка Онлайн",
+    domain: "music-online.ru",
+    stageCode: "S5",
+    stageLabel: "Предложение",
+    title: "Уточнить формат размещения",
+    dueAt: "2026-08-20T15:00:00+03:00",
+    group: "later",
+    factors: {
+      partnerScore: 57,
+      inactiveDays: 6,
+    },
+    interactionType: "Заметка",
+    interactionSummary: "Нужно выбрать формат для мобильной версии",
+  },
+  {
+    taskNumber: 13,
+    organization: "Game World",
+    domain: "gameworld.ru",
+    stageCode: "S7",
+    stageLabel: "Интеграция",
+    title: "Ожидание доступа в тестовый контур",
+    dueAt: "2026-08-21T10:00:00+03:00",
+    group: "waiting",
+    factors: {
+      partnerScore: 80,
+      isIntegrationOrPilot: true,
+      isWaitingBeforeReview: true,
+    },
+    interactionType: "Ожидание",
+    interactionSummary: "Доступ готовит служба безопасности партнёра",
+  },
+  {
+    taskNumber: 14,
+    organization: "Новости Мира",
+    domain: "world-news.ru",
+    stageCode: "S4",
+    stageLabel: "Диалог",
+    title: "Ожидание ответа на КП",
+    dueAt: "2026-08-22T10:00:00+03:00",
+    group: "waiting",
+    factors: {
+      partnerScore: 73,
+      isWaitingBeforeReview: true,
+    },
+    interactionType: "Ожидание",
+    interactionSummary: "Коммерческое предложение на внутреннем согласовании",
+  },
+  {
+    taskNumber: 15,
+    organization: "Домашний уют",
+    domain: "home-style.ru",
+    stageCode: "S5",
+    stageLabel: "Предложение",
+    title: "Ожидание материалов",
+    dueAt: "2026-08-23T10:00:00+03:00",
+    group: "waiting",
+    factors: {
+      partnerScore: 61,
+      isWaitingBeforeReview: true,
+    },
+    interactionType: "Ожидание",
+    interactionSummary: "Редакция готовит перечень страниц с видео",
+  },
+  {
+    taskNumber: 16,
+    organization: "Финансы Онлайн",
+    domain: "finance-online.ru",
+    stageCode: "S6",
+    stageLabel: "Согласование",
+    title: "Ожидание согласования безопасности",
+    dueAt: "2026-08-24T10:00:00+03:00",
+    group: "waiting",
+    factors: {
+      partnerScore: 76,
+      isWaitingBeforeReview: true,
+    },
+    interactionType: "Ожидание",
+    interactionSummary: "Документы переданы службе информационной безопасности",
   },
 ];
+
+/** The in-memory fixture starts the day with 6 tasks already completed. */
+const COMPLETED_TODAY = 6;
 
 async function main() {
   await prisma.team.upsert({
@@ -292,31 +536,71 @@ async function main() {
     },
   });
 
-  for (const [index, action] of actions.entries()) {
+  const now = new Date();
+  const shiftMs = seedDayShiftMs(now);
+
+  for (const action of actions) {
+    const index = action.taskNumber - 1;
     const organizationId = uuid(1_000 + index);
     const domainId = uuid(2_000 + index);
     const opportunityId = uuid(3_000 + index);
     const taskId = uuid(4_000 + index);
-    const contactId = uuid(index < 2 ? 5_000 : 5_000 + index);
+    const isSharedContact = action.taskNumber <= 2;
+    const contactId = uuid(isSharedContact ? 5_000 : 5_000 + index);
     const contactLinkId = uuid(6_000 + index);
+    const interactionId = uuid(8_000 + index);
+    const inMediaGroup = action.taskNumber === 1 || action.taskNumber === 3;
+    const legalName =
+      action.taskNumber === 1
+        ? "ООО «Медиа Новости»"
+        : action.taskNumber === 3
+          ? "АО «Городской портал»"
+          : null;
+    const contactName = isSharedContact
+      ? "Иван Петров"
+      : (seedContactNames[(action.taskNumber - 3) % seedContactNames.length] ?? "Иван Петров");
+    const contactRole =
+      action.taskNumber === 1
+        ? "Технический директор"
+        : action.taskNumber === 2
+          ? "Консультант по интеграции"
+          : action.stageCode === "S7"
+            ? "Технический руководитель"
+            : "Руководитель направления";
+    const contactDepartment = action.stageCode === "S7" ? "ИТ" : "Развитие бизнеса";
+    const priority = calculatePriority(action.factors);
+    const dueAt = new Date(new Date(action.dueAt).getTime() + shiftMs);
+    const opportunityStatus =
+      action.group === "waiting" ? OpportunityStatus.WAITING : OpportunityStatus.ACTIVE;
+    const waitingFields =
+      action.group === "waiting"
+        ? {
+            waitingReason: action.interactionSummary,
+            waitingFor: action.title.replace(/^Ожидание\s*/u, "") || action.title,
+            reviewAt: dueAt,
+          }
+        : { waitingReason: null, waitingFor: null, reviewAt: null };
+    const partnerScore =
+      typeof action.factors.partnerScore === "number" ? action.factors.partnerScore : 0;
+    // The in-memory fixture omits the interaction outcome for S2 opportunities
+    // so the BR-003 readiness check reports the missing field.
+    const interactionOutcome = action.stageCode === "S2" ? "" : "Следующий шаг согласован";
 
     await prisma.$transaction(async (transaction) => {
       await transaction.organization.upsert({
         where: { id: organizationId },
         update: {
-          groupId: index === 0 || index === 2 ? MEDIA_GROUP_ID : null,
+          groupId: inMediaGroup ? MEDIA_GROUP_ID : null,
           name: action.organization,
-          legalName:
-            index === 0 ? "ООО «Медиа Новости»" : index === 2 ? "АО «Городской портал»" : null,
+          legalName,
           ownerId: BOOTSTRAP_USER_ID,
           segment: "Медиа и контент",
         },
         create: {
           id: organizationId,
-          groupId: index === 0 || index === 2 ? MEDIA_GROUP_ID : null,
+          groupId: inMediaGroup ? MEDIA_GROUP_ID : null,
           name: action.organization,
-          legalName:
-            index === 0 ? "ООО «Медиа Новости»" : index === 2 ? "АО «Городской портал»" : null,
+          legalName,
           ownerId: BOOTSTRAP_USER_ID,
           segment: "Медиа и контент",
         },
@@ -330,29 +614,32 @@ async function main() {
           hostNormalized: action.domain,
           isPrimary: true,
           source: "seed",
-          verifiedAt: new Date("2026-08-17T09:00:00+03:00"),
+          verifiedAt: new Date("2026-08-15T11:32:00+03:00"),
         },
       });
       await transaction.contact.upsert({
         where: { id: contactId },
         update: {
-          fullName: index < 2 ? "Иван Петров" : `Контакт ${action.organization}`,
-          verifiedAt: new Date("2026-08-17T09:00:00+03:00"),
+          fullName: contactName,
+          verifiedAt: new Date("2026-08-15T11:32:00+03:00"),
         },
         create: {
           id: contactId,
-          fullName: index < 2 ? "Иван Петров" : `Контакт ${action.organization}`,
-          email: index < 2 ? "ivan.petrov@partners.example.invalid" : null,
-          messenger: index < 2 ? "@ivan_petrov" : null,
+          fullName: contactName,
+          email: isSharedContact
+            ? "ivan.petrov@partners.example.invalid"
+            : `ivan.petrov@${action.domain}`,
+          messenger: isSharedContact ? "@ivan_petrov" : `@ivan_${action.taskNumber}`,
           source: "seed",
-          verifiedAt: new Date("2026-08-17T09:00:00+03:00"),
+          verifiedAt: new Date("2026-08-15T11:32:00+03:00"),
           restrictions: {},
         },
       });
       await transaction.contactOrganization.upsert({
         where: { id: contactLinkId },
         update: {
-          role: index === 0 ? "Технический директор" : "Контакт по интеграции",
+          role: contactRole,
+          department: contactDepartment,
           isPrimary: true,
           validTo: null,
         },
@@ -360,8 +647,8 @@ async function main() {
           id: contactLinkId,
           contactId,
           organizationId,
-          role: index === 0 ? "Технический директор" : "Контакт по интеграции",
-          department: index === 0 ? "ИТ" : "Развитие бизнеса",
+          role: contactRole,
+          department: contactDepartment,
           isPrimary: true,
         },
       });
@@ -371,8 +658,10 @@ async function main() {
           ownerId: BOOTSTRAP_USER_ID,
           stageCode: action.stageCode,
           stageLabel: action.stageLabel,
-          score: action.score,
+          status: opportunityStatus,
+          score: partnerScore,
           stageData: opportunityStageData(action.domain),
+          ...waitingFields,
         },
         create: {
           id: opportunityId,
@@ -382,17 +671,19 @@ async function main() {
           type: "initial-embed",
           stageCode: action.stageCode,
           stageLabel: action.stageLabel,
-          score: action.score,
+          status: opportunityStatus,
+          score: partnerScore,
           stageData: opportunityStageData(action.domain),
+          ...waitingFields,
         },
       });
       await transaction.task.upsert({
         where: { id: taskId },
         update: {
           title: action.title,
-          dueAt: new Date(action.dueAt),
-          priorityScore: action.priorityScore,
-          priorityReasons: action.priorityReasons,
+          dueAt,
+          priorityScore: priority.score,
+          priorityReasons: priority.reasons,
         },
         create: {
           id: taskId,
@@ -400,9 +691,9 @@ async function main() {
           ownerId: BOOTSTRAP_USER_ID,
           type: "follow-up",
           title: action.title,
-          dueAt: new Date(action.dueAt),
-          priorityScore: action.priorityScore,
-          priorityReasons: action.priorityReasons,
+          dueAt,
+          priorityScore: priority.score,
+          priorityReasons: priority.reasons,
           status: TaskStatus.OPEN,
           source: "seed",
         },
@@ -411,6 +702,53 @@ async function main() {
         where: { id: opportunityId },
         data: { nextTaskId: taskId },
       });
+      // Interactions are append-only (immutability trigger), so only insert.
+      await transaction.interaction.createMany({
+        data: [
+          {
+            id: interactionId,
+            opportunityId,
+            taskId,
+            // Deliberately unattributed: the in-memory fixture models the
+            // last interaction without a contact link, and the merge contract
+            // pins movedInteractions=0 for seeded contacts.
+            contactId: null,
+            authorId: BOOTSTRAP_USER_ID,
+            type: action.interactionType,
+            occurredAt: new Date("2026-08-15T14:32:00+03:00"),
+            summary: action.interactionSummary,
+            outcome: interactionOutcome,
+            source: "seed",
+          },
+        ],
+        skipDuplicates: true,
+      });
+    });
+  }
+
+  // Six follow-ups closed earlier "today", mirroring the in-memory fixture's
+  // completed counter. Attached to the later/waiting opportunities that no
+  // partner-card contract assertion inspects.
+  for (let index = 0; index < COMPLETED_TODAY; index += 1) {
+    const opportunityId = uuid(3_000 + 10 + index);
+    const completedTaskId = uuid(7_001 + index);
+    await prisma.task.upsert({
+      where: { id: completedTaskId },
+      update: { completedAt: now },
+      create: {
+        id: completedTaskId,
+        opportunityId,
+        ownerId: BOOTSTRAP_USER_ID,
+        type: "follow-up",
+        title: `Утренний созвон с партнёром №${index + 1}`,
+        dueAt: now,
+        priorityScore: 10,
+        priorityReasons: [],
+        status: TaskStatus.COMPLETED,
+        outcome: "Выполнено",
+        completedAt: now,
+        source: "seed",
+      },
     });
   }
 
@@ -421,12 +759,32 @@ function uuid(value: number) {
   return `00000000-0000-4000-8000-${String(value).padStart(12, "0")}`;
 }
 
+function startOfMoscowDay(now: Date): Date {
+  const moscow = new Date(now.getTime() + MOSCOW_UTC_OFFSET_MS);
+  const startLocalAsUtc = Date.UTC(
+    moscow.getUTCFullYear(),
+    moscow.getUTCMonth(),
+    moscow.getUTCDate(),
+  );
+  return new Date(startLocalAsUtc - MOSCOW_UTC_OFFSET_MS);
+}
+
+/**
+ * Fixture dates are authored relative to SEED_ANCHOR_DATE and shifted to the
+ * current Moscow day at seed time, so the today/later grouping stays stable
+ * regardless of when the seed runs — the same rule the in-memory fixture uses.
+ */
+function seedDayShiftMs(now: Date): number {
+  const anchorStart = new Date(`${SEED_ANCHOR_DATE}T00:00:00+03:00`).getTime();
+  return startOfMoscowDay(now).getTime() - anchorStart;
+}
+
 function opportunityStageData(domain: string) {
   return {
     geography: "Россия",
     videoPlayerType: "iframe",
-    dataSource: "seed",
-    researchCheckedAt: "2026-08-17T06:00:00.000Z",
+    dataSource: "Ручное исследование",
+    researchCheckedAt: "2026-08-15T11:32:00.000Z",
     priorityReason: "Подтверждён потенциал видеосценария",
     rutubeUseCase: "Встраивание редакционного видео",
     need: "Стабильный видеоплеер для редакционных материалов",

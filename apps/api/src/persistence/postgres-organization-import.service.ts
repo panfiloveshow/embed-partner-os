@@ -137,7 +137,7 @@ export class PostgresOrganizationImportService implements OrganizationImportPort
           now,
         });
         if (replay !== null) return parseJobReplay(replay, idempotencyKey);
-        await transaction.$queryRaw(Prisma.sql`
+        await transaction.$executeRaw(Prisma.sql`
         SELECT pg_advisory_xact_lock(hashtextextended(${`organization-import:${jobId}`}, 0))
       `);
         const current = await transaction.importJob.findFirst({
@@ -408,7 +408,7 @@ export class PostgresOrganizationImportService implements OrganizationImportPort
           now,
         });
         if (replay !== null) return parseJobReplay(replay, idempotencyKey);
-        await transaction.$queryRaw(Prisma.sql`
+        await transaction.$executeRaw(Prisma.sql`
         SELECT pg_advisory_xact_lock(hashtextextended(${`organization-import:${jobId}`}, 0))
       `);
         const current = await transaction.importJob.findFirst({

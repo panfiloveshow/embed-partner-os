@@ -117,7 +117,7 @@ export class PostgresOpportunityService implements OpportunityPort {
       generatedAt: now.toISOString(),
       teamName:
         actor.scopeMode === "all"
-          ? "Все команды"
+          ? (actor.teamName ?? "Все команды")
           : actor.scopeMode === "team"
             ? (actor.teamName ?? "Моя команда")
             : actor.displayName,
@@ -158,7 +158,7 @@ export class PostgresOpportunityService implements OpportunityPort {
           now,
         });
         if (replay !== null) return parseTransitionReplay(replay, idempotencyKey);
-        await transaction.$queryRaw(Prisma.sql`
+        await transaction.$executeRaw(Prisma.sql`
         SELECT pg_advisory_xact_lock(hashtextextended(${`opportunity:${opportunityId}`}, 0))
       `);
         const current = await transaction.opportunity.findFirst({

@@ -153,7 +153,7 @@ export class PostgresTodayService implements TodayPort {
       generatedAt: now.toISOString(),
       teamName:
         actor.scopeMode === "all"
-          ? "Все команды"
+          ? (actor.teamName ?? "Все команды")
           : actor.scopeMode === "team"
             ? (actor.teamName ?? "Без команды")
             : actor.displayName,
@@ -181,13 +181,45 @@ export class PostgresTodayService implements TodayPort {
     idempotencyKey: string,
   ): Promise<TodayPayload> {
     const actor = await this.actors.current();
+    // Scope visibility only: a completed task must stay resolvable here so an
+    // idempotent replay can return the stored response instead of a 404.
     const visible = await this.prisma.task.findFirst({
-      where: { id: taskId, status: TaskStatus.OPEN, ...taskScope(actor) },
+      where: { id: taskId, ...taskScope(actor) },
       select: { id: true },
     });
     if (!visible) throw new TaskNotFoundError(taskId);
     await this.completionService.complete(taskId, actor.id, input, idempotencyKey);
-    return this.getToday();
+    // The HTTP contract promises byte-identical responses on idempotent
+    // replays, so the first execution stores the rendered payload alongside
+    // the completion result and replays return it verbatim.
+    const record = await this.prisma.idempotencyRecord.findUnique({
+      where: {
+        actorId_operation_requestKey: {
+          actorId: actor.id,
+          operation: `task.complete:${taskId}`,
+          requestKey: parseIdempotencyKey(idempotencyKey),
+        },
+      },
+      select: { id: true, responseJson: true },
+    });
+    const stored =
+      record?.responseJson && typeof record.responseJson === "object"
+        ? (record.responseJson as { todayPayload?: TodayPayload })
+        : null;
+    if (stored?.todayPayload) return stored.todayPayload;
+    const payload = await this.getToday();
+    if (record && stored) {
+      await this.prisma.idempotencyRecord.update({
+        where: { id: record.id },
+        data: {
+          responseJson: {
+            ...(stored as Prisma.JsonObject),
+            todayPayload: payload as unknown as Prisma.InputJsonValue,
+          },
+        },
+      });
+    }
+    return payload;
   }
 
   async rescheduleTask(

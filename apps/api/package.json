@@ -24,6 +24,7 @@
     "start:sla-notification-worker": "node dist/workers/sla-notification-worker.js",
     "start:radar-recheck-worker": "node dist/workers/radar-recheck-worker.js",
     "test": "vitest run",
+    "test:pg": "tsx scripts/run-postgres-integration-tests.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

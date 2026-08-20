@@ -24,8 +24,53 @@ function moscowDateInDays(days: number, hour: number): { command: string; utc: s
   return { command: `${local.toISOString().slice(0, 19)}+03:00`, utc: instant.toISOString() };
 }
 
+interface SeededContactRef {
+  id: string;
+  fullName: string;
+  role: string;
+  department: string | null;
+}
+
+interface SeededActionRef {
+  taskId: string;
+  organizationId: string;
+  opportunityId: string;
+  contacts: SeededContactRef[];
+}
+
 describe("Today HTTP contract", () => {
   let app: INestApplication;
+  /** Seeded fixture rows keyed by organization name — ids differ per persistence mode. */
+  const seeded = new Map<string, SeededActionRef>();
+  let currentUserId: string;
+  let sharedContactId: string;
+
+  function seededAction(organizationName: string): SeededActionRef {
+    const action = seeded.get(organizationName);
+    if (!action) throw new Error(`Seeded action for «${organizationName}» not found`);
+    return action;
+  }
+
+  async function refreshSeededActions() {
+    const today = await request(app.getHttpServer()).get("/api/v1/today").expect(200);
+    currentUserId = today.body.currentUser.id;
+    for (const action of today.body.actions as Array<
+      SeededContactRef & {
+        id: string;
+        organizationId: string;
+        organizationName: string;
+        opportunityId: string;
+        contacts: SeededContactRef[];
+      }
+    >) {
+      seeded.set(action.organizationName, {
+        taskId: action.id,
+        organizationId: action.organizationId,
+        opportunityId: action.opportunityId,
+        contacts: action.contacts,
+      });
+    }
+  }
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
@@ -105,6 +150,10 @@ describe("Today HTTP contract", () => {
     app.setGlobalPrefix("api/v1");
     app.useGlobalFilters(new ProblemDetailsFilter());
     await app.listen(0, "127.0.0.1");
+    await refreshSeededActions();
+    const shared = seededAction("Медиа Новости").contacts[0];
+    if (!shared) throw new Error("Seeded shared contact not found");
+    sharedContactId = shared.id;
   });
 
   afterAll(async () => {
@@ -120,13 +169,15 @@ describe("Today HTTP contract", () => {
       priorityScore: 92,
       contacts: [
         expect.objectContaining({
-          id: "contact-shared-ivan",
+          id: sharedContactId,
           fullName: "Иван Петров",
         }),
       ],
     });
     const sharedContactLinks = response.body.actions
-      .filter((action: { id: string }) => ["task-1", "task-2"].includes(action.id))
+      .filter((action: { organizationName: string }) =>
+        ["Медиа Новости", "Спорт Онлайн"].includes(action.organizationName),
+      )
       .map(
         (action: { organizationName: string; contacts: Array<{ id: string; role: string }> }) => ({
           organizationName: action.organizationName,
@@ -136,12 +187,12 @@ describe("Today HTTP contract", () => {
     expect(sharedContactLinks).toEqual([
       expect.objectContaining({
         organizationName: "Медиа Новости",
-        id: "contact-shared-ivan",
+        id: sharedContactId,
         role: "Технический директор",
       }),
       expect.objectContaining({
         organizationName: "Спорт Онлайн",
-        id: "contact-shared-ivan",
+        id: sharedContactId,
         role: "Консультант по интеграции",
       }),
     ]);
@@ -163,7 +214,7 @@ describe("Today HTTP contract", () => {
       .expect(200);
 
     const denied = await request(app.getHttpServer())
-      .post("/api/v1/tasks/task-11/reschedule")
+      .post(`/api/v1/tasks/${seededAction("Travel Guide").taskId}/reschedule`)
       .set("X-Embed-Actor", "bootstrap:observer")
       .set("Idempotency-Key", "observer-mutation-must-be-denied")
       .send({
@@ -347,9 +398,10 @@ describe("Today HTTP contract", () => {
   });
 
   it("reschedules a task idempotently and requires an explicit reason", async () => {
+    const taskId = seededAction("Travel Guide").taskId;
     const rescheduleTo = moscowDateInDays(8, 12);
     await request(app.getHttpServer())
-      .post("/api/v1/tasks/task-11/reschedule")
+      .post(`/api/v1/tasks/${taskId}/reschedule`)
       .set("Idempotency-Key", "test-key-http-reschedule-invalid-0001")
       .send({ dueAt: rescheduleTo.command })
       .expect(422);
@@ -359,27 +411,27 @@ describe("Today HTTP contract", () => {
       reason: "Партнёр перенёс встречу",
     };
     const first = await request(app.getHttpServer())
-      .post("/api/v1/tasks/task-11/reschedule")
+      .post(`/api/v1/tasks/${taskId}/reschedule`)
       .set("Idempotency-Key", "test-key-http-reschedule-0001")
       .send(command)
       .expect(200);
     expect(first.body.actions).toContainEqual(
       expect.objectContaining({
-        id: "task-11",
+        id: taskId,
         dueAt: rescheduleTo.utc,
         group: "later",
       }),
     );
 
     const replay = await request(app.getHttpServer())
-      .post("/api/v1/tasks/task-11/reschedule")
+      .post(`/api/v1/tasks/${taskId}/reschedule`)
       .set("Idempotency-Key", "test-key-http-reschedule-0001")
       .send(command)
       .expect(200);
     expect(replay.body.summary.rescheduled).toBe(first.body.summary.rescheduled);
 
     await request(app.getHttpServer())
-      .post("/api/v1/tasks/task-11/reschedule")
+      .post(`/api/v1/tasks/${taskId}/reschedule`)
       .set("Idempotency-Key", "test-key-http-reschedule-0001")
       .send({ ...command, dueAt: moscowDateInDays(9, 12).command })
       .expect(409);
@@ -388,11 +440,13 @@ describe("Today HTTP contract", () => {
   it("returns the funnel dataset used by kanban and table views", async () => {
     const response = await request(app.getHttpServer()).get("/api/v1/opportunities").expect(200);
 
+    // The SLA settings test above published ProcessDefinition v2, which
+    // migrates every open opportunity onto the new version (baseline rule).
     expect(response.body).toMatchObject({
       teamName: "Команда внедрения",
       total: 16,
       truncated: false,
-      processVersions: [1],
+      processVersions: [2],
     });
     expect(
       response.body.stageCounts.reduce(
@@ -402,10 +456,10 @@ describe("Today HTTP contract", () => {
     ).toBe(16);
     expect(response.body.opportunities).toContainEqual(
       expect.objectContaining({
-        id: "opp-task-1",
+        id: seededAction("Медиа Новости").opportunityId,
         organizationName: "Медиа Новости",
         stageCode: "S7",
-        owner: { id: "user-anna", name: "Анна Соколова" },
+        owner: { id: currentUserId, name: "Анна Соколова" },
       }),
     );
   });
@@ -420,28 +474,35 @@ describe("Today HTTP contract", () => {
       total: 3,
       truncated: false,
     });
+    const media = seededAction("Медиа Новости");
     expect(registry.body.partners).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: "org-task-1",
+          id: media.organizationId,
           name: "Медиа Новости",
           primaryDomain: "medianovosti.ru",
           partnerScore: 85,
           currentStage: { code: "S7", label: "Интеграция" },
         }),
-        expect.objectContaining({ id: "org-task-2", name: "Спорт Онлайн", partnerScore: 90 }),
+        expect.objectContaining({
+          id: seededAction("Спорт Онлайн").organizationId,
+          name: "Спорт Онлайн",
+          partnerScore: 90,
+        }),
       ]),
     );
 
-    const card = await request(app.getHttpServer()).get("/api/v1/partners/org-task-1").expect(200);
+    const card = await request(app.getHttpServer())
+      .get(`/api/v1/partners/${media.organizationId}`)
+      .expect(200);
     expect(card.body).toMatchObject({
       organization: expect.objectContaining({
-        id: "org-task-1",
+        id: media.organizationId,
         name: "Медиа Новости",
       }),
       contacts: [expect.objectContaining({ fullName: "Иван Петров" })],
-      opportunities: [expect.objectContaining({ id: "opp-task-1", stageCode: "S7" })],
-      tasks: [expect.objectContaining({ id: "task-1", status: "OPEN" })],
+      opportunities: [expect.objectContaining({ id: media.opportunityId, stageCode: "S7" })],
+      tasks: [expect.objectContaining({ id: media.taskId, status: "OPEN" })],
       documents: [],
     });
     expect(card.body.metrics).toEqual(
@@ -450,39 +511,43 @@ describe("Today HTTP contract", () => {
   });
 
   it("groups brands, legal entities and domains in one organization group", async () => {
+    const media = seededAction("Медиа Новости");
+    const city = seededAction("Городской портал");
+    const card = await request(app.getHttpServer())
+      .get(`/api/v1/partners/${media.organizationId}`)
+      .expect(200);
+    expect(card.body.organizationGroup).toMatchObject({
+      name: "Медиа Альянс",
+      members: expect.arrayContaining([
+        expect.objectContaining({ id: media.organizationId, name: "Медиа Новости" }),
+        expect.objectContaining({ id: city.organizationId, name: "Городской портал" }),
+      ]),
+    });
+    expect(card.body.organizationGroup.members[0]).toHaveProperty("domains");
+    const groupId: string = card.body.organizationGroup.id;
+
     const registry = await request(app.getHttpServer())
-      .get("/api/v1/partners?groupId=group-media")
+      .get(`/api/v1/partners?groupId=${groupId}`)
       .expect(200);
 
     expect(registry.body).toMatchObject({
       total: 2,
       filters: {
-        groups: [expect.objectContaining({ id: "group-media", name: "Медиа Альянс" })],
+        groups: [expect.objectContaining({ id: groupId, name: "Медиа Альянс" })],
       },
     });
     expect(registry.body.partners).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: "org-task-1",
-          organizationGroup: { id: "group-media", name: "Медиа Альянс" },
+          id: media.organizationId,
+          organizationGroup: { id: groupId, name: "Медиа Альянс" },
         }),
         expect.objectContaining({
-          id: "org-task-3",
-          organizationGroup: { id: "group-media", name: "Медиа Альянс" },
+          id: city.organizationId,
+          organizationGroup: { id: groupId, name: "Медиа Альянс" },
         }),
       ]),
     );
-
-    const card = await request(app.getHttpServer()).get("/api/v1/partners/org-task-1").expect(200);
-    expect(card.body.organizationGroup).toMatchObject({
-      id: "group-media",
-      name: "Медиа Альянс",
-      members: expect.arrayContaining([
-        expect.objectContaining({ id: "org-task-1", name: "Медиа Новости" }),
-        expect.objectContaining({ id: "org-task-3", name: "Городской портал" }),
-      ]),
-    });
-    expect(card.body.organizationGroup.members[0]).toHaveProperty("domains");
   });
 
   it("exports partners only with a separate permission and records immutable audit", async () => {
@@ -553,9 +618,10 @@ describe("Today HTTP contract", () => {
   });
 
   it("registers and lists a placement idempotently", async () => {
+    const media = seededAction("Медиа Новости");
     const command = {
-      organizationId: "org-task-1",
-      opportunityId: "opp-task-1",
+      organizationId: media.organizationId,
+      opportunityId: media.opportunityId,
       pageUrl: "https://medianovosti.ru/articles/rutube-player",
       embedType: "video",
       environment: "production",
@@ -584,12 +650,13 @@ describe("Today HTTP contract", () => {
   });
 
   it("updates and archives a placement with version conflict protection", async () => {
+    const media = seededAction("Медиа Новости");
     const created = await request(app.getHttpServer())
       .post("/api/v1/placements")
       .set("Idempotency-Key", "test-key-placement-lifecycle-register-0001")
       .send({
-        organizationId: "org-task-1",
-        opportunityId: "opp-task-1",
+        organizationId: media.organizationId,
+        opportunityId: media.opportunityId,
         pageUrl: "https://medianovosti.ru/articles/lifecycle",
         embedType: "video",
         environment: "production",
@@ -631,12 +698,13 @@ describe("Today HTTP contract", () => {
   });
 
   it("classifies a loopback L0 target as blocked without requesting it", async () => {
+    const sport = seededAction("Спорт Онлайн");
     const placement = await request(app.getHttpServer())
       .post("/api/v1/placements")
       .set("Idempotency-Key", "test-key-placement-private-0001")
       .send({
-        organizationId: "org-task-2",
-        opportunityId: "opp-task-2",
+        organizationId: sport.organizationId,
+        opportunityId: sport.opportunityId,
         pageUrl: "http://127.0.0.1/internal-player",
         embedType: "video",
         environment: "test",
@@ -663,14 +731,15 @@ describe("Today HTTP contract", () => {
   });
 
   it("transitions an opportunity idempotently and enforces BR-007", async () => {
+    const opportunityId = seededAction("Кинообзор").opportunityId;
     const command = { version: 1, toStageCode: "S8", reason: "Пилот согласован" };
     const first = await request(app.getHttpServer())
-      .post("/api/v1/opportunities/opp-task-4/stage-transitions")
+      .post(`/api/v1/opportunities/${opportunityId}/stage-transitions`)
       .set("Idempotency-Key", "test-key-stage-transition-0001")
       .send(command)
       .expect(200);
     const replay = await request(app.getHttpServer())
-      .post("/api/v1/opportunities/opp-task-4/stage-transitions")
+      .post(`/api/v1/opportunities/${opportunityId}/stage-transitions`)
       .set("Idempotency-Key", "test-key-stage-transition-0001")
       .send(command)
       .expect(200);
@@ -678,7 +747,7 @@ describe("Today HTTP contract", () => {
     expect(first.body).toMatchObject({ fromStageCode: "S7", toStageCode: "S8", version: 2 });
 
     const conflict = await request(app.getHttpServer())
-      .post("/api/v1/opportunities/opp-task-4/stage-transitions")
+      .post(`/api/v1/opportunities/${opportunityId}/stage-transitions`)
       .set("Idempotency-Key", "test-key-stage-transition-stale-0001")
       .send({ version: 1, toStageCode: "S9", reason: "Устаревшая форма" })
       .expect(409);
@@ -688,7 +757,7 @@ describe("Today HTTP contract", () => {
     });
 
     const blocked = await request(app.getHttpServer())
-      .post("/api/v1/opportunities/opp-task-4/stage-transitions")
+      .post(`/api/v1/opportunities/${opportunityId}/stage-transitions`)
       .set("Idempotency-Key", "test-key-stage-transition-0002")
       .send({ version: 2, toStageCode: "S9", reason: "Запуск без проверки" })
       .expect(422);
@@ -705,7 +774,7 @@ describe("Today HTTP contract", () => {
 
   it("lists the exact BR-003 field missing from a stage transition", async () => {
     const response = await request(app.getHttpServer())
-      .post("/api/v1/opportunities/opp-task-9/stage-transitions")
+      .post(`/api/v1/opportunities/${seededAction("EduVideo").opportunityId}/stage-transitions`)
       .set("Idempotency-Key", "test-key-stage-required-0001")
       .send({ version: 1, toStageCode: "S3", reason: "Первичное письмо отправлено" })
       .expect(422);
@@ -720,7 +789,7 @@ describe("Today HTTP contract", () => {
 
   it("returns problem+json when BR-002 is violated", async () => {
     const response = await request(app.getHttpServer())
-      .post("/api/v1/tasks/task-1/complete")
+      .post(`/api/v1/tasks/${seededAction("Медиа Новости").taskId}/complete`)
       .set("Idempotency-Key", "test-key-br002-0001")
       .send({ outcome: "Готово" })
       .expect(422);
@@ -731,9 +800,9 @@ describe("Today HTTP contract", () => {
 
   it("requires Idempotency-Key for mutations", async () => {
     const response = await request(app.getHttpServer())
-      .post("/api/v1/tasks/task-1/complete")
+      .post(`/api/v1/tasks/${seededAction("Медиа Новости").taskId}/complete`)
       .send({
-        contactId: "contact-shared-ivan",
+        contactId: sharedContactId,
         interactionType: "call",
         outcome: "Получен ответ",
         summary: "Партнёр прислал спецификацию",
@@ -753,10 +822,10 @@ describe("Today HTTP contract", () => {
 
   it("rejects a system interaction type from the manual contact command", async () => {
     const response = await request(app.getHttpServer())
-      .post("/api/v1/tasks/task-2/complete")
+      .post(`/api/v1/tasks/${seededAction("Спорт Онлайн").taskId}/complete`)
       .set("Idempotency-Key", "test-key-invalid-interaction-0001")
       .send({
-        contactId: "contact-shared-ivan",
+        contactId: sharedContactId,
         interactionType: "system-event",
         outcome: "Получен ответ",
         summary: "Партнёр прислал спецификацию",
@@ -773,7 +842,7 @@ describe("Today HTTP contract", () => {
 
   it("requires a contact for a manual interaction", async () => {
     const response = await request(app.getHttpServer())
-      .post("/api/v1/tasks/task-4/complete")
+      .post(`/api/v1/tasks/${seededAction("Кинообзор").taskId}/complete`)
       .set("Idempotency-Key", "test-key-contact-required-0001")
       .send({
         interactionType: "email",
@@ -796,10 +865,10 @@ describe("Today HTTP contract", () => {
 
   it("rejects a contact linked to another organization", async () => {
     const response = await request(app.getHttpServer())
-      .post("/api/v1/tasks/task-3/complete")
+      .post(`/api/v1/tasks/${seededAction("Городской портал").taskId}/complete`)
       .set("Idempotency-Key", "test-key-contact-scope-0001")
       .send({
-        contactId: "contact-shared-ivan",
+        contactId: sharedContactId,
         interactionType: "call",
         outcome: "Получен ответ",
         summary: "Попытка сохранить чужой контакт",
@@ -819,6 +888,7 @@ describe("Today HTTP contract", () => {
   });
 
   it("creates a normalized contact idempotently and blocks an exact duplicate", async () => {
+    const techBlog = seededAction("TechBlog");
     const command = {
       fullName: "  Мария Орлова  ",
       role: " Редактор ",
@@ -829,12 +899,12 @@ describe("Today HTTP contract", () => {
       restrictions: " Только рабочее время ",
     };
     const first = await request(app.getHttpServer())
-      .post("/api/v1/organizations/org-task-5/contacts")
+      .post(`/api/v1/organizations/${techBlog.organizationId}/contacts`)
       .set("Idempotency-Key", "test-key-create-contact-0001")
       .send(command)
       .expect(201);
     const replay = await request(app.getHttpServer())
-      .post("/api/v1/organizations/org-task-5/contacts")
+      .post(`/api/v1/organizations/${techBlog.organizationId}/contacts`)
       .set("Idempotency-Key", "test-key-create-contact-0001")
       .send(command)
       .expect(201);
@@ -852,11 +922,11 @@ describe("Today HTTP contract", () => {
 
     const today = await request(app.getHttpServer()).get("/api/v1/today").expect(200);
     expect(
-      today.body.actions.find((action: { id: string }) => action.id === "task-5").contacts,
+      today.body.actions.find((action: { id: string }) => action.id === techBlog.taskId).contacts,
     ).toContainEqual(first.body);
 
     const duplicate = await request(app.getHttpServer())
-      .post("/api/v1/organizations/org-task-5/contacts")
+      .post(`/api/v1/organizations/${techBlog.organizationId}/contacts`)
       .set("Idempotency-Key", "test-key-create-contact-0002")
       .send({
         fullName: "Другая Мария",
@@ -874,8 +944,9 @@ describe("Today HTTP contract", () => {
   });
 
   it("lists, updates, archives and restores a contact with optimistic locking", async () => {
+    const lifestyle = seededAction("LifeStyle Media");
     const created = await request(app.getHttpServer())
-      .post("/api/v1/organizations/org-task-6/contacts")
+      .post(`/api/v1/organizations/${lifestyle.organizationId}/contacts`)
       .set("Idempotency-Key", "test-key-contact-registry-create-0001")
       .send({
         fullName: "Елена Соколова",
@@ -901,7 +972,7 @@ describe("Today HTTP contract", () => {
       status: "active",
       organizationLinks: [
         expect.objectContaining({
-          organizationId: "org-task-6",
+          organizationId: lifestyle.organizationId,
           role: "Коммерческий директор",
         }),
       ],
@@ -958,7 +1029,8 @@ describe("Today HTTP contract", () => {
       .get("/api/v1/today")
       .expect(200);
     expect(
-      todayWithoutArchived.body.actions.find(({ id }: { id: string }) => id === "task-6").contacts,
+      todayWithoutArchived.body.actions.find(({ id }: { id: string }) => id === lifestyle.taskId)
+        .contacts,
     ).not.toContainEqual(expect.objectContaining({ id: created.body.id }));
 
     const restored = await request(app.getHttpServer())
@@ -970,8 +1042,10 @@ describe("Today HTTP contract", () => {
   });
 
   it("links an existing contact to another organization with a contextual role", async () => {
+    const autoPortal = seededAction("АвтоПортал");
+    const regions = seededAction("Новости Регионов");
     const created = await request(app.getHttpServer())
-      .post("/api/v1/organizations/org-task-7/contacts")
+      .post(`/api/v1/organizations/${autoPortal.organizationId}/contacts`)
       .set("Idempotency-Key", "test-key-link-source-0001")
       .send({
         fullName: "Алексей Воронцов",
@@ -982,12 +1056,12 @@ describe("Today HTTP contract", () => {
     const command = { role: " Технический эксперт ", department: " ИТ " };
 
     const first = await request(app.getHttpServer())
-      .post(`/api/v1/organizations/org-task-8/contacts/${created.body.id}/link`)
+      .post(`/api/v1/organizations/${regions.organizationId}/contacts/${created.body.id}/link`)
       .set("Idempotency-Key", "test-key-link-contact-0001")
       .send(command)
       .expect(201);
     const replay = await request(app.getHttpServer())
-      .post(`/api/v1/organizations/org-task-8/contacts/${created.body.id}/link`)
+      .post(`/api/v1/organizations/${regions.organizationId}/contacts/${created.body.id}/link`)
       .set("Idempotency-Key", "test-key-link-contact-0001")
       .send(command)
       .expect(201);
@@ -1004,11 +1078,11 @@ describe("Today HTTP contract", () => {
 
     const today = await request(app.getHttpServer()).get("/api/v1/today").expect(200);
     expect(
-      today.body.actions.find((action: { id: string }) => action.id === "task-8").contacts,
+      today.body.actions.find((action: { id: string }) => action.id === regions.taskId).contacts,
     ).toContainEqual(first.body);
 
     const alreadyLinked = await request(app.getHttpServer())
-      .post(`/api/v1/organizations/org-task-8/contacts/${created.body.id}/link`)
+      .post(`/api/v1/organizations/${regions.organizationId}/contacts/${created.body.id}/link`)
       .set("Idempotency-Key", "test-key-link-contact-0002")
       .send(command)
       .expect(409);
@@ -1018,7 +1092,9 @@ describe("Today HTTP contract", () => {
     });
 
     const missing = await request(app.getHttpServer())
-      .post("/api/v1/organizations/org-task-8/contacts/contact-missing/link")
+      .post(
+        `/api/v1/organizations/${regions.organizationId}/contacts/00000000-0000-4000-8000-999999999999/link`,
+      )
       .set("Idempotency-Key", "test-key-link-contact-missing-0001")
       .send(command)
       .expect(404);
@@ -1026,24 +1102,27 @@ describe("Today HTTP contract", () => {
   });
 
   it("merges a duplicate contact idempotently and preserves its organization context", async () => {
+    const kino = seededAction("Кинообзор");
+    const sourceContactId = kino.contacts[0]?.id;
+    if (!sourceContactId) throw new Error("Seeded contact for «Кинообзор» not found");
     const command = {
-      targetContactId: " contact-shared-ivan ",
+      targetContactId: ` ${sharedContactId} `,
       reason: " Совпадает подтверждённый рабочий контакт ",
     };
     const first = await request(app.getHttpServer())
-      .post("/api/v1/contacts/contact-task-4/merge")
+      .post(`/api/v1/contacts/${sourceContactId}/merge`)
       .set("Idempotency-Key", "test-key-merge-contact-0001")
       .send(command)
       .expect(200);
     const replay = await request(app.getHttpServer())
-      .post("/api/v1/contacts/contact-task-4/merge")
+      .post(`/api/v1/contacts/${sourceContactId}/merge`)
       .set("Idempotency-Key", "test-key-merge-contact-0001")
       .send(command)
       .expect(200);
 
     expect(first.body).toMatchObject({
-      sourceContactId: "contact-task-4",
-      targetContactId: "contact-shared-ivan",
+      sourceContactId,
+      targetContactId: sharedContactId,
       movedOrganizationLinks: 1,
       closedConflictingLinks: 0,
       movedInteractions: 0,
@@ -1053,19 +1132,19 @@ describe("Today HTTP contract", () => {
 
     const today = await request(app.getHttpServer()).get("/api/v1/today").expect(200);
     const contacts = today.body.actions.find(
-      (action: { id: string }) => action.id === "task-4",
+      (action: { id: string }) => action.id === kino.taskId,
     ).contacts;
     expect(contacts).toContainEqual(
       expect.objectContaining({
-        id: "contact-shared-ivan",
+        id: sharedContactId,
         role: "Технический руководитель",
         department: "ИТ",
       }),
     );
-    expect(contacts).not.toContainEqual(expect.objectContaining({ id: "contact-task-4" }));
+    expect(contacts).not.toContainEqual(expect.objectContaining({ id: sourceContactId }));
 
     const alreadyMerged = await request(app.getHttpServer())
-      .post("/api/v1/contacts/contact-task-4/merge")
+      .post(`/api/v1/contacts/${sourceContactId}/merge`)
       .set("Idempotency-Key", "test-key-merge-contact-0002")
       .send(command)
       .expect(409);
@@ -1076,8 +1155,9 @@ describe("Today HTTP contract", () => {
   });
 
   it("closes the duplicate organization link when both contacts are already linked", async () => {
+    const edu = seededAction("EduVideo");
     const source = await request(app.getHttpServer())
-      .post("/api/v1/organizations/org-task-9/contacts")
+      .post(`/api/v1/organizations/${edu.organizationId}/contacts`)
       .set("Idempotency-Key", "test-key-merge-conflict-source-0001")
       .send({
         fullName: "Ольга Сергеева",
@@ -1086,7 +1166,7 @@ describe("Today HTTP contract", () => {
       })
       .expect(201);
     const target = await request(app.getHttpServer())
-      .post("/api/v1/organizations/org-task-9/contacts")
+      .post(`/api/v1/organizations/${edu.organizationId}/contacts`)
       .set("Idempotency-Key", "test-key-merge-conflict-target-0001")
       .send({
         fullName: "Ольга Сергеева",
@@ -1107,17 +1187,19 @@ describe("Today HTTP contract", () => {
     });
     const today = await request(app.getHttpServer()).get("/api/v1/today").expect(200);
     const contacts = today.body.actions.find(
-      (action: { id: string }) => action.id === "task-9",
+      (action: { id: string }) => action.id === edu.taskId,
     ).contacts;
     expect(contacts.filter(({ id }: { id: string }) => id === target.body.id)).toHaveLength(1);
     expect(contacts.some(({ id }: { id: string }) => id === source.body.id)).toBe(false);
   });
 
   it("rejects merging a contact into itself", async () => {
+    const contactId = seededAction("Деловой обзор").contacts[0]?.id;
+    if (!contactId) throw new Error("Seeded contact for «Деловой обзор» not found");
     const response = await request(app.getHttpServer())
-      .post("/api/v1/contacts/contact-task-10/merge")
+      .post(`/api/v1/contacts/${contactId}/merge`)
       .set("Idempotency-Key", "test-key-merge-self-0001")
-      .send({ targetContactId: "contact-task-10", reason: "Ошибка оператора" })
+      .send({ targetContactId: contactId, reason: "Ошибка оператора" })
       .expect(422);
 
     expect(response.body).toMatchObject({
@@ -1127,8 +1209,9 @@ describe("Today HTTP contract", () => {
   });
 
   it("replays the same mutation and rejects a changed payload", async () => {
+    const taskId = seededAction("Медиа Новости").taskId;
     const command = {
-      contactId: "contact-shared-ivan",
+      contactId: sharedContactId,
       interactionType: "email",
       outcome: "Получен ответ",
       summary: "Партнёр прислал спецификацию",
@@ -1139,12 +1222,12 @@ describe("Today HTTP contract", () => {
       },
     };
     const first = await request(app.getHttpServer())
-      .post("/api/v1/tasks/task-1/complete")
+      .post(`/api/v1/tasks/${taskId}/complete`)
       .set("Idempotency-Key", "test-key-http-replay-0001")
       .send(command)
       .expect(200);
     const replay = await request(app.getHttpServer())
-      .post("/api/v1/tasks/task-1/complete")
+      .post(`/api/v1/tasks/${taskId}/complete`)
       .set("Idempotency-Key", "test-key-http-replay-0001")
       .send(command)
       .expect(200);
@@ -1157,7 +1240,7 @@ describe("Today HTTP contract", () => {
     ).toMatchObject({ type: "Письмо", contactName: "Иван Петров" });
 
     const conflict = await request(app.getHttpServer())
-      .post("/api/v1/tasks/task-1/complete")
+      .post(`/api/v1/tasks/${taskId}/complete`)
       .set("Idempotency-Key", "test-key-http-replay-0001")
       .send({ ...command, summary: "Payload изменён" })
       .expect(409);

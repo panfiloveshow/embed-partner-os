@@ -173,11 +173,11 @@ export class PostgresContactService implements ContactPort {
           .filter((value): value is string => value !== null)
           .sort();
         for (const channelLock of channelLocks) {
-          await transaction.$queryRaw(Prisma.sql`
+          await transaction.$executeRaw(Prisma.sql`
             SELECT pg_advisory_xact_lock(hashtextextended(${channelLock}, 0))
           `);
         }
-        await transaction.$queryRaw(Prisma.sql`
+        await transaction.$executeRaw(Prisma.sql`
           SELECT pg_advisory_xact_lock(hashtextextended(${`contact-links:${organizationId}`}, 0))
         `);
 
@@ -340,7 +340,7 @@ export class PostgresContactService implements ContactPort {
           return replay;
         }
 
-        await transaction.$queryRaw(Prisma.sql`
+        await transaction.$executeRaw(Prisma.sql`
           SELECT pg_advisory_xact_lock(hashtextextended(${`contact-merge:${contactId}`}, 0))
         `);
         const [organization, contact] = await Promise.all([
@@ -370,7 +370,7 @@ export class PostgresContactService implements ContactPort {
           throw new ContactStateError("Архивный контакт сначала нужно восстановить.");
         }
 
-        await transaction.$queryRaw(Prisma.sql`
+        await transaction.$executeRaw(Prisma.sql`
           SELECT pg_advisory_xact_lock(hashtextextended(${`contact-links:${organizationId}`}, 0))
         `);
         const existingLink = await transaction.contactOrganization.findFirst({
@@ -502,11 +502,11 @@ export class PostgresContactService implements ContactPort {
         if (sourceContactId === command.targetContactId) {
           throw new ContactMergeSameContactError(sourceContactId);
         }
-        await transaction.$queryRaw(Prisma.sql`
+        await transaction.$executeRaw(Prisma.sql`
           SELECT pg_advisory_xact_lock(hashtextextended('contact-merge-graph', 0))
         `);
         for (const contactId of [sourceContactId, command.targetContactId].sort()) {
-          await transaction.$queryRaw(Prisma.sql`
+          await transaction.$executeRaw(Prisma.sql`
             SELECT pg_advisory_xact_lock(hashtextextended(${`contact-merge:${contactId}`}, 0))
           `);
         }
@@ -540,7 +540,7 @@ export class PostgresContactService implements ContactPort {
         for (const { id } of previouslyMergedContacts.sort((left, right) =>
           left.id.localeCompare(right.id),
         )) {
-          await transaction.$queryRaw(Prisma.sql`
+          await transaction.$executeRaw(Prisma.sql`
             SELECT pg_advisory_xact_lock(hashtextextended(${`contact-merge:${id}`}, 0))
           `);
         }
@@ -553,7 +553,7 @@ export class PostgresContactService implements ContactPort {
           ...new Set(sourceLinks.map(({ organizationId }) => organizationId)),
         ].sort();
         for (const organizationId of organizationIds) {
-          await transaction.$queryRaw(Prisma.sql`
+          await transaction.$executeRaw(Prisma.sql`
             SELECT pg_advisory_xact_lock(hashtextextended(${`contact-links:${organizationId}`}, 0))
           `);
         }
@@ -1090,7 +1090,7 @@ function assertEditableContact(
 }
 
 async function lockContact(transaction: Prisma.TransactionClient, contactId: string) {
-  await transaction.$queryRaw(Prisma.sql`
+  await transaction.$executeRaw(Prisma.sql`
     SELECT pg_advisory_xact_lock(hashtextextended(${`contact-registry:${contactId}`}, 0))
   `);
 }

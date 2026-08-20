@@ -599,7 +599,7 @@ function mapOrganizationGroup(
 }
 
 function scopeName(actor: PersistenceActor) {
-  if (actor.scopeMode === "all") return "Все команды";
+  if (actor.scopeMode === "all") return actor.teamName ?? "Все команды";
   if (actor.scopeMode === "team") return actor.teamName ?? "Моя команда";
   return actor.displayName;
 }

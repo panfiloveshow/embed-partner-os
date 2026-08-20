@@ -383,7 +383,7 @@ export class PostgresPlacementService implements PlacementPort {
 
     const result = this.prisma.$transaction(
       async (transaction) => {
-        await transaction.$queryRaw(Prisma.sql`
+        await transaction.$executeRaw(Prisma.sql`
         SELECT pg_advisory_xact_lock(hashtextextended(${`placement-check:${placementId}`}, 0))
       `);
         const current = await transaction.placement.findFirst({
@@ -730,7 +730,7 @@ function mutablePlacementSnapshot(placement: PlacementView) {
 }
 
 async function lockPlacement(transaction: Prisma.TransactionClient, placementId: string) {
-  await transaction.$queryRaw(Prisma.sql`
+  await transaction.$executeRaw(Prisma.sql`
     SELECT pg_advisory_xact_lock(hashtextextended(${`placement-check:${placementId}`}, 0))
   `);
 }

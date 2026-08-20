@@ -851,13 +851,13 @@ async function recordMutation(
 }
 
 function lockHost(transaction: Prisma.TransactionClient, teamId: string, host: string) {
-  return transaction.$queryRaw(Prisma.sql`
+  return transaction.$executeRaw(Prisma.sql`
     SELECT pg_advisory_xact_lock(hashtextextended(${`radar-host:${teamId}:${host}`}, 0))
   `);
 }
 
 function lockCandidate(transaction: Prisma.TransactionClient, candidateId: string) {
-  return transaction.$queryRaw(Prisma.sql`
+  return transaction.$executeRaw(Prisma.sql`
     SELECT pg_advisory_xact_lock(hashtextextended(${`radar-candidate:${candidateId}`}, 0))
   `);
 }
