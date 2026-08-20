@@ -28,6 +28,7 @@ import { messageFor } from "./lib/problem";
 import { createIdempotencyKey, mutationKey, type MutationKeyState } from "./lib/idempotency";
 import { longDateFormat } from "./lib/format";
 import { applyContactMerge, collectMergeTargets } from "./lib/contact-merge";
+import { pageFromHash } from "./lib/routing";
 import { Sidebar } from "./components/Sidebar";
 import type { AppPage } from "./components/Sidebar";
 import { SummaryStrip } from "./components/SummaryStrip";
@@ -50,21 +51,8 @@ interface AppProps {
   onLogout?: () => Promise<void>;
 }
 
-const routablePages: readonly AppPage[] = [
-  "today",
-  "partners",
-  "funnel",
-  "radar",
-  "placements",
-  "reports",
-  "settings",
-];
-
 function pageFromLocation(): AppPage {
-  const candidate = window.location.hash.replace(/^#\/?/, "");
-  return (routablePages as readonly string[]).includes(candidate)
-    ? (candidate as AppPage)
-    : "today";
+  return pageFromHash(window.location.hash);
 }
 
 export function App({ onLogout }: AppProps) {
