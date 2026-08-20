@@ -16,6 +16,7 @@
     "worker:opportunity-sla": "npm run worker:opportunity-sla -w @embed-os/api",
     "worker:sla-notification": "npm run worker:sla-notification -w @embed-os/api",
     "worker:radar-recheck": "npm run worker:radar-recheck -w @embed-os/api",
+    "worker:radar-sourcing": "npm run worker:radar-sourcing -w @embed-os/api",
     "build": "npm run build:packages && npm run build -w @embed-os/api && npm run build -w @embed-os/web",
     "db:validate": "npm run prisma:validate -w @embed-os/api",
     "db:generate": "npm run prisma:generate -w @embed-os/api",

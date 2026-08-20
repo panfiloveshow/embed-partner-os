@@ -11,6 +11,7 @@
     "worker:opportunity-sla": "tsx src/workers/opportunity-sla-worker.ts",
     "worker:sla-notification": "tsx src/workers/sla-notification-worker.ts",
     "worker:radar-recheck": "tsx src/workers/radar-recheck-worker.ts",
+    "worker:radar-sourcing": "tsx src/workers/radar-sourcing-worker.ts",
     "build": "npm run prisma:generate && tsc -p tsconfig.json",
     "prisma:generate": "DATABASE_URL=${DATABASE_URL:-postgresql://embed_os:embed_os@127.0.0.1:5432/embed_os?schema=public} prisma generate",
     "prisma:validate": "DATABASE_URL=${DATABASE_URL:-postgresql://embed_os:embed_os@127.0.0.1:5432/embed_os?schema=public} prisma validate",
@@ -23,6 +24,7 @@
     "start:opportunity-sla-worker": "node dist/workers/opportunity-sla-worker.js",
     "start:sla-notification-worker": "node dist/workers/sla-notification-worker.js",
     "start:radar-recheck-worker": "node dist/workers/radar-recheck-worker.js",
+    "start:radar-sourcing-worker": "node dist/workers/radar-sourcing-worker.js",
     "test": "vitest run",
     "test:pg": "tsx scripts/run-postgres-integration-tests.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"

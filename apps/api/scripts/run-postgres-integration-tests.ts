@@ -50,3 +50,6 @@ await recreateDatabase();
 run("npx", ["prisma", "migrate", "deploy"]);
 run("npx", ["tsx", "prisma/seed.ts"]);
 run("npx", ["vitest", "run", "src/app.integration.test.ts"]);
+// Sourcing is postgres-only; its cycle contract runs after the HTTP suite so
+// the two files never share the database concurrently.
+run("npx", ["vitest", "run", "src/sourcing/radar-sourcing.pg.test.ts"]);

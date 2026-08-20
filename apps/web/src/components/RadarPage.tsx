@@ -155,7 +155,7 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
       (candidate) =>
         (status === "all" || candidate.status === status) &&
         (!needle ||
-          `${candidate.name} ${candidate.hostNormalized} ${candidate.source}`
+          `${candidate.name} ${candidate.hostNormalized} ${sourceLabel(candidate.source)}`
             .toLocaleLowerCase("ru-RU")
             .includes(needle)),
     );
@@ -423,7 +423,9 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
                       <span className={`radar-score radar-score-${candidate.score.priority}`}>
                         {candidate.score.total}
                       </span>
-                      <span className="radar-candidate-source">{candidate.source}</span>
+                      <span className="radar-candidate-source">
+                        {sourceLabel(candidate.source)}
+                      </span>
                     </button>
                   </li>
                 );
@@ -1530,6 +1532,11 @@ function statusLabel(status: RadarCandidateStatus) {
 
 function priorityLabel(priority: RadarCandidate["score"]["priority"]) {
   return { high: "Высокий", medium: "Средний", low: "Низкий" }[priority];
+}
+
+/** Candidates found by the sourcing worker carry the technical source "auto". */
+function sourceLabel(source: RadarCandidate["source"]) {
+  return source === "auto" ? "Автопоиск" : source;
 }
 
 function frequencyLabel(value: RadarCandidate["features"]["publicationFrequency"]) {
