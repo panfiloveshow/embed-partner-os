@@ -178,13 +178,26 @@ export class RadarPageInspector implements RadarInspector {
         );
         // Видеоподобные URL из карты сайта проверяем первыми — иначе разделы
         // /video/ не попадают в лимит доп. страниц и фактор видео пустует.
+        // Следом — страницы команды/руководства/о компании: там живут
+        // ближайшие руководители с именами и контактами.
+        const teamUrlPattern = /team|komanda|rukovodstvo|staff|management|leadership|about|contacts/i;
         const prioritizedSitemapUrls = [...sitemapUrls].sort((left, right) => {
           const leftVideo = Number(looksLikeVideoUrl(new URL(left, page.url)));
           const rightVideo = Number(looksLikeVideoUrl(new URL(right, page.url)));
-          return rightVideo - leftVideo;
+          if (leftVideo !== rightVideo) return rightVideo - leftVideo;
+          return (
+            Number(teamUrlPattern.test(right)) - Number(teamUrlPattern.test(left))
+          );
+        });
+        const prioritizedBusinessUrls = [...businessUrls].sort((left, right) => {
+          const leftTeam = Number(teamUrlPattern.test(left));
+          const rightTeam = Number(teamUrlPattern.test(right));
+          const leftVideo = Number(looksLikeVideoUrl(new URL(left, page.url)));
+          const rightVideo = Number(looksLikeVideoUrl(new URL(right, page.url)));
+          return rightTeam + rightVideo - (leftTeam + leftVideo);
         });
         const pageCandidates = uniqueSameOriginUrls(
-          [...businessUrls, ...prioritizedSitemapUrls.slice(0, 6), ...feedUrls.slice(0, 4)],
+          [...prioritizedBusinessUrls, ...prioritizedSitemapUrls.slice(0, 6), ...feedUrls.slice(0, 4)],
           page.url,
           11,
         ).filter((url) => url !== page.url.toString());

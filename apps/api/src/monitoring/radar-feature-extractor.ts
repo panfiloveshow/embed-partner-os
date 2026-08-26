@@ -783,7 +783,7 @@ function detectDecisionMakers(html: string, pageUrl: URL): RadarDecisionMakerLea
     ).slice(0, MAX_DECISION_MAKER_BLOCKS),
     ...matches(
       html,
-      /<div\b[^>]*(?:class|id)\s*=\s*["'][^"']*(?:team|staff|person|employee|author|contact|management|editor)[^"']*["'][^>]*>([\s\S]{0,4000}?)<\/div>/gi,
+      /<div\b[^>]*(?:class|id)\s*=\s*["'][^"']*(?:team|staff|person|employee|author|contact|management|editor|rukovodstvo|komanda|directors|leadership|founders|about)[^"']*["'][^>]*>([\s\S]{0,4000}?)<\/div>/gi,
     ).slice(0, MAX_DECISION_MAKER_BLOCKS),
   ].slice(0, MAX_DECISION_MAKER_BLOCKS);
   for (const block of blocks) {
@@ -1167,16 +1167,32 @@ function researchLinkScore(value: string) {
 
 const roleDefinitions: Array<{ pattern: RegExp; department: string }> = [
   {
+    // Специфичные «замы» — раньше общего «генерального директора»,
+    // иначе match съест слово «заместитель».
+    pattern:
+      /(?:заместител[ья]\s+(?:генеральн(?:ого|ый|ая)\s+)?директора|зам\.\s*директора|deputy (?:general )?director)/i,
+    department: "Руководство",
+  },
+  {
+    pattern: /(?:исполнительн(?:ый|ая)\s+директор|executive director)/i,
+    department: "Руководство",
+  },
+  {
     pattern: /(?:генеральн(?:ый|ая)\s+директор|chief executive officer|\bceo\b)/i,
     department: "Руководство",
   },
   {
     pattern:
-      /(?:директор\s+по\s+развитию|руководитель\s+по\s+развитию|business development director|head of business development)/i,
+      /(?:директор\s+по\s+развитию|руководитель\s+по\s+развитию|business development director|head of business development|head of partnerships?)/i,
     department: "Развитие бизнеса",
   },
   {
     pattern: /(?:коммерческ(?:ий|ая)\s+директор|chief commercial officer|\bcco\b)/i,
+    department: "Коммерческий отдел",
+  },
+  {
+    pattern:
+      /(?:(?:руководитель|директор)\s+(?:отдела\s+)?продаж|head of sales|sales director)/i,
     department: "Коммерческий отдел",
   },
   { pattern: /(?:главн(?:ый|ая)\s+редактор|editor[- ]in[- ]chief)/i, department: "Редакция" },
@@ -1186,6 +1202,11 @@ const roleDefinitions: Array<{ pattern: RegExp; department: string }> = [
     department: "Видеоредакция",
   },
   { pattern: /(?:директор\s+по\s+продукту|chief product officer|\bcpo\b)/i, department: "Продукт" },
+  {
+    pattern:
+      /(?:(?:директор\s+по\s+маркетингу|маркетингов(?:ый|ая)\s+директор|chief marketing officer|\bcmo\b)|pr[- ]директор|директор\s+по\s+pr)/i,
+    department: "Маркетинг и PR",
+  },
   {
     pattern: /(?:техническ(?:ий|ая)\s+директор|chief technology officer|\bcto\b)/i,
     department: "Технологии",

@@ -22,8 +22,8 @@ import { DomainRuleError } from "./task-completion.js";
 const DEPARTMENT_EMAIL_HINTS: Array<{ match: RegExp; localParts: string[]; rationale: string }> = [
   {
     match: /руководств|генеральн|директор/i,
-    localParts: ["info", "office", "welcome", "hello", "pr", "press"],
-    rationale: "Общий ящик организации — стандартный путь к руководству",
+    localParts: ["info", "office", "secret", "priem", "reception", "welcome", "hello", "pr", "press"],
+    rationale: "Общий ящик / секретариат — стандартный путь к руководству",
   },
   {
     match: /коммерч|партнёр|партнер|продаж|развития бизнеса/i,

@@ -269,6 +269,58 @@ describe("Radar page feature extraction", () => {
     expect(telegram.some((lead) => lead.value === "@share")).toBe(false);
   });
 
+  it("находит ближайших руководителей на странице команды", () => {
+    const html = `
+      <html lang="ru"><head><title>Медиа-площадка</title></head>
+      <body>
+        <div class="management-team">
+          <div class="person">
+            <b>Соколов Артём Викторович</b>
+            <span>Заместитель генерального директора</span>
+            <a href="mailto:sokolov@media.example.ru">Написать</a>
+          </div>
+          <div class="person">
+            <b>Миронова Елена Сергеевна</b>
+            <span>Директор по маркетингу</span>
+            <a href="mailto:mironova@media.example.ru">Написать</a>
+          </div>
+          <div class="person">
+            <b>Ким Олег Петрович</b>
+            <span>Исполнительный директор</span>
+            <a href="tel:+74950001122">Позвонить</a>
+          </div>
+        </div>
+      </body></html>`;
+    const result = extractRadarPageFeatures(
+      html,
+      new URL("https://media.example.ru/team"),
+      new Date("2026-08-26T12:00:00Z"),
+    );
+    const people = result.research.decisionMakers;
+    const byName = new Map(people.map(({ fullName, ...rest }) => [fullName, rest]));
+    expect([...byName.keys()].sort()).toEqual(
+      [
+        "Соколов Артём Викторович",
+        "Миронова Елена Сергеевна",
+        "Ким Олег Петрович",
+      ].sort(),
+    );
+    expect(byName.get("Соколов Артём Викторович")).toMatchObject({
+      role: "Заместитель генерального директора",
+      department: "Руководство",
+      email: "sokolov@media.example.ru",
+    });
+    expect(byName.get("Миронова Елена Сергеевна")).toMatchObject({
+      department: "Маркетинг и PR",
+      email: "mironova@media.example.ru",
+    });
+    expect(byName.get("Ким Олег Петрович")).toMatchObject({
+      role: "Исполнительный директор",
+      department: "Руководство",
+      phone: "+74950001122",
+    });
+  });
+
   it("находит географию по JSON-LD адресу организации", () => {
     const html = `
       <html lang="ru"><head><title>Маркетплейс цифровых товаров</title></head>
