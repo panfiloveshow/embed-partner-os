@@ -27,6 +27,7 @@ import {
   type RadarCandidateDecisionCommand,
   type RadarCandidateStatus,
   type RadarFeatureSignal,
+  type RadarLprChannelLink,
   type RadarRejectReasonCode,
   type RadarScoreFactor,
 } from "@embed-os/contracts";
@@ -1448,6 +1449,111 @@ function WorkBrief({
             каналы, если они есть.
           </p>
         )}
+        {research.decisionMakers.length > 0 ? (
+          (() => {
+            const person = research.decisionMakers[0];
+            if (!person) return null;
+            const direct: RadarLprChannelLink | null = person.email
+              ? { contactType: "email", contactValue: person.email, contactHref: `mailto:${person.email}`, rationale: "Прямой email из публичных источников", confidence: "high" }
+              : person.phone
+                ? { contactType: "phone", contactValue: person.phone, contactHref: `tel:${person.phone}`, rationale: "Прямой телефон из публичных источников", confidence: "high" }
+                : closestLprChannel(person, research.contacts);
+            const chosenHref = direct?.contactHref ?? null;
+            const alternatives = research.contacts
+              .filter((contact) => contact.href !== chosenHref)
+              .slice(0, 4);
+            return (
+              <div className="radar-lpr-path-map">
+                <div className="radar-lpr-path-title">🗺️ Как выйти на ЛПР</div>
+                <ol className="radar-lpr-path-steps">
+                  <li>
+                    <span className="radar-lpr-path-step-label">Цель</span>
+                    <div>
+                      <b>{person.fullName ?? "Имя не подтверждено"}</b>
+                      <small>
+                        {person.role}
+                        {person.department ? ` · ${person.department}` : ""} ·{" "}
+                        {confidenceLabel(person.confidence)}
+                      </small>
+                    </div>
+                  </li>
+                  <li>
+                    <span className="radar-lpr-path-step-label">Канал входа</span>
+                    <div>
+                      {direct ? (
+                        <>
+                          {direct.contactType === "email" ? (
+                            <a href={`mailto:${direct.contactValue}`}>
+                              <Mail size={12} />
+                              {direct.contactValue}
+                            </a>
+                          ) : direct.contactType === "phone" ? (
+                            <a href={`tel:${direct.contactValue}`}>
+                              <Phone size={12} />
+                              {direct.contactValue}
+                            </a>
+                          ) : direct.contactHref ? (
+                            <a href={direct.contactHref} target="_blank" rel="noreferrer">
+                              <ExternalLink size={12} />
+                              {direct.contactValue}
+                            </a>
+                          ) : (
+                            <span>{direct.contactValue}</span>
+                          )}
+                          <small>
+                            {direct.rationale} · {confidenceLabel(direct.confidence)}
+                          </small>
+                        </>
+                      ) : (
+                        <small>Публичных каналов не найдено — путь через руководителя площадки.</small>
+                      )}
+                    </div>
+                  </li>
+                  {alternatives.length > 0 ? (
+                    <li>
+                      <span className="radar-lpr-path-step-label">Запасные пути</span>
+                      <div className="radar-lpr-path-alternatives">
+                        {alternatives.map((contact) =>
+                          contact.type === "email" ? (
+                            <a key={`${contact.type}:${contact.href}`} href={`mailto:${contact.href.replace(/^mailto:/, "")}`}>
+                              <Mail size={11} />
+                              {contact.value}
+                            </a>
+                          ) : contact.type === "phone" ? (
+                            <a key={`${contact.type}:${contact.href}`} href={`tel:${contact.href.replace(/^tel:/, "")}`}>
+                              <Phone size={11} />
+                              {contact.value}
+                            </a>
+                          ) : contact.type === "telegram" ? (
+                            <a key={`${contact.type}:${contact.href}`} href={contact.href} target="_blank" rel="noreferrer">
+                              <Send size={11} />
+                              {contact.value}
+                            </a>
+                          ) : (
+                            <a key={`${contact.type}:${contact.href}`} href={contact.href} target="_blank" rel="noreferrer">
+                              <ExternalLink size={11} />
+                              {contact.value}
+                            </a>
+                          ),
+                        )}
+                      </div>
+                      <small>Если основной канал молчит — обходные точки входа.</small>
+                    </li>
+                  ) : null}
+                  <li>
+                    <span className="radar-lpr-path-step-label">Письмо</span>
+                    <div>
+                      <small>
+                        Готовое первое касание под ЛПР — в блоке «Готовое первое касание» ниже;
+                        перед отправкой сверьте адресата с картой.
+                      </small>
+                    </div>
+                  </li>
+                </ol>
+              </div>
+            );
+          })()
+        ) : null}
       </div>
       <div className="radar-lead-columns">
         <div>
