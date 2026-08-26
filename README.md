@@ -1,156 +1,141 @@
-# Embed Partner OS
+<div align="center">
 
-**Версия 1.1.0** · Система автоматизации развития эмбедной сети RUTUBE.
+# 📡 Embed Partner OS
 
-Первый вертикальный срез системы автоматизации развития эмбедной сети RUTUBE.
+### Система автоматизации развития эмбедной сети RUTUBE
 
-Сейчас реализованы основной сценарий менеджера на экране «Сегодня» и экран недельного отчёта руководителя поверх версионного backend-контура:
+*Радар поиска площадок · ЛПР из открытых данных ФНС · Воронка · SLA-мониторинг · Недельные отчёты*
 
-- приоритетная очередь с группами «Критично», «Сегодня», «Можно позже» и «Ожидание»;
-- объяснимый Priority Score по правилам ТЗ;
-- контекст выбранного партнёра и быстрые действия;
-- контакты без жёсткой привязки к одной компании и роли contact–organization;
-- реестр контактов с поиском, фильтрами, карточкой, созданием, версионным редактированием, мягким архивом, восстановлением и подсказками дублей;
-- реестр организаций с фильтрами по группе, тематике, владельцу, стадии, Partner Score, интеграции и активности, группировкой нескольких брендов/юридических лиц/доменов и единой карточкой со связанными сущностями и аудитом;
-- CSV-экспорт текущей выборки организаций только с отдельным разрешением `partners.export`, защитой от spreadsheet injection и append-only аудитом (PRT-008);
-- проверяемая сервером сессия, семь ролей из ТЗ и отдельные разрешения на чтение/изменение задач, контактов, стадий, Радара, размещений, импортов и отчётов;
-- импорт организаций из CSV/XLSX с безопасным предпросмотром, дедупликацией, ручным разрешением конфликтов, отменой и построчным протоколом;
-- «Радар» потенциальных партнёров: ручной ввод и CSV/XLSX, SSRF-safe исследование сайта через HTML/sitemap/RSS, ЛПР с ФИО и должностью из официальных открытых данных ФНС (ЕГРЮЛ, включая ИП), регион площадки из адреса регистрации, публичные контакты включая Telegram-каналы (с пометкой «канал площадки»/«канал автора»), оценка объёма видеостраниц по карте сайта, оценка трафика через Similarweb или бесплатный Tranco, объяснимый Partner Score, готовое первое касание и решения accept/defer/reject/merge;
-- безопасное слияние контактов-дубликатов с сохранением истории, аудита и исходной записи;
-- фиксация письма, звонка, встречи, сообщения или заметки в одном диалоге;
-- завершение задачи только вместе с результатом и следующим действием (BR-002, TSK-008);
-- append-only история взаимодействий, аудита и стадий в PostgreSQL;
-- обязательный `Idempotency-Key` для безопасного повтора мутаций;
-- REST API под `/api/v1` и документация OpenAPI;
-- адаптивный интерфейс от 390 px;
-- единый экран «Воронка» с канбаном и таблицей, поиском и фильтрами по стадии, ответственному и риску;
-- доменные тесты бизнес-правил;
-- версионный `ReportSnapshot` с неделей понедельник–воскресенье по `Europe/Moscow`;
-- повторяемая генерация по `data_as_of` и версии формул, новая ревизия для поздних данных;
-- явная полнота данных: отсутствующие Placement/HealthCheck не подменяются нулями;
-- адаптивный экран «Отчёты» с результатом недели, воронкой, исполнением, решениями руководителя и раскрываемым реестром исключений;
-- автоматический catch-up запуск отчёта по понедельникам в 10:00 MSK и idempotent digest через transactional outbox;
-- реестр Placement и ручная L0-проверка документированного RUTUBE iframe с SSRF-защитой;
-- версионное управление параметрами и статусом Placement, мягкий архив, аудит и остановка плановых проверок;
-- проверяемые переходы Opportunity по опубликованной воронке с типизированными данными стадий, точным списком недостающих полей, историей, аудитом и запретом активного запуска без здорового Placement;
-- плановый L0 monitor worker с конкурентным claim, lease recovery, idempotent retry и dead-letter;
-- append-only HealthCheck, технический риск, Alert и техническая Task после двух последовательных ошибок;
-- автоматический SLA-monitor стадий: одна задача и предупреждение владельцу при зависании, однократная эскалация руководителю, закрытие инцидента после новой активности и включение эскалации в недельный отчёт.
-- административный экран «Настройки SLA» с версионной публикацией порогов, обязательной причиной, optimistic locking, аудитом и автоматическим переводом действующих возможностей на новую конфигурацию.
-- административный экран «Роли и доступ»: смена семи ролей, точечные разрешения, деактивация учётной записи, optimistic locking, обязательная причина, идемпотентность, AuditLog/OutboxEvent и защита от self-lockout/отключения последнего администратора.
+[![Version](https://img.shields.io/badge/version-1.1.0-5865F2?style=flat-square)](CHANGELOG.md)
+[![Tests](https://img.shields.io/badge/tests-335%2B_passing-22c55e?style=flat-square)](#-проверка)
+[![Node](https://img.shields.io/badge/node-%E2%89%A522-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
+[![NestJS](https://img.shields.io/badge/API-NestJS-E0234E?style=flat-square&logo=nestjs&logoColor=white)](https://nestjs.com)
+[![React](https://img.shields.io/badge/Web-React_19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
+[![Docker](https://img.shields.io/badge/deploy-docker_compose-2496ED?style=flat-square&logo=docker&logoColor=white)](#-продакшн-одной-командой)
+[![License](https://img.shields.io/badge/license-Proprietary-f59e0b?style=flat-square)](LICENSE)
 
-## Запуск
+</div>
 
-Требуется Node.js 22 или новее. Целевой корпоративный runtime по ТЗ — Node.js 24 LTS.
+---
+
+## Что это
+
+Полноценная операционная система для команды, которая развивает эмбедную сеть RUTUBE:
+от поиска потенциальных площадок до подписания партнёрства, контроля здоровья размещений
+и недельной отчётности руководителю.
+
+> **Ключевая особенность — «Радар».** Система сама исследует сайты-кандидаты через
+> robots.txt → HTML → sitemap → RSS, находит контакты и Telegram-каналы, достаёт
+> ФИО и должность руководителя из официальных данных ЕГРЮЛ (ФНС), определяет регион,
+> считает объём видеостраниц и трафик — и сводит всё в объяснимый Partner Score
+> с готовым текстом первого касания.
+
+## Модули
+
+| Модуль | Что делает |
+|---|---|
+| 🗞️ **Сегодня** | Приоритетная очередь менеджера: «Критично» / «Сегодня» / «Можно позже» / «Ожидание», объяснимый Priority Score |
+| 🔻 **Воронка** | Канбан + таблица из одного ответа API, проверяемые переходы стадий, запрет запуска без здорового размещения |
+| 👤 **Контакты** | Реестр с поиском и фильтрами, contact–organization без жёсткой привязки, безопасное слияние дублей с сохранением истории |
+| 🏢 **Организации** | Группировка брендов/юрлиц/доменов, единая карточка со связями и аудитом, импорт CSV/XLSX с дедупликацией и отменой |
+| 📡 **Радар** | Автоисследование сайтов: контакты, Telegram («канал площадки»/«канал автора»), ЛПР из ЕГРЮЛ (ООО и ИП), регион ФНС, sitemap-видео, Tranco/Similarweb |
+| 🖥️ **Размещения** | Реестр Placement, плановая L0-проверка iframe, технические риски, Alert и Task после двух ошибок подряд |
+| ⏱️ **SLA** | Версионные пороги, предупреждение при зависании, однократная эскалация руководителю, инциденты в недельном отчёте |
+| 📊 **Отчёты** | Версионный `ReportSnapshot` по неделям Europe/Moscow, автозапуск по понедельникам 10:00 MSK, явная полнота данных |
+| 🛡️ **Роли и доступ** | 7 ролей, точечные разрешения, optimistic locking, защита от self-lockout, аудит каждой мутации |
+| ✍️ **Профиль отправителя** | Подпись под первым касанием кандидату, per-user настройка |
+
+## Архитектура
+
+```mermaid
+flowchart LR
+    subgraph client["Веб-клиент"]
+        W["React 19 + Vite<br/>адаптив от 390px"]
+    end
+    subgraph core["API-ядро"]
+        A["NestJS REST /api/v1<br/>OpenAPI · RBAC · идемпотентность"]
+        R["Радар: inspector + extractor<br/>ЕГРЮЛ · Tranco · L0-renderer"]
+    end
+    subgraph data["Данные"]
+        P[("PostgreSQL<br/>Prisma · append-only история")]
+        M[("In-memory режим<br/>демо-данные")]
+    end
+    subgraph jobs["Фоновые воркеры"]
+        K1["placement-monitor"]
+        K2["weekly-report + digest"]
+        K3["opportunity-sla + notifications"]
+        K4["radar-recheck + sourcing"]
+        K5["outbox-relay"]
+    end
+    W -->|"HTTPS /api"| A
+    A --> R
+    A --> P
+    A -.->|"PERSISTENCE_MODE=memory"| M
+    P --> K1 & K2 & K3 & K4 & K5
+    R -->|"robots→HTML→sitemap→RSS"| X["Сайты-кандидаты"]
+    R -->|"ИНН → карточка"| F["ЕГРЮЛ ФНС"]
+```
+
+**Надёжность в основе:** обязательный `Idempotency-Key` на мутациях, transactional outbox,
+optimistic locking, append-only `Interaction / AuditLog / StageHistory / ReportSnapshot /
+RadarEvidence / RadarScoreSnapshot / RadarDecision` (защищены триггерами от UPDATE/DELETE).
+
+## Быстрый старт
 
 ```bash
+git clone https://github.com/panfiloveshow/embed-partner-os.git
+cd embed-partner-os
 npm install
 npm run dev
 ```
 
-После запуска:
+| Что | Где |
+|---|---|
+| 🌐 Веб-интерфейс | `http://localhost:5173` |
+| 🔌 API | `http://localhost:3000/api/v1` |
+| 📚 OpenAPI UI | `http://localhost:3000/api/docs` |
 
-- web-интерфейс: `http://127.0.0.1:5173`;
-- API: `http://127.0.0.1:3000/api/v1`;
-- OpenAPI UI: `http://127.0.0.1:3000/api/docs`.
+По умолчанию используется in-memory режим с демонстрационными данными.
+Для PostgreSQL-режима: `docker compose up -d postgres`, затем `cp .env.example .env`
+и серия `npm run db:*` — см. раздел [PostgreSQL-режим](#postgresql-режим).
 
-Worker-процессы PostgreSQL-режима запускаются отдельно:
-
-```bash
-npm run worker:placement-monitor
-npm run worker:weekly-report
-npm run worker:report-digest
-npm run worker:opportunity-sla
-npm run worker:sla-notification
-npm run worker:radar-recheck
-npm run worker:radar-sourcing
-npm run worker:outbox-relay
-```
-
-> В продакшн-стеке (`compose.prod.yaml`) все воркеры запускаются как сервисы
-> автоматически; вручную они нужны только для локальной отладки.
-
-Переменные окружения и процедура проверки описаны в `docs/runbooks/weekly-report-workers.md`.
-
-Контракт регистрации, безопасной L0-проверки и эксплуатации monitor worker описан в `docs/runbooks/placement-l0.md`.
-
-Контракт смены стадий, паузы, закрытия и правила BR-007 описаны в `docs/runbooks/opportunity-stage-transitions.md`.
-
-Контракт чтения воронки, ограничение выдачи и проверка двух представлений описаны в `docs/runbooks/funnel.md`.
-
-Формат таблицы, правила решений и процедура импорта организаций описаны в `docs/runbooks/organization-import.md`.
-
-Порядок загрузки кандидатов, проверки страниц, оценки и принятия решений в «Радаре» описан в `docs/runbooks/radar.md`.
-
-Поиск, жизненный цикл, конкурентное редактирование и безопасное объединение контактов описаны в `docs/runbooks/contact-registry.md`.
-
-Фильтры реестра организаций, состав единой карточки и правила полноты данных описаны в `docs/runbooks/partner-card.md`.
-
-Отдельное право, доверенный identity-заголовок, аудит и проверка CSV-экспорта описаны в `docs/runbooks/partner-export.md`.
-
-Роли, разрешения, доверенная граница auth-proxy и production-gates описаны в `docs/runbooks/access-control.md`.
-
-Пороговые значения стадий, жизненный цикл SLA-инцидента, доставка уведомлений и проверка идемпотентности описаны в `docs/runbooks/opportunity-sla.md`.
-
-Режимы входа: корпоративный SSO (`trusted_proxy` / `oidc_jwt`) или встроенный
-логин-пароль (`AUTH_MODE` = значение `AUTH_MODE_LOCAL_PASSWORD`, см.
-`apps/api/src/auth/auth-base.ts`) — с формой входа в вебе. Каналы
-уведомлений SLA/дайджеста: webhook или Telegram (`*_CHANNEL=telegram`).
-Чек-лист безопасности: `docs/security-checklist.md`; материалы для продажи:
-`docs/sales-onepager.md`, демо-сценарий: `docs/demo-scenario.md`.
-
-## Продакшн-развёртывание
-
-Полный стек одним файлом — PostgreSQL, миграции, API, веб за nginx с прокси `/api`
-и все фоновые воркеры:
+## Продакшн одной командой
 
 ```bash
 cp .env.example .env
 docker compose -f compose.prod.yaml up -d --build
 ```
 
-Health-check без аутентификации: `GET /api/v1/health`. Пошаговая процедура,
-бэкап/восстановление и диагностика описаны в `docs/runbooks/deploy.md`.
+PostgreSQL + автоматические миграции + API + веб за nginx с прокси `/api` + все воркеры.
+Health-check без аутентификации: `GET /api/v1/health`.
 
-## Проверка
+<details>
+<summary><b>Режимы аутентификации</b></summary>
 
-```bash
-npm test
-npm run typecheck
-npm run build
-```
+| Режим | Описание |
+|---|---|
+| `AUTH_MODE_LOCAL_PASSWORD` | Встроенный вход по паролю: scrypt, HS256-сессии 12ч, rate-limit, форма входа в вебе |
+| `trusted_proxy` | Корпоративный контур с доверенным identity-заголовком |
+| `oidc_jwt` | Проверка Bearer JWT: HTTPS JWKS, issuer, audience, асимметричные алгоритмы |
 
-## Структура
-
-```text
-apps/
-  api/        NestJS API первого сценария
-  web/        React + TypeScript + Vite
-packages/
-  contracts/  общие API-типы
-  domain/     чистые бизнес-правила и тесты
-docs/
-  adr/        архитектурные решения
-  design/     визуальная спецификация экрана
-```
-
-По умолчанию API использует in-memory repository с демонстрационными данными. PostgreSQL-режим уже содержит Prisma-схему, контролируемые SQL-миграции, optimistic locking, append-only Interaction/AuditLog/StageHistory/ReportSnapshot/RadarEvidence/RadarScoreSnapshot/RadarDecision, сохраняемые протоколы импорта и transactional outbox.
+Уведомления SLA/дайджеста: webhook или Telegram (`*_CHANNEL=telegram`).
+</details>
 
 ## PostgreSQL-режим
 
 ```bash
 docker compose up -d postgres
 cp .env.example .env
-npm run db:validate
-npm run db:generate
-npm run db:migrate
-npm run db:seed
+npm run db:validate && npm run db:generate && npm run db:migrate && npm run db:seed
 PERSISTENCE_MODE=postgres npm run dev
 ```
 
-Миграции добавляют новые таблицы, поля и индексы без удаления или переименования существующих данных. `Interaction`, `AuditLog`, `StageHistory`, `ReportSnapshot`, `RadarEvidence`, `RadarScoreSnapshot` и `RadarDecision` защищены от `UPDATE/DELETE` триггером. Резервация IdempotencyRecord, завершение задачи, создание Interaction и следующей задачи, обновление Opportunity, аудит и OutboxEvent выполняются в одной транзакции.
+Миграции только добавляют объекты — существующие данные не трогаются.
+Резервация idempotency, завершение задачи, создание Interaction и следующей задачи,
+обновление Opportunity, аудит и OutboxEvent выполняются **в одной транзакции**.
 
-Пример мутации:
+<details>
+<summary><b>Пример идемпотентной мутации</b></summary>
 
 ```bash
 curl -X POST http://127.0.0.1:3000/api/v1/tasks/task-1/complete \
@@ -159,29 +144,59 @@ curl -X POST http://127.0.0.1:3000/api/v1/tasks/task-1/complete \
   -d '{"contactId":"00000000-0000-4000-8000-000000005000","interactionType":"email","outcome":"Получен ответ","summary":"Партнёр подтвердил следующий шаг","next":{"mode":"task","title":"Отправить примеры","dueAt":"2026-08-18T09:00:00.000Z"}}'
 ```
 
-Слияние дубля выполняется через `POST /api/v1/contacts/:sourceContactId/merge` с телом `{"targetContactId":"...","reason":"..."}` и обязательным `Idempotency-Key`. Исходный контакт не удаляется: активные связи и взаимодействия переходят к целевому, конфликтующая связь с той же организацией закрывается исторически, а источник получает `merged_into_id`, время и причину слияния.
+Повтор того же ключа с тем же payload не создаёт дублей; ключ с другим payload — `409 IDEMPOTENCY_KEY_REUSED`.
+</details>
 
-Реестр доступен через `GET /api/v1/contacts`: без параметра `status` возвращаются только действующие контакты. Изменение профиля выполняется через `PATCH /api/v1/contacts/:contactId`, архивирование и восстановление — через отдельные идемпотентные команды; каждая мутация требует актуальную `version` и создаёт AuditLog/OutboxEvent.
-
-Недельный снимок публикуется через `POST /api/v1/reports/weekly/snapshots`:
+## 🧪 Проверка
 
 ```bash
-curl -X POST http://127.0.0.1:3000/api/v1/reports/weekly/snapshots \
-  -H 'Content-Type: application/json' \
-  -H 'Idempotency-Key: 3678ffb4-62a7-4ee1-850e-40aeabbd457b' \
-  -d '{"periodStart":"2026-08-10","dataAsOf":"2026-08-17T10:00:00+03:00","formulaVersion":"weekly-v1"}'
+npm test          # 335+ тестов: 214 API · 69 веб · 53 домен
+npm run typecheck # строгий TS по всему монорепо
+npm run build     # сборка пакетов, API и веба
+npm run lint      # ESLint
 ```
 
-Последняя опубликованная ревизия доступна через `GET /api/v1/reports/weekly/snapshots/latest`. Повтор генерации с теми же `dataAsOf` и `formulaVersion` возвращает тот же снимок даже с новым ключом команды; более поздний срез создаёт следующую ревизию. Публикация, AuditLog, событие `report.weekly.published` и завершение IdempotencyRecord входят в одну транзакцию.
+Vitest повсюду; сетевые стабы через инжектируемый `Fetcher` — ни одного реального
+запроса из юнит-тестов. Доменные бизнес-правила покрыты отдельным пакетом `@embed-os/domain`.
 
-Текущий срез воронки доступен через `GET /api/v1/opportunities`. Канбан и таблица используют один ответ API, поэтому стадии, владельцы, следующие действия и флаги риска не расходятся между представлениями. PostgreSQL-адаптер считает итоги по области текущего actor (свои/назначенные, команда или все данные), а детальную выдачу ограничивает первыми 200 возможностями и явно возвращает `truncated`.
+## Структура монорепозитория
 
-Одинаковые ключ и нормализованный payload не создают повторных взаимодействий или событий. Повтор ключа с другим payload возвращает `409 IDEMPOTENCY_KEY_REUSED`. Записи хранят `expires_at` для будущей регламентной очистки.
+```text
+apps/
+  api/         NestJS API: модули auth, monitoring (Радар), workers, persistence
+  web/         React + TypeScript + Vite
+packages/
+  contracts/   общие API-типы (единый источник правды)
+  domain/      чистые бизнес-правила, скоринг и их тесты
+deploy/        nginx.conf для прод-контура
+docs/
+  adr/         архитектурные решения
+  runbooks/    эксплуатационные сценарии каждого модуля
+  design/      визуальная спецификация экранов
+scripts/       backup / restore / dev-postgres
+```
 
-Outbox relay содержит транспортно-независимый publisher port, конкурентный захват через `FOR UPDATE SKIP LOCKED`, аренду, экспоненциальный retry и проверку владельца при acknowledge. Конкретный RabbitMQ-адаптер и процесс непрерывного запуска будут подключены после утверждения корпоративной конфигурации брокера.
+## 📖 Документация
 
-Текущий `payload_uri` использует схему `postgres://report-snapshot/...`, а JSONB хранит воспроизводимый payload рядом с метаданными. Перенос payload в корпоративное S3-совместимое хранилище остаётся совместимым расширением после утверждения object storage; API-контракт и checksum при этом не меняются. Автоматический запуск по понедельникам реализован отдельным worker-процессом. Digest и SLA-уведомления доставляются через настраиваемый HTTP notification gateway; его корпоративный адрес, credentials и окончательные email-шаблоны остаются эксплуатационной конфигурацией D-06.
+| Runbook | Тема |
+|---|---|
+| [`deploy.md`](docs/runbooks/deploy.md) | Прод-развёртывание, бэкап/восстановление, диагностика |
+| [`radar.md`](docs/runbooks/radar.md) | Загрузка кандидатов, исследование, оценка, решения |
+| [`opportunity-stage-transitions.md`](docs/runbooks/opportunity-stage-transitions.md) | Стадии воронки, пауза, закрытие, BR-007 |
+| [`contact-registry.md`](docs/runbooks/contact-registry.md) | Жизненный цикл и слияние контактов |
+| [`organization-import.md`](docs/runbooks/organization-import.md) | Импорт организаций из CSV/XLSX |
+| [`access-control.md`](docs/runbooks/access-control.md) | Роли, разрешения, production-gates |
+| [`opportunity-sla.md`](docs/runbooks/opportunity-sla.md) | SLA-пороги, эскалации, уведомления |
+| [`security-checklist.md`](docs/security-checklist.md) | Чек-лист безопасности |
 
-Локальный `AUTH_MODE=development` использует демонстрационного пользователя из seed и запрещён при `NODE_ENV=production`. Production поддерживает два явных режима: `trusted_proxy` с закрытым сетевым контуром и проверенным `X-Embed-Actor`, либо `oidc_jwt`, где API самостоятельно проверяет подпись Bearer JWT через HTTPS JWKS, issuer, audience, обязательные `sub/iat/exp` и разрешённый асимметричный алгоритм. Web получает токен от `window.embedPartnerAuth`, умеет обновить его после 401 и выполнить logout. Проверенный actor передаётся в PostgreSQL через изолированный request context: режимы `own`/`assigned`, `team` и `all` применяются к задачам, партнёрам, возможностям, Радар-кандидатам, контактам, размещениям и импортам; actor также записывается в idempotency, аудит и историю. Production-gates теперь ограничены подключением конкретного корпоративного OIDC SDK/групповых claims и стендовыми acceptance-проверками.
+## Лицензия
 
-Текущие npm-риски, безопасные обновления и временное исключение Prisma CLI зафиксированы в `docs/dependency-audit.md`.
+Проект распространяется под проприетарной лицензией — все права защищены,
+условия коммерческого использования определяются отдельным договором.
+Подробности в [LICENSE](LICENSE).
+
+<div align="center">
+
+**Зубарев Данил Викторович** · [panfiloveshow@gmail.com](mailto:panfiloveshow@gmail.com) · [@panfiloveshow](https://t.me/panfiloveshow)
+
+</div>
