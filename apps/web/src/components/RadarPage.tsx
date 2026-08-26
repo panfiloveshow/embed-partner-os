@@ -29,7 +29,6 @@ import {
   type RadarFeatureSignal,
   type RadarRejectReasonCode,
   type RadarScoreFactor,
-  type SenderProfilePayload,
 } from "@embed-os/contracts";
 import {
   ApiError,
