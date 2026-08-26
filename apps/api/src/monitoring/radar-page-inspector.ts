@@ -274,8 +274,14 @@ export class RadarPageInspector implements RadarInspector {
         extraction = applyLegalRegionToGeography(extraction);
         // Fresh RSS articles are the most likely places to carry an embedded
         // player; without a feed we fall back to the checked business pages.
+        // Видеостраницы из приоритизированной выборки идут в L1 всегда:
+        // их плееры почти всегда JS-ленивые и L0-html их не видит.
+        const videoCandidates = pageCandidates.filter((candidateUrl) =>
+          looksLikeVideoUrl(new URL(candidateUrl, page.url)),
+        );
         const l1Candidates = [
           page.url.toString(),
+          ...videoCandidates.slice(0, 2),
           ...(feedUrls.length > 0 ? feedUrls : pageCandidates),
         ];
         return this.finalize(page, checkedAt, html, extraction, staticDetections, l1Candidates);

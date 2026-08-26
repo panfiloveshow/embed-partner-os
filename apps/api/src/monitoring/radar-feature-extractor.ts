@@ -16,6 +16,7 @@ import type {
   RadarOutreachPackage,
   RadarChangeSignal,
 } from "@embed-os/contracts";
+import { linkLprEmailsBySurname } from "@embed-os/domain";
 import { extractRequisites } from "./legal-entity-enrichment.js";
 
 export interface RadarPageFeatureExtraction {
@@ -195,8 +196,9 @@ export function mergeRadarPageExtractions(
     extractions.flatMap(({ research }) => research.contacts),
     (lead) => `${lead.type}:${lead.href}`,
   );
-  const decisionMakers = mergeDecisionMakers(
-    extractions.flatMap(({ research }) => research.decisionMakers),
+  const decisionMakers = linkLprEmailsBySurname(
+    mergeDecisionMakers(extractions.flatMap(({ research }) => research.decisionMakers)),
+    contacts,
   );
   const videoPages = uniqueBy(
     [...extractions.flatMap(({ research }) => research.videoPages), ...extraVideoPages],

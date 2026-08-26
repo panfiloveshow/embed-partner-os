@@ -53,6 +53,53 @@ function emailLocalPart(value: string): string {
   return value.split("@", 1)[0]?.toLocaleLowerCase("ru-RU") ?? "";
 }
 
+/** Российская транслитерация (ГОСТ-подобная) для сопоставления фамилий и ящиков. */
+const RU_TO_LATIN: Record<string, string> = {
+  а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z",
+  и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r",
+  с: "s", т: "t", у: "u", ф: "f", х: "kh", ц: "ts", ч: "ch", ш: "sh",
+  щ: "shch", ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
+};
+
+export function transliterateRussian(value: string): string {
+  return value
+    .toLocaleLowerCase("ru-RU")
+    .split("")
+    .map((char) => RU_TO_LATIN[char] ?? char)
+    .join("");
+}
+
+/**
+ * Кросс-страничная связка: ЛПР без email (например, директор из ЕГРЮЛ или
+ * человек со страницы «Команда») получает email с другой страницы сайта,
+ * если локальная часть ящика начинается с транслитерации его фамилии
+ * (Соколов -> sokolov@…). Прямой email не перезаписывается.
+ */
+export function linkLprEmailsBySurname(
+  decisionMakers: RadarDecisionMakerLead[],
+  contacts: RadarContactLead[],
+): RadarDecisionMakerLead[] {
+  const emails = contacts.filter(({ type }) => type === "email");
+  if (emails.length === 0) return decisionMakers;
+  return decisionMakers.map((person) => {
+    if (person.email) return person;
+    const surname = (person.fullName ?? "").split(/\s+/)[0] ?? "";
+    if (surname.length < 4) return person;
+    const latin = transliterateRussian(surname);
+    const match = emails.find(({ value }) => {
+      const localPart = emailLocalPart(value);
+      return localPart.startsWith(latin) || localPart.includes(latin);
+    });
+    if (!match) return person;
+    return {
+      ...person,
+      email: match.value,
+      evidence: `${person.evidence}. Email сопоставлен по фамилии с публичным ящиком ${match.value}.`,
+      confidence: "medium" as const,
+    };
+  });
+}
+
 /**
  * Ближайший доступный канал к ЛПР без прямых контактов: подбирает
  * функциональный email/телефон/страницу контактов по отделу и локальной части

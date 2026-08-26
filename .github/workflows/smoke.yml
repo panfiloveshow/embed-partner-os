@@ -1,0 +1,33 @@
+# Еженедельная проверка внешних источников Радара: Tranco, живые сайты.
+# Ловит деградацию внешнего мира (как сменившийся API Tranco) без пуша.
+# Уведомление о падении приходит в Actions и на почту аккаунта.
+
+name: Live smoke (external APIs)
+
+on:
+  schedule:
+    - cron: "0 4 * * 1" # понедельники 04:00 UTC
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run build:packages
+      - name: Живые источники Радара (Tranco + полная инспекция vc.ru)
+        working-directory: apps/api
+        env:
+          RUN_LIVE_SMOKE: "1"
+          RADAR_TRANKO_ENABLED: "1"
+        run: npx vitest run src/monitoring/live-smoke.test.ts
+      - name: Итог
+        if: always()
+        run: echo "Live smoke завершён. При failure — внешний источник Радара деградировал, см. лог выше."

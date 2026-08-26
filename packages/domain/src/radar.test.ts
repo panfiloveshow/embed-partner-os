@@ -3,9 +3,11 @@ import type { RadarCandidateFeatures, RadarEvidence } from "@embed-os/contracts"
 import {
   calculatePartnerScore,
   closestLprChannel,
+  linkLprEmailsBySurname,
   normalizeRadarTarget,
   parseRadarDecisionCommand,
   parseRadarScoreAdjustmentCommand,
+  transliterateRussian,
 } from "./radar.js";
 
 const features: RadarCandidateFeatures = {
@@ -247,5 +249,54 @@ describe("closestLprChannel — ближайший канал к ЛПР без �
     expect(
       closestLprChannel({ ...director, email: "dubinin@lenta-co.ru" }, [email("info")]),
     ).toBeNull();
+  });
+});
+
+describe("linkLprEmailsBySurname — кросс-страничная связка фамилия ↔ email", () => {
+  const person = {
+    fullName: "Соколов Артём Викторович",
+    role: "Заместитель генерального директора",
+    department: "Руководство",
+    email: null,
+    phone: null,
+    profileUrl: null,
+    sourceUrl: "https://media.example.ru/team",
+    evidence: "Блок команды: Соколов Артём Викторович, заместитель генерального директора",
+    confidence: "medium" as const,
+  };
+  const email = (localPart: string) => ({
+    type: "email" as const,
+    value: `${localPart}@media.example.ru`,
+    href: `mailto:${localPart}@media.example.ru`,
+    sourceUrl: "https://media.example.ru/contacts",
+    confidence: "high" as const,
+  });
+
+  it("транслитерирует русскую фамилию (Соколов -> sokolov)", () => {
+    expect(transliterateRussian("Соколов")).toBe("sokolov");
+  });
+
+  it("прикрепляет email, чья локальная часть начинается с фамилии", () => {
+    const [linked] = linkLprEmailsBySurname([person], [
+      email("info"),
+      email("sokolov"),
+      email("support"),
+    ]);
+    expect(linked?.email).toBe("sokolov@media.example.ru");
+    expect(linked?.confidence).toBe("medium");
+    expect(linked?.evidence).toContain("по фамилии");
+  });
+
+  it("прямой email не перезаписывается", () => {
+    const [linked] = linkLprEmailsBySurname([{ ...person, email: "a.sokolov@media.example.ru" }], [
+      email("sokolov"),
+    ]);
+    expect(linked?.email).toBe("a.sokolov@media.example.ru");
+  });
+
+  it("без совпадений и без email — человек остаётся как был", () => {
+    const [linked] = linkLprEmailsBySurname([person], [email("press")]);
+    expect(linked?.email).toBeNull();
+    expect(linked?.evidence).toBe(person.evidence);
   });
 });
