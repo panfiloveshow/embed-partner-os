@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -14,7 +15,9 @@ import { PlaywrightPageRenderer } from "./playwright-page-renderer.js";
 const browserAvailable = await (async () => {
   try {
     const { chromium } = await import("playwright");
-    return Boolean(chromium.executablePath());
+    // executablePath() returns the expected location even when the binary
+    // was never downloaded, so verify it actually exists on disk.
+    return existsSync(chromium.executablePath());
   } catch {
     return false;
   }
