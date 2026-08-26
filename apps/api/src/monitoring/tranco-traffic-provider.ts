@@ -156,6 +156,10 @@ export class TrancoTrafficProvider {
       measuredAt: measuredAt.toISOString(),
       confidence: "low" as const,
       ...band,
+      // Дневная полоса выводится из месячной (широкой) — иначе плитки
+      // «Посещений в день» и видео-возможности остаются пустыми.
+      minDailyVisits: Math.max(1, Math.round(band.minMonthlyVisits / 30)),
+      maxDailyVisits: Math.max(1, Math.round(band.maxMonthlyVisits / 30)),
     };
   }
 

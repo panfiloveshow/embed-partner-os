@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { RadarCandidateFeatures, RadarEvidence } from "@embed-os/contracts";
 import {
   calculatePartnerScore,
+  closestLprChannel,
   normalizeRadarTarget,
   parseRadarDecisionCommand,
   parseRadarScoreAdjustmentCommand,
@@ -175,5 +176,76 @@ describe("radar domain", () => {
     expect(() => normalizeRadarTarget("https://staging.media.example/story")).toThrow(
       "Технический поддомен исключён из Радара",
     );
+  });
+});
+
+describe("closestLprChannel — ближайший канал к ЛПР без прямых контактов", () => {
+  const director = {
+    fullName: "Дубынин Дмитрий Геннадьевич",
+    role: "ГЕНЕРАЛЬНЫЙ ДИРЕКТОР",
+    department: "Руководство",
+    email: null,
+    phone: null,
+    profileUrl: null,
+    sourceUrl: "https://egrul.nalog.ru/",
+    evidence: "ЕГРЮЛ: ГЕНЕРАЛЬНЫЙ ДИРЕКТОР: Дубынин Дмитрий Геннадьевич",
+    confidence: "high" as const,
+  };
+  const email = (localPart: string) => ({
+    type: "email" as const,
+    value: `${localPart}@lenta-co.ru`,
+    href: `mailto:${localPart}@lenta-co.ru`,
+    sourceUrl: "https://lenta.ru/contacts",
+    confidence: "high" as const,
+  });
+
+  it("руководству предлагает общий ящик организации", () => {
+    const link = closestLprChannel(director, [
+      email("it"),
+      email("info"),
+      email("pr"),
+    ]);
+    expect(link?.contactValue).toBe("info@lenta-co.ru");
+    expect(link?.rationale).toContain("руководству");
+    expect(link?.confidence).toBe("high");
+  });
+
+  it("коммерческому отделу — коммерческий ящик, а не технический", () => {
+    const link = closestLprChannel(
+      { ...director, role: "КОММЕРЧЕСКИЙ ДИРЕКТОР", department: "Коммерческий отдел" },
+      [email("it"), email("partners")],
+    );
+    expect(link?.contactValue).toBe("partners@lenta-co.ru");
+  });
+
+  it("если профильного ящика нет — берёт первый публичный как точку входа", () => {
+    const link = closestLprChannel(director, [email("support")]);
+    expect(link?.contactValue).toBe("support@lenta-co.ru");
+    expect(link?.rationale).toContain("точка входа");
+  });
+
+  it("без email — телефон, затем страница контактов", () => {
+    const phone = {
+      type: "phone" as const,
+      value: "+7 495 785-17-00",
+      href: "tel:+74957851700",
+      sourceUrl: "https://lenta.ru/contacts",
+      confidence: "high" as const,
+    };
+    expect(closestLprChannel(director, [phone])?.contactType).toBe("phone");
+    const page = {
+      type: "contact_page" as const,
+      value: "Контакты",
+      href: "https://lenta.ru/contacts",
+      sourceUrl: "https://lenta.ru/",
+      confidence: "medium" as const,
+    };
+    expect(closestLprChannel(director, [page])?.contactType).toBe("contact_page");
+  });
+
+  it("у ЛПР с прямым email связь уже есть -> null", () => {
+    expect(
+      closestLprChannel({ ...director, email: "dubinin@lenta-co.ru" }, [email("info")]),
+    ).toBeNull();
   });
 });

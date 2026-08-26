@@ -5,6 +5,7 @@ import type {
   RadarResearchCoverage,
   RadarVideoPageLead,
 } from "@embed-os/contracts";
+import { gunzipSync } from "node:zlib";
 import {
   applyFeedPublicationFrequency,
   applyLegalRegionToGeography,
@@ -175,8 +176,15 @@ export class RadarPageInspector implements RadarInspector {
           page.url,
           200,
         );
+        // Видеоподобные URL из карты сайта проверяем первыми — иначе разделы
+        // /video/ не попадают в лимит доп. страниц и фактор видео пустует.
+        const prioritizedSitemapUrls = [...sitemapUrls].sort((left, right) => {
+          const leftVideo = Number(looksLikeVideoUrl(new URL(left, page.url)));
+          const rightVideo = Number(looksLikeVideoUrl(new URL(right, page.url)));
+          return rightVideo - leftVideo;
+        });
         const pageCandidates = uniqueSameOriginUrls(
-          [...businessUrls, ...sitemapUrls.slice(0, 6), ...feedUrls.slice(0, 4)],
+          [...businessUrls, ...prioritizedSitemapUrls.slice(0, 6), ...feedUrls.slice(0, 4)],
           page.url,
           11,
         ).filter((url) => url !== page.url.toString());
@@ -398,7 +406,12 @@ export class RadarPageInspector implements RadarInspector {
       if (!response) continue;
       const locations = xmlLocations(response.body);
       if (/<sitemapindex\b/i.test(response.body)) {
-        childSitemaps.push(...sameOriginUrls(locations, response.url, pageUrl, 3));
+        // Выделенные видеосайтмапы (…/video/sitemap…) часто глубоко в индексе —
+        // поднимаем их в первые 3, иначе фактор видео остаётся пустым.
+        const prioritized = [...locations].sort(
+          (left, right) => Number(/video/i.test(right)) - Number(/video/i.test(left)),
+        );
+        childSitemaps.push(...sameOriginUrls(prioritized, response.url, pageUrl, 3));
       } else {
         pages.push(
           ...sameOriginUrls(locations, response.url, pageUrl, 200).map((url) => url.toString()),
@@ -447,17 +460,31 @@ export class RadarPageInspector implements RadarInspector {
         maxBytes: RADAR_MAX_RESPONSE_BYTES,
       });
       const contentType = response.headers["content-type"] ?? "";
+      // lenta.ru и другие отдают .gz-сайтмапы как application/octet-stream —
+      // content-type не фильтруем жёстко: битый контент даст пустой парс.
       if (
         response.url.origin !== pageUrl.origin ||
         response.status < 200 ||
         response.status >= 300 ||
-        (contentType && !/xml|rss|atom/i.test(contentType))
+        (contentType && !/xml|rss|atom|gzip|octet-stream/i.test(contentType))
       )
         return null;
-      return { url: response.url, body: response.body.toString("utf8") };
+      return { url: response.url, body: this.decodeXmlBody(response.body) };
     } catch {
       return null;
     }
+  }
+
+  /** Многие сайты отдают sitemap только в gzip (…xml.gz) — распознаём по магии. */
+  private decodeXmlBody(body: Buffer): string {
+    if (body.length > 2 && body[0] === 0x1f && body[1] === 0x8b) {
+      try {
+        return gunzipSync(body).toString("utf8");
+      } catch {
+        // Битый gzip — вернём как есть: парсер тегов вернёт пусто.
+      }
+    }
+    return body.toString("utf8");
   }
 
   private observation(

@@ -3387,6 +3387,29 @@ td {
   font-size: 8px;
   overflow-wrap: anywhere;
 }
+.radar-lpr-channel-link {
+  display: grid;
+  gap: 3px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-weak, rgba(15, 23, 42, 0.1));
+  border-radius: 8px;
+  background: rgba(88, 101, 242, 0.05);
+  font-size: 9px;
+}
+.radar-lpr-channel-link b {
+  font-size: 9px;
+}
+.radar-lpr-channel-link a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
+.radar-lpr-channel-link small {
+  color: var(--muted, #64748b);
+}
 .radar-outreach-package {
   display: grid;
   gap: 9px;

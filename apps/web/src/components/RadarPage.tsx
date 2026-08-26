@@ -30,6 +30,7 @@ import {
   type RadarRejectReasonCode,
   type RadarScoreFactor,
 } from "@embed-os/contracts";
+import { closestLprChannel } from "@embed-os/domain";
 import {
   ApiError,
   adjustRadarCandidateScore,
@@ -1403,6 +1404,35 @@ function WorkBrief({
                     </a>
                   ) : null}
                 </div>
+                {person.email || person.phone ? null : (() => {
+                  const channel = closestLprChannel(person, research.contacts);
+                  return channel ? (
+                    <div className="radar-lpr-channel-link">
+                      <b>Ближайший канал</b>{" "}
+                      {channel.contactType === "email" ? (
+                        <a href={`mailto:${channel.contactValue}`}>
+                          <Mail size={12} />
+                          {channel.contactValue}
+                        </a>
+                      ) : channel.contactType === "phone" ? (
+                        <a href={`tel:${channel.contactValue}`}>
+                          <Phone size={12} />
+                          {channel.contactValue}
+                        </a>
+                      ) : channel.contactHref ? (
+                        <a href={channel.contactHref} target="_blank" rel="noreferrer">
+                          <ExternalLink size={12} />
+                          {channel.contactValue}
+                        </a>
+                      ) : (
+                        <span>{channel.contactValue}</span>
+                      )}
+                      <small>
+                        {channel.rationale} · {confidenceLabel(channel.confidence)}
+                      </small>
+                    </div>
+                  ) : null;
+                })()}
                 <small>
                   {confidenceLabel(person.confidence)} ·{" "}
                   <a href={person.sourceUrl} target="_blank" rel="noreferrer">

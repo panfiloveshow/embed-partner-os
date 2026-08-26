@@ -615,6 +615,19 @@ export interface RadarDecisionMakerLead {
   confidence: RadarConfidence;
 }
 
+/**
+ * Ближайший доступный канал связи к ЛПР, у которого нет прямых контактов
+ * (например, руководитель из ЕГРЮЛ). Подбирается по соответствию отдела/роли
+ * и локальной части публичных email организации.
+ */
+export interface RadarLprChannelLink {
+  contactType: "email" | "phone" | "telegram" | "contact_page";
+  contactValue: string;
+  contactHref: string | null;
+  rationale: string;
+  confidence: RadarConfidence;
+}
+
 export interface RadarVideoPageLead {
   pageUrl: string;
   label: string;

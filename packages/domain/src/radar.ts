@@ -3,7 +3,10 @@ import {
   type CreateRadarCandidateCommand,
   type RadarCandidateDecisionCommand,
   type RadarCandidateFeatures,
+  type RadarContactLead,
+  type RadarDecisionMakerLead,
   type RadarEvidence,
+  type RadarLprChannelLink,
   type RadarRejectReasonCode,
   type RadarScore,
   type RadarScoreAdjustmentCommand,
@@ -11,6 +14,109 @@ import {
   type RadarTrafficEstimate,
 } from "@embed-os/contracts";
 import { DomainRuleError } from "./task-completion.js";
+
+/**
+ * Предпочтительные локальные части email по отделам ЛПР — «тропа» к нужному
+ * человеку через функциональный ящик организации. Порядок = приоритет.
+ */
+const DEPARTMENT_EMAIL_HINTS: Array<{ match: RegExp; localParts: string[]; rationale: string }> = [
+  {
+    match: /руководств|генеральн|директор/i,
+    localParts: ["info", "office", "welcome", "hello", "pr", "press"],
+    rationale: "Общий ящик организации — стандартный путь к руководству",
+  },
+  {
+    match: /коммерч|партнёр|партнер|продаж|развития бизнеса/i,
+    localParts: ["partner", "partners", "sale", "sales", "commerce", "commercial", "bizdev", "adv", "media", "reklama"],
+    rationale: "Ящик коммерческой службы — профильная тропа к партнёрским решениям",
+  },
+  {
+    match: /pr|пресс|маркет|реклам/i,
+    localParts: ["pr", "press", "marketing", "smm", "media"],
+    rationale: "Пресс-служба / маркетинг — профильный канал по рекламным вопросам",
+  },
+  {
+    match: /технич|it|инженер|разраб/i,
+    localParts: ["it", "tech", "dev", "support", "admin", "hostmaster"],
+    rationale: "Технический ящик — профильный канал по интеграции",
+  },
+  {
+    match: /редакц|видео|контент|новост/i,
+    localParts: ["editor", "editors", "news", "redak", "video", "content", "media"],
+    rationale: "Ящик редакции — профильный канал по контенту",
+  },
+];
+
+const FALLBACK_LOCAL_PARTS = ["info", "office", "pr", "contact"];
+
+function emailLocalPart(value: string): string {
+  return value.split("@", 1)[0]?.toLocaleLowerCase("ru-RU") ?? "";
+}
+
+/**
+ * Ближайший доступный канал к ЛПР без прямых контактов: подбирает
+ * функциональный email/телефон/страницу контактов по отделу и локальной части
+ * ящика. Если у ЛПР есть прямой email/телефон — null (связь уже есть).
+ */
+export function closestLprChannel(
+  person: RadarDecisionMakerLead,
+  contacts: RadarContactLead[],
+): RadarLprChannelLink | null {
+  if (person.email || person.phone) return null;
+
+  const department = person.department ?? person.role ?? "";
+  const hints = DEPARTMENT_EMAIL_HINTS.filter(({ match }) => match.test(department));
+  const preferred =
+    hints.length > 0 ? hints.flatMap(({ localParts }) => localParts) : FALLBACK_LOCAL_PARTS;
+
+  const emails = contacts.filter(({ type }) => type === "email");
+  const scored = emails
+    .map((contact) => {
+      const localPart = emailLocalPart(contact.value);
+      const hintIndex = preferred.indexOf(localPart);
+      const partial = preferred.findIndex((part) => localPart.startsWith(part));
+      const rank = hintIndex >= 0 ? hintIndex : partial >= 0 ? 100 + partial : 1_000;
+      return { contact, rank };
+    })
+    .sort((left, right) => left.rank - right.rank);
+  const bestEmail = scored[0]?.contact;
+  if (bestEmail) {
+    const matchedHint = hints.find(({ localParts }) => {
+      const localPart = emailLocalPart(bestEmail.value);
+      return localParts.includes(localPart) || localParts.some((part) => localPart.startsWith(part));
+    });
+    return {
+      contactType: "email",
+      contactValue: bestEmail.value,
+      contactHref: bestEmail.href,
+      rationale: matchedHint?.rationale ?? "Единственный публичный ящик — точка входа к ЛПР",
+      confidence: bestEmail.confidence,
+    };
+  }
+
+  const phone = contacts.find(({ type }) => type === "phone");
+  if (phone)
+    return {
+      contactType: "phone",
+      contactValue: phone.value,
+      contactHref: phone.href,
+      rationale: "Общий телефон организации — уточнить ЛПР у секретариата",
+      confidence: "medium",
+    };
+
+  const contactPage = contacts.find(({ type }) => type === "contact_page");
+  if (contactPage)
+    return {
+      contactType: "contact_page",
+      contactValue: contactPage.value,
+      contactHref: contactPage.href,
+      rationale: "Страница контактов — выбрать ответственного за видеонаправление",
+      confidence: "low",
+    };
+
+  return null;
+}
+
 
 /**
  * v2: the player evidence is split into two features — "a video player is
