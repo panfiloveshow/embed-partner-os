@@ -7,33 +7,38 @@ import type { TrafficHttpReader } from "./radar-traffic-provider.js";
  * Бесплатный провайдер оценки трафика на основе открытого рейтинга Tranco
  * (tranco-list.eu) — агрегированного глобального рейтинга доменов по трафику.
  *
- * Что даёт честно: ФАКТИЧЕСКИЙ глобальный ранг домена (если входит в список)
+ * Что даёт честно: ФАКТИЧЕСКИЙ глобальный ранг домена (свежий дневной список)
  * и порядок величины месячных визитов широкой полосой. Это не панельные данные
  * уровня Similarweb — значение помечается провайдером "Tranco (ранг)", чтобы
  * менеджер понимал природу оценки. Домены вне топ-листа -> null («нет данных»).
  *
- * Список кэшируется в памяти процесса на RADAR_TRANKO_TTL_DAYS дней
- * (по умолчанию 7): два HTTP-запроса на обновление, дальше только поиск.
+ * С апреля 2026 Tranco отдаёт ранги через эндпоинт
+ * GET https://tranco-list.eu/api/ranks/domain/{domain}
+ * (ответ: {"ranks":[{"date":"YYYY-mm-dd","rank":N}, …], "domain":"…"} —
+ * дневные списки за последние ~30 дней; лимит 1 запрос/сек). Старый формат
+ * «скачать весь список целиком» больше не поддерживается их API.
+ *
+ * Ответ по домену кэшируется в памяти процесса на RADAR_TRANKO_TTL_DAYS дней
+ * (по умолчанию 7); негативный ответ («домена нет в списке») кэшируется так же,
+ * чтобы повторные проверки не тратили лимит запросов.
  */
 
 export interface TrancoProviderConfig {
   enabled: boolean;
-  /** Коды стран для фильтра списка через запятую ("ru", "ru,kz"); пусто = весь мир. */
-  countries?: string;
-  /** Сколько строк списка загружать (место в списке = верхняя граница охвата). */
-  limit?: number;
+  /** Сколько дней кэшировать ответ по домену (по умолчанию 7). */
   ttlDays?: number;
-  timeoutMs?: number;
+  /** Минимальный интервал между запросами к API (мс; лимит Tranco 1/сек). */
+  minRequestIntervalMs?: number;
 }
 
-interface CachedList {
+interface CachedRank {
   fetchedAt: number;
-  /** domain -> место в рейтинге (1 = самый посещаемый). */
-  ranks: Map<string, number>;
+  /** null = домен вне списка (негативный ответ кэшируется наравне с рангом). */
+  rank: number | null;
 }
 
-const DEFAULT_LIMIT = 300_000;
 const DEFAULT_TTL_DAYS = 7;
+const DEFAULT_MIN_REQUEST_INTERVAL_MS = 1_100;
 const DAY_MS = 24 * 60 * 60_000;
 
 /**
@@ -65,17 +70,55 @@ function normalizeHost(host: string): string {
   return trimmed.startsWith("www.") ? trimmed.slice(4) : trimmed;
 }
 
+interface RankEntry {
+  date: string;
+  rank: number;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Разбирает ответ /ranks/domain и выбирает ранг самой свежей даты. */
+export function pickLatestRank(body: string): number | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return null;
+  }
+  if (!isRecord(parsed) || !Array.isArray(parsed.ranks)) return null;
+  const entries: RankEntry[] = parsed.ranks.flatMap((item) => {
+    if (!isRecord(item)) return [];
+    const date = typeof item.date === "string" ? item.date.slice(0, 10) : "";
+    const rank =
+      typeof item.rank === "number" && Number.isInteger(item.rank) && item.rank >= 1
+        ? item.rank
+        : null;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || rank === null) return [];
+    return [{ date, rank }];
+  });
+  if (entries.length === 0) return null;
+  let latest: RankEntry | undefined;
+  for (const entry of entries) {
+    if (!latest || entry.date > latest.date) latest = entry;
+  }
+  return latest?.rank ?? null;
+}
+
 export class TrancoTrafficProvider {
-  private readonly cache = new Map<string, CachedList>();
-  private readonly limit: number;
+  private readonly cache = new Map<string, CachedRank>();
   private readonly ttlMs: number;
+  private readonly minRequestIntervalMs: number;
+  private lastRequestAt = 0;
 
   constructor(
     private readonly config: TrancoProviderConfig,
     private readonly http: TrafficHttpReader = new SafeHttpClient(),
   ) {
-    this.limit = config.limit ?? DEFAULT_LIMIT;
     this.ttlMs = (config.ttlDays ?? DEFAULT_TTL_DAYS) * DAY_MS;
+    this.minRequestIntervalMs =
+      config.minRequestIntervalMs ?? DEFAULT_MIN_REQUEST_INTERVAL_MS;
   }
 
   /**
@@ -85,16 +128,27 @@ export class TrancoTrafficProvider {
   async estimate(host: string, measuredAt: Date): Promise<RadarTrafficEstimate | null> {
     const normalized = normalizeHost(host);
     if (!normalized) return null;
-    let ranks: Map<string, number>;
+
+    const cached = this.cache.get(normalized);
+    if (cached && Date.now() - cached.fetchedAt < this.ttlMs) {
+      return cached.rank === null ? null : this.toEstimate(cached.rank, measuredAt);
+    }
+
+    let rank: number | null;
     try {
-      ranks = await this.ensureList();
+      await this.throttle();
+      rank = await this.fetchDomainRank(normalized);
     } catch {
-      // Список недоступен (сеть/лимиты API) -> честно «нет данных»,
-      // а не падение инспекции Радара.
+      // API недоступен (сеть/лимиты) -> честно «нет данных»,
+      // а не падение инспекции Радара. Негативный результат НЕ кэшируем:
+      // следующая проверка попробует снова.
       return null;
     }
-    const rank = ranks.get(normalized);
-    if (!rank) return null;
+    this.cache.set(normalized, { fetchedAt: Date.now(), rank });
+    return rank === null ? null : this.toEstimate(rank, measuredAt);
+  }
+
+  private toEstimate(rank: number, measuredAt: Date): RadarTrafficEstimate | null {
     const band = rankToMonthlyVisitsBand(rank);
     if (!band) return null;
     return {
@@ -105,55 +159,25 @@ export class TrancoTrafficProvider {
     };
   }
 
-  /** Загружает/освежает список при устаревании кэша; потокобезопасно по факту. */
-  private async ensureList(): Promise<Map<string, number>> {
-    const cached = this.cache.get("list");
-    if (cached && Date.now() - cached.fetchedAt < this.ttlMs) return cached.ranks;
-
-    const listId = await this.fetchLatestListId();
-    const rows = await this.downloadRows(listId);
-    const ranks = new Map<string, number>();
-    for (let index = 0; index < rows.length; index += 1) {
-      const line = rows[index]?.trim() ?? "";
-      if (!line) continue;
-      const commaIndex = line.indexOf(",");
-      if (commaIndex === -1) continue;
-      const rankNum = Number(line.slice(0, commaIndex));
-      const domain = line.slice(commaIndex + 1).trim().toLowerCase();
-      if (!domain || !Number.isInteger(rankNum) || rankNum < 1) continue;
-      if (!ranks.has(domain)) ranks.set(domain, rankNum);
-    }
-    this.cache.set("list", { fetchedAt: Date.now(), ranks });
-    return ranks;
+  /** Лимит Tranco — 1 запрос/сек: выдерживаем интервал между запросами. */
+  private async throttle(): Promise<void> {
+    if (this.minRequestIntervalMs <= 0) return;
+    const wait = this.lastRequestAt + this.minRequestIntervalMs - Date.now();
+    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+    this.lastRequestAt = Date.now();
   }
 
-  private async fetchLatestListId(): Promise<string> {
-    const response = await this.http.get(
-      `https://tranco-list.eu/api/lists/date/daily?limit=${this.limit}`,
-    );
+  /**
+   * Ранг домена в свежем дневном списке либо null, если домена нет в списке
+   * (пустой массив ranks или 404). Любой другой не-2xx — исключение.
+   */
+  private async fetchDomainRank(domain: string): Promise<number | null> {
+    const url = `https://tranco-list.eu/api/ranks/domain/${encodeURIComponent(domain)}`;
+    const response = await this.http.get(url);
+    if (response.status === 404) return null;
     if (response.status < 200 || response.status >= 300) {
-      throw new Error(`Tranco list-id HTTP ${response.status}`);
+      throw new Error(`Tranco ranks HTTP ${response.status}`);
     }
-    const parsed: unknown = JSON.parse(response.body.toString("utf8"));
-    const id =
-      typeof parsed === "object" && parsed !== null
-        ? (parsed as { list_id?: unknown }).list_id
-        : undefined;
-    if (typeof id !== "string" || !id.trim()) throw new Error("Tranco list_id is empty");
-    return id.trim();
-  }
-
-  private async downloadRows(listId: string): Promise<string[]> {
-    const params = new URLSearchParams({ limit: String(this.limit) });
-    if (this.config.countries?.trim()) {
-      params.set("countries", this.config.countries.trim());
-    }
-    const response = await this.http.get(
-      `https://tranco-list.eu/api/lists/download/id/${encodeURIComponent(listId)}?${params}`,
-    );
-    if (response.status < 200 || response.status >= 300) {
-      throw new Error(`Tranco download HTTP ${response.status}`);
-    }
-    return response.body.toString("utf8").split("\n");
+    return pickLatestRank(response.body.toString("utf8"));
   }
 }

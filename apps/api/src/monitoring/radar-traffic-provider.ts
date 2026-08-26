@@ -55,8 +55,6 @@ export function trafficProviderFromEnvironment(): RadarTrafficProvider | null {
   if ((process.env.RADAR_TRANKO_ENABLED ?? "").trim() === "1") {
     return new TrancoTrafficProvider({
       enabled: true,
-      countries: process.env.RADAR_TRANKO_COUNTRIES?.trim() || undefined,
-      limit: Number(process.env.RADAR_TRANKO_LIMIT) || undefined,
       ttlDays: Number(process.env.RADAR_TRANKO_TTL_DAYS) || undefined,
     });
   }

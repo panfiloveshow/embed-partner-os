@@ -193,6 +193,32 @@ describe("Radar page feature extraction", () => {
     });
   });
 
+  it("принимает оценку трафика из инспекции и не теряет её при повторном мерже", () => {
+    const current = emptyRadarFeatures({
+      name: "Площадка",
+      url: "https://example.ru/",
+      source: "Ручной поиск",
+    });
+    const estimate = {
+      provider: "Tranco (оценка по рангу)",
+      measuredAt: "2026-08-26T05:00:29.401Z",
+      confidence: "low" as const,
+      minMonthlyVisits: 3_000_000,
+      maxMonthlyVisits: 20_000_000,
+    };
+
+    // Регрессия RADAR-traffic: mergeRadarFeatures брал только current.trafficEstimate
+    // и молча выбрасывал оценку, полученную инспекцией (фактор «Оценка охвата»
+    // оставался 0/22 даже при работающем провайдере).
+    const merged = mergeRadarFeatures(current, { trafficEstimate: estimate });
+    expect(merged.trafficEstimate).toEqual(estimate);
+
+    // Повторный мерж поверх кандидата с уже сохранённой оценкой её не подменяет.
+    expect(mergeRadarFeatures(merged, { trafficEstimate: null }).trafficEstimate).toEqual(
+      estimate,
+    );
+  });
+
   it("raises newly discovered LPR and video growth as reasons to act now", () => {
     const previous = extractRadarPageFeatures(
       "<html><body><p>Архив публикаций</p></body></html>",

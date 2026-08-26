@@ -432,7 +432,10 @@ export function mergeRadarFeatures(
       current.estimatedVideoPagesMin ?? extracted.estimatedVideoPagesMin ?? null,
     estimatedVideoPagesMax:
       current.estimatedVideoPagesMax ?? extracted.estimatedVideoPagesMax ?? null,
-    trafficEstimate: current.trafficEstimate,
+    // Оценка трафика: сохраняем прежнюю, если была; иначе принимаем свежую
+    // из инспекции (Tranco/Similarweb). Не переносить в candidate.features
+    // значение инспекции нельзя — Радар терял фактор «Оценка охвата» целиком.
+    trafficEstimate: current.trafficEstimate ?? extracted.trafficEstimate ?? null,
   };
 }
 
