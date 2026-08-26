@@ -8,3 +8,7 @@ playwright-report/
 test-results/
 output/playwright/
 .playwright-cli/
+backups/
+
+# локальные креды БД для backup/restore-скриптов
+scripts/.database-url

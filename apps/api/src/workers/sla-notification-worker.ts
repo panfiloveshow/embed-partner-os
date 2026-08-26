@@ -7,18 +7,17 @@ import {
   SLA_NOTIFICATION_EVENTS,
   SlaNotificationWebhookPublisher,
 } from "../notifications/sla-notification-publisher.js";
+import {
+  TelegramOutboxPublisher,
+  formatSlaEnvelopeText,
+} from "../notifications/telegram-publisher.js";
+import type { OutboxPublisher } from "../outbox/outbox-relay.service.js";
 
 async function bootstrap() {
   requirePostgresMode();
   const prisma = new PrismaClient();
   const abort = shutdownController();
-  const publisher = new SlaNotificationWebhookPublisher({
-    webhookUrl: requiredSetting("SLA_NOTIFICATION_WEBHOOK_URL"),
-    publicAppUrl: requiredSetting("PUBLIC_APP_URL"),
-    escalationRecipients: recipients(requiredSetting("SLA_ESCALATION_RECIPIENTS")),
-    webhookSecret: requiredSetting("SLA_NOTIFICATION_WEBHOOK_SECRET"),
-    timeoutMs: integerSetting("SLA_NOTIFICATION_TIMEOUT_MS", 10_000, 100, 60_000),
-  });
+  const publisher = buildSlaPublisher();
   const workerId =
     process.env.SLA_NOTIFICATION_WORKER_ID?.trim() ||
     `${hostname()}:${process.pid}:sla-notification`;
@@ -83,6 +82,33 @@ function requirePostgresMode() {
   if (process.env.PERSISTENCE_MODE !== "postgres") {
     throw new Error("SLA notification worker requires PERSISTENCE_MODE=postgres");
   }
+}
+
+/**
+ * Выбор канала доставки: SLA_NOTIFICATION_CHANNEL=telegram отправляет
+ * сообщения через Telegram Bot API (TELEGRAM_BOT_TOKEN +
+ * SLA_NOTIFICATION_TELEGRAM_CHAT_ID); значение по умолчанию — прежний
+ * подписанный webhook-шлюз.
+ */
+function buildSlaPublisher(): OutboxPublisher {
+  const timeoutMs = integerSetting("SLA_NOTIFICATION_TIMEOUT_MS", 10_000, 100, 60_000);
+  if ((process.env.SLA_NOTIFICATION_CHANNEL ?? "").trim() === "telegram") {
+    return new TelegramOutboxPublisher(
+      {
+        botToken: requiredSetting("TELEGRAM_BOT_TOKEN"),
+        chatId: requiredSetting("SLA_NOTIFICATION_TELEGRAM_CHAT_ID"),
+        timeoutMs,
+      },
+      formatSlaEnvelopeText,
+    );
+  }
+  return new SlaNotificationWebhookPublisher({
+    webhookUrl: requiredSetting("SLA_NOTIFICATION_WEBHOOK_URL"),
+    publicAppUrl: requiredSetting("PUBLIC_APP_URL"),
+    escalationRecipients: recipients(requiredSetting("SLA_ESCALATION_RECIPIENTS")),
+    webhookSecret: requiredSetting("SLA_NOTIFICATION_WEBHOOK_SECRET"),
+    timeoutMs,
+  });
 }
 
 function shutdownController() {

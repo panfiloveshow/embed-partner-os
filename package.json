@@ -1,6 +1,6 @@
 {
   "name": "embed-partner-os",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -17,6 +17,7 @@
     "worker:sla-notification": "npm run worker:sla-notification -w @embed-os/api",
     "worker:radar-recheck": "npm run worker:radar-recheck -w @embed-os/api",
     "worker:radar-sourcing": "npm run worker:radar-sourcing -w @embed-os/api",
+    "worker:outbox-relay": "npm run worker:outbox-relay -w @embed-os/api",
     "radar:calibration": "npm run radar:calibration -w @embed-os/api",
     "build": "npm run build:packages && npm run build -w @embed-os/api && npm run build -w @embed-os/web",
     "db:validate": "npm run prisma:validate -w @embed-os/api",

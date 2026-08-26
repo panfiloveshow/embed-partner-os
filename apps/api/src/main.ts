@@ -54,8 +54,11 @@ async function bootstrap() {
   }
 
   const port = Number(process.env.PORT ?? 3000);
-  await app.listen(port, "127.0.0.1");
-  console.log(`Embed Partner OS API: http://127.0.0.1:${port}/api/v1`);
+  // 127.0.0.1 по умолчанию для локальной разработки; в Docker/проде
+  // задаётся HOST=0.0.0.0 (см. compose.prod.yaml).
+  const host = process.env.HOST?.trim() || "127.0.0.1";
+  await app.listen(port, host);
+  console.log(`Embed Partner OS API: http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${port}/api/v1`);
   if (!isProduction) {
     console.log(`OpenAPI UI: http://127.0.0.1:${port}/api/docs`);
   }

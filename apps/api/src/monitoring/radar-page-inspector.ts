@@ -3,14 +3,18 @@ import type {
   RadarDetectedPlayer,
   RadarEvidenceStatus,
   RadarResearchCoverage,
+  RadarVideoPageLead,
 } from "@embed-os/contracts";
 import {
+  applyLegalRegionToGeography,
   enrichRadarResearchWithDetectedPlayers,
   extractRadarPageFeatures,
   findRadarResearchLinks,
+  looksLikeVideoUrl,
   mergeRadarPageExtractions,
   type RadarPageFeatureExtraction,
-} from "./radar-feature-extractor.js";
+  } from "./radar-feature-extractor.js";
+  import { enrichResearchWithLegalEntity } from "./legal-entity-enrichment.js";
 import {
   detectPlayersInHtml,
   toRadarDetectedPlayers,
@@ -159,6 +163,9 @@ export class RadarPageInspector implements RadarInspector {
           .slice(0, 2);
         const sitemapUrls = await this.readSitemapPages(declaredSitemaps, page.url, robotsSource);
         const feedUrls = await this.readFeedPages(declaredFeeds, page.url);
+        // Видеостраницы из карты сайта: дешёвое (без дополнительных запросов)
+        // расширение оценки «объём страниц с видео».
+        const sitemapVideoLeads = sitemapVideoPageLeads(sitemapUrls, page.url);
         const discoveredUrls = uniqueSameOriginUrls(
           [page.url.toString(), ...businessUrls, ...sitemapUrls, ...feedUrls],
           page.url,
@@ -225,7 +232,18 @@ export class RadarPageInspector implements RadarInspector {
             // Provider failures do not turn a valid page inspection into an error.
           }
         }
-        const extraction = mergeRadarPageExtractions(extractions, trafficEstimate, coverage);
+        let extraction = mergeRadarPageExtractions(
+          extractions,
+          trafficEstimate,
+          coverage,
+          sitemapVideoLeads,
+        );
+        // Обогащение по реквизитам: ЕГРЮЛ (ФНС) + руководитель (DaData).
+        extraction.research = await enrichResearchWithLegalEntity(extraction.research, {
+          dadataApiKey: process.env.DADATA_API_KEY ?? null,
+        });
+        // Регион из официального адреса ФНС -> фактор «Целевая география».
+        extraction = applyLegalRegionToGeography(extraction);
         // Fresh RSS articles are the most likely places to carry an embedded
         // player; without a feed we fall back to the checked business pages.
         const l1Candidates = [
@@ -245,7 +263,13 @@ export class RadarPageInspector implements RadarInspector {
           // Provider failures do not turn a valid page inspection into an error.
         }
       }
-      const extraction = mergeRadarPageExtractions(extractions, trafficEstimate);
+      let extraction = mergeRadarPageExtractions(extractions, trafficEstimate);
+      // Обогащение по реквизитам: ЕГРЮЛ (ФНС) + руководитель (DaData).
+      extraction.research = await enrichResearchWithLegalEntity(extraction.research, {
+        dadataApiKey: process.env.DADATA_API_KEY ?? null,
+      });
+      // Регион из официального адреса ФНС -> фактор «Целевая география».
+      extraction = applyLegalRegionToGeography(extraction);
       return this.finalize(page, checkedAt, html, extraction, staticDetections, [
         page.url.toString(),
       ]);
@@ -458,6 +482,36 @@ function addDetections(target: Map<string, PlayerDetection>, detections: PlayerD
   for (const detection of detections) {
     if (!target.has(detection.vendor)) target.set(detection.vendor, detection);
   }
+}
+
+/** Видеостраницы, найденные в карте сайта (без дополнительных запросов). */
+export function sitemapVideoPageLeads(
+  sitemapUrls: string[],
+  pageUrl: URL,
+  limit = 200,
+): RadarVideoPageLead[] {
+  const leads: RadarVideoPageLead[] = [];
+  const seen = new Set<string>();
+  for (const raw of sitemapUrls) {
+    try {
+      const url = new URL(raw);
+      url.hash = "";
+      if (!looksLikeVideoUrl(url)) continue;
+      const key = url.toString();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      leads.push({
+        pageUrl: key,
+        label: url.pathname,
+        sourceUrl: pageUrl.toString(),
+        confidence: "low",
+      });
+    } catch {
+      // Malformed sitemap entries are skipped.
+    }
+    if (leads.length >= limit) break;
+  }
+  return leads;
 }
 
 /**

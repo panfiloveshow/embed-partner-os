@@ -24,9 +24,29 @@ import {
   type OidcTokenVerifierPort,
 } from "./oidc-token-verifier.js";
 
+import { AUTH_MODE_LOCAL_PASSWORD } from "./auth-base.js";
+import { verifyLocalSessionToken } from "./local-auth.js";
+
 export const ACTOR_IDENTITY = Symbol("ACTOR_IDENTITY");
 const REQUIRED_PERMISSION = "access-control:required-permission";
-const PUBLIC_ROUTE = "access-control:public-route";
+
+// Базовые ошибки и PublicRoute вынесены в auth-base.ts (разрыв цикла
+// импортов); импортируем для внутреннего использования и реэкспортируем,
+// чтобы существующие внешние импорты не менялись.
+import {
+  AccessPermissionDeniedError,
+  AuthenticationRequiredError,
+  IdentityConfigurationError,
+  PUBLIC_ROUTE,
+  PublicRoute,
+} from "./auth-base.js";
+export {
+  AccessPermissionDeniedError,
+  AuthenticationRequiredError,
+  IdentityConfigurationError,
+  PublicRoute,
+};
+
 const BOOTSTRAP_SUBJECT = "bootstrap:anna.sokolova";
 
 export type ActorContext = SessionPayload;
@@ -41,35 +61,6 @@ export interface ActorIdentityPort {
 
 export const RequirePermission = (permission: ActorPermission) =>
   SetMetadata(REQUIRED_PERMISSION, permission);
-
-export const PublicRoute = () => SetMetadata(PUBLIC_ROUTE, true);
-
-export class AuthenticationRequiredError extends Error {
-  readonly code = "AUTHENTICATION_REQUIRED";
-
-  constructor(message = "Требуется корпоративная учётная запись") {
-    super(message);
-    this.name = "AuthenticationRequiredError";
-  }
-}
-
-export class IdentityConfigurationError extends Error {
-  readonly code = "IDENTITY_CONFIGURATION_ERROR";
-
-  constructor(message = "В production настройте AUTH_MODE=trusted_proxy или AUTH_MODE=oidc_jwt") {
-    super(message);
-    this.name = "IdentityConfigurationError";
-  }
-}
-
-export class AccessPermissionDeniedError extends Error {
-  readonly code = "ACCESS_PERMISSION_DENIED";
-
-  constructor(readonly permission: ActorPermission) {
-    super(`Нет разрешения ${permission}`);
-    this.name = "AccessPermissionDeniedError";
-  }
-}
 
 @Injectable()
 export class ActorIdentityService implements ActorIdentityPort {
@@ -220,6 +211,12 @@ export async function resolveRequestSubject(
     }
   }
 
+  if (mode === AUTH_MODE_LOCAL_PASSWORD) {
+    const token = bearerToken(request.headers.authorization);
+    if (!token) throw new AuthenticationRequiredError();
+    return validateSubject(await verifyLocalSessionToken(token));
+  }
+
   const rawHeader = request.headers["x-embed-actor"];
   const supplied = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader;
   if (mode === "trusted_proxy") {
@@ -248,9 +245,10 @@ function authenticationMode(environment: NodeJS.ProcessEnv) {
     }
     return configured;
   }
+  if (configured === AUTH_MODE_LOCAL_PASSWORD) return configured;
   if (configured === "trusted_proxy" || configured === "oidc_jwt") return configured;
   throw new IdentityConfigurationError(
-    "AUTH_MODE должен быть development, trusted_proxy или oidc_jwt",
+    "AUTH_MODE должен быть development, trusted_proxy, oidc_jwt или local_password",
   );
 }
 

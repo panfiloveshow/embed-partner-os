@@ -25,6 +25,7 @@ import type {
   PartnerCardPayload,
   PartnerIntegrationStatus,
   PartnerRegistryPayload,
+  SenderProfilePayload,
   CreateRadarCandidateCommand,
   RadarCandidate,
   RadarCandidateDecisionCommand,
@@ -97,6 +98,32 @@ export class ApiError extends Error {
     super(problem.detail);
     this.name = "ApiError";
   }
+}
+
+export interface LocalLoginResponse {
+  accessToken: string;
+  tokenType: "Bearer";
+  expiresInSeconds: number;
+}
+
+/**
+ * Вход по логину/паролю для режима встроенной аутентификации. Эндпоинт
+ * публичный: запрос идёт без Bearer-токена и не триггерит обработчик
+ * «корпоративная сессия истекла» при ошибке 401.
+ */
+export async function loginWithPassword(
+  email: string,
+  password: string,
+  signal?: AbortSignal,
+): Promise<LocalLoginResponse> {
+  const response = await fetch(`${apiBase}/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email, password }),
+    signal,
+  });
+  if (!response.ok) throw new ApiError(await readProblem(response));
+  return (await response.json()) as LocalLoginResponse;
 }
 
 export async function fetchToday(signal?: AbortSignal): Promise<TodayPayload> {
@@ -209,6 +236,20 @@ export async function fetchPartnerCard(
 
 export async function fetchRadar(signal?: AbortSignal): Promise<RadarPayload> {
   return request<RadarPayload>("/radar/candidates", { signal });
+}
+
+export async function fetchSenderProfile(signal?: AbortSignal): Promise<SenderProfilePayload> {
+  return request<SenderProfilePayload>("/settings/sender-profile", { signal });
+}
+
+export async function saveSenderProfile(
+  profile: SenderProfilePayload,
+): Promise<SenderProfilePayload> {
+  return request<SenderProfilePayload>("/settings/sender-profile", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(profile),
+  });
 }
 
 export async function createRadarCandidate(

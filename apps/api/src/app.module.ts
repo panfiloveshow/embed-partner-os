@@ -33,7 +33,19 @@ import { RadarService } from "./radar.service.js";
 import { RADAR_INSPECTOR, RadarPageInspector } from "./monitoring/radar-page-inspector.js";
 import { RADAR_PAGE_RENDERER, type RadarPageRenderer } from "./monitoring/radar-page-renderer.js";
 import { playwrightPageRendererFromEnvironment } from "./monitoring/playwright-page-renderer.js";
-import { trafficProviderFromEnvironment } from "./monitoring/radar-traffic-provider.js";
+import {
+  RADAR_TRAFFIC_STATUS,
+  trafficProviderFromEnvironment,
+  trafficStatusFromEnvironment,
+} from "./monitoring/radar-traffic-provider.js";
+import { RadarInlineInspectionService } from "./monitoring/radar-inline-inspection.js";
+import { HealthController } from "./health.controller.js";
+import {
+  AuthController,
+  LOCAL_CREDENTIALS,
+  LocalAdminBootstrapService,
+  LocalCredentialsService,
+} from "./auth/local-auth.js";
 import { PostgresRadarService } from "./persistence/postgres-radar.service.js";
 import { PartnerController } from "./partner.controller.js";
 import { PARTNER_PORT } from "./partner.port.js";
@@ -45,6 +57,10 @@ import { SlaSettingsController } from "./sla-settings.controller.js";
 import { SLA_SETTINGS_PORT } from "./sla-settings.port.js";
 import { SlaSettingsService } from "./sla-settings.service.js";
 import { PostgresSlaSettingsService } from "./persistence/postgres-sla-settings.service.js";
+import { SenderProfileController } from "./sender-profile.controller.js";
+import { SENDER_PROFILE_PORT } from "./sender-profile.port.js";
+import { SenderProfileService } from "./sender-profile.service.js";
+import { PostgresSenderProfileService } from "./persistence/postgres-sender-profile.service.js";
 import { EnvironmentOidcTokenVerifier, OIDC_TOKEN_VERIFIER } from "./auth/oidc-token-verifier.js";
 import { AccessAdministrationController } from "./access-administration.controller.js";
 import { AccessAdministrationService } from "./access-administration.service.js";
@@ -64,7 +80,10 @@ import { PersistenceActorService } from "./persistence/persistence-actor.service
     PartnerController,
     SessionController,
     SlaSettingsController,
+    SenderProfileController,
     AccessAdministrationController,
+    HealthController,
+    AuthController,
   ],
   providers: [
     TodayService,
@@ -85,6 +104,8 @@ import { PersistenceActorService } from "./persistence/persistence-actor.service
     PostgresPartnerService,
     SlaSettingsService,
     PostgresSlaSettingsService,
+    SenderProfileService,
+    PostgresSenderProfileService,
     AccessAdministrationService,
     EnvironmentOidcTokenVerifier,
     ActorIdentityService,
@@ -123,6 +144,17 @@ import { PersistenceActorService } from "./persistence/persistence-actor.service
       inject: [RADAR_PAGE_RENDERER],
       useFactory: (renderer: RadarPageRenderer | null) =>
         new RadarPageInspector(undefined, undefined, trafficProviderFromEnvironment(), renderer),
+    },
+    {
+      provide: RADAR_TRAFFIC_STATUS,
+      useFactory: trafficStatusFromEnvironment,
+    },
+    RadarInlineInspectionService,
+    LocalCredentialsService,
+    LocalAdminBootstrapService,
+    {
+      provide: LOCAL_CREDENTIALS,
+      useExisting: LocalCredentialsService,
     },
     {
       provide: TODAY_PORT,
@@ -178,6 +210,12 @@ import { PersistenceActorService } from "./persistence/persistence-actor.service
       provide: SLA_SETTINGS_PORT,
       inject: [SlaSettingsService, PostgresSlaSettingsService],
       useFactory: (memory: SlaSettingsService, postgres: PostgresSlaSettingsService) =>
+        process.env.PERSISTENCE_MODE === "postgres" ? postgres : memory,
+    },
+    {
+      provide: SENDER_PROFILE_PORT,
+      inject: [SenderProfileService, PostgresSenderProfileService],
+      useFactory: (memory: SenderProfileService, postgres: PostgresSenderProfileService) =>
         process.env.PERSISTENCE_MODE === "postgres" ? postgres : memory,
     },
   ],

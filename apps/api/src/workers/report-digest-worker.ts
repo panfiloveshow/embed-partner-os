@@ -4,6 +4,11 @@ import { PrismaClient } from "@prisma/client";
 import { OutboxRelayService } from "../outbox/outbox-relay.service.js";
 import { PrismaOutboxRelayStore } from "../outbox/prisma-outbox-relay.store.js";
 import { ReportDigestWebhookPublisher } from "../reporting/report-digest-publisher.js";
+import {
+  TelegramOutboxPublisher,
+  formatDigestEnvelopeText,
+} from "../notifications/telegram-publisher.js";
+import type { OutboxPublisher } from "../outbox/outbox-relay.service.js";
 
 const REPORT_EVENT = "report.weekly.published";
 
@@ -13,13 +18,7 @@ async function bootstrap() {
   const abort = shutdownController();
   const pollMs = integerSetting("REPORT_DIGEST_POLL_MS", 2_000, 100, 60_000);
   const batchSize = integerSetting("REPORT_DIGEST_BATCH_SIZE", 25, 1, 500);
-  const publisher = new ReportDigestWebhookPublisher({
-    webhookUrl: requiredSetting("REPORT_DIGEST_WEBHOOK_URL"),
-    publicAppUrl: requiredSetting("PUBLIC_APP_URL"),
-    recipients: recipients(requiredSetting("REPORT_DIGEST_RECIPIENTS")),
-    webhookSecret: requiredSetting("REPORT_DIGEST_WEBHOOK_SECRET"),
-    timeoutMs: integerSetting("REPORT_DIGEST_TIMEOUT_MS", 10_000, 100, 60_000),
-  });
+  const publisher = buildDigestPublisher();
   const workerId =
     process.env.OUTBOX_WORKER_ID?.trim() || `${hostname()}:${process.pid}:report-digest`;
   const relay = new OutboxRelayService(
@@ -53,6 +52,32 @@ function requiredSetting(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is required`);
   return value;
+}
+
+/**
+ * Канал доставки дайджеста: REPORT_DIGEST_CHANNEL=telegram отправляет
+ * сводку в Telegram (TELEGRAM_BOT_TOKEN + REPORT_DIGEST_TELEGRAM_CHAT_ID);
+ * по умолчанию — подписанный webhook-шлюз.
+ */
+function buildDigestPublisher(): OutboxPublisher {
+  const timeoutMs = integerSetting("REPORT_DIGEST_TIMEOUT_MS", 10_000, 100, 60_000);
+  if ((process.env.REPORT_DIGEST_CHANNEL ?? "").trim() === "telegram") {
+    return new TelegramOutboxPublisher(
+      {
+        botToken: requiredSetting("TELEGRAM_BOT_TOKEN"),
+        chatId: requiredSetting("REPORT_DIGEST_TELEGRAM_CHAT_ID"),
+        timeoutMs,
+      },
+      formatDigestEnvelopeText,
+    );
+  }
+  return new ReportDigestWebhookPublisher({
+    webhookUrl: requiredSetting("REPORT_DIGEST_WEBHOOK_URL"),
+    publicAppUrl: requiredSetting("PUBLIC_APP_URL"),
+    recipients: recipients(requiredSetting("REPORT_DIGEST_RECIPIENTS")),
+    webhookSecret: requiredSetting("REPORT_DIGEST_WEBHOOK_SECRET"),
+    timeoutMs,
+  });
 }
 
 function recipients(raw: string): string[] {

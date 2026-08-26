@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { Inject, Injectable, ServiceUnavailableException } from "@nestjs/common";
+import { Inject, Injectable, Optional, ServiceUnavailableException } from "@nestjs/common";
 import { Prisma, TaskStatus } from "@prisma/client";
 import {
   radarRejectReasonCodes,
@@ -40,6 +40,10 @@ import {
   enrichRadarResearchWithChanges,
   mergeRadarFeatures,
 } from "../monitoring/radar-feature-extractor.js";
+import {
+  RADAR_TRAFFIC_STATUS,
+  type RadarTrafficStatus,
+} from "../monitoring/radar-traffic-provider.js";
 import { parseRadarImportFile } from "../application/radar-import.js";
 import type { OrganizationImportFile } from "../application/organization-import.js";
 import type { RadarPort } from "../radar.port.js";
@@ -76,6 +80,9 @@ export class PostgresRadarService implements RadarPort {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(RADAR_INSPECTOR) private readonly inspector: RadarInspector,
     @Inject(PersistenceActorService) private readonly actors: PersistenceActorService,
+    @Optional()
+    @Inject(RADAR_TRAFFIC_STATUS)
+    private readonly trafficStatus?: RadarTrafficStatus,
   ) {}
 
   async list(): Promise<RadarPayload> {
@@ -88,6 +95,7 @@ export class PostgresRadarService implements RadarPort {
     return {
       generatedAt: new Date().toISOString(),
       total: records.length,
+      trafficProvider: this.trafficStatus ?? { configured: false, provider: null },
       candidates: records.map(mapCandidate),
     };
   }

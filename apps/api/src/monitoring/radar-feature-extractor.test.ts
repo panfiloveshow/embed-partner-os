@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { emptyRadarFeatures } from "@embed-os/domain";
+import type { RadarVideoPageLead } from "@embed-os/contracts";
 import {
+  classifyTelegramLead,
   enrichRadarResearchWithChanges,
   extractRadarPageFeatures,
   mergeRadarFeatures,
+  mergeRadarPageExtractions,
 } from "./radar-feature-extractor.js";
 
 describe("Radar page feature extraction", () => {
@@ -216,5 +219,114 @@ describe("Radar page feature extraction", () => {
     );
     expect(enriched.brief.priorityInsights?.[0]).toMatchObject({ code: "timing" });
     expect(enriched.brief.whyNow).toContain("Найдены новые целевые контакты");
+  });
+
+  it("находит Telegram-канал площадки как канал связи", () => {
+    const html = `
+      <html lang="ru"><head><title>Медиа</title></head><body>
+        <a href="https://t.me/vcnews">Наш Telegram</a>
+        <a href="https://telegram.me/somechannel">Канал</a>
+        <a href="https://t.me/share">Служебная ссылка</a>
+        <a href="mailto:hi@example.ru">Почта</a>
+      </body></html>`;
+    const { research } = extractRadarPageFeatures(
+      html,
+      new URL("https://example.ru/"),
+      new Date("2026-08-25T10:00:00Z"),
+    );
+    const telegram = research.contacts.filter((lead) => lead.type === "telegram");
+    expect(telegram.map((lead) => lead.value).sort()).toEqual(["@somechannel", "@vcnews"]);
+    expect(telegram[0]?.href).toBe("https://t.me/vcnews");
+    // Служебная ссылка t.me/share не должна попасть в контакты.
+    expect(telegram.some((lead) => lead.value === "@share")).toBe(false);
+  });
+});
+
+describe("классификация Telegram-каналов (площадка vs автор)", () => {
+  const extractTelegram = (html: string, pageUrl = "https://example.ru/") => {
+    const { research } = extractRadarPageFeatures(
+      html,
+      new URL(pageUrl),
+      new Date("2026-08-25T10:00:00Z"),
+    );
+    return research.contacts.find((lead) => lead.type === "telegram");
+  };
+
+  it("ссылка в футере -> канал площадки", () => {
+    const lead = extractTelegram(`
+      <body><main>Статья</main><footer><a href="https://t.me/officialnews">Канал</a></footer></body>`);
+    expect(lead?.kind).toBe("site");
+  });
+
+  it("ссылка внутри <article> -> канал автора материала", () => {
+    const lead = extractTelegram(`
+      <body><article><p>Текст автора</p><a href="https://t.me/rationalanswer">Автор</a></article></body>`);
+    expect(lead?.kind).toBe("author");
+  });
+
+  it("хэндл повторяется на странице >= 2 раз -> канал площадки", () => {
+    const lead = extractTelegram(`
+      <body><aside><a href="https://t.me/dupl">Канал</a></aside>
+      <nav><a href="/go?t.me%2Fdupl">x</a>
+      <a href="https://t.me/dupl?before=2">Ещё</a></nav></body>`);
+    expect(lead?.kind).toBe("site");
+  });
+
+  it("одиночная ссылка вне футера и статьи — kind не определён", () => {
+    const lead = extractTelegram(
+      `<body><div><a href="https://t.me/unknownhandle">Ссылка</a></div></body>`,
+    );
+    expect(lead).toBeDefined();
+    expect(lead?.kind).toBeUndefined();
+  });
+
+  it("classifyTelegramLead напрямую: футер без закрывающего тега тоже площадка", () => {
+    expect(classifyTelegramLead("<footer><a>t.me/site</a>", 20, "site")).toBe("site");
+  });
+});
+
+describe("sitemap: видеостраницы расширяют оценку объёма видео", () => {
+  it("extraVideoPages дедуплицируются и поднимают estimatedVideoPagesMax", () => {
+    const primary = extractRadarPageFeatures(
+      `<html><body><a href="/video/abc">Видео</a></body></html>`,
+      new URL("https://media.example/"),
+      new Date("2026-08-25T10:00:00Z"),
+    );
+    const sitemapLeads: RadarVideoPageLead[] = Array.from({ length: 25 }, (_, i) => ({
+      pageUrl: `https://media.example/video/item-${i}`,
+      label: `/video/item-${i}`,
+      sourceUrl: "https://media.example/sitemap.xml",
+      confidence: "low",
+    }));
+    const merged = mergeRadarPageExtractions([primary], null, undefined, sitemapLeads);
+    // 1 проверенная страница + 25 из карты сайта, без дублей.
+    expect(merged.research.videoPages.length).toBe(26);
+    expect(merged.features.estimatedVideoPagesMax).toBe(26);
+    // Нижняя граница остаётся по реально проверенным страницам.
+    expect(merged.features.estimatedVideoPagesMin).toBe(1);
+    // Бриф упоминает найденные видеостраницы.
+    expect(merged.research.brief.videoUsage).toContain("Найдены видеостраницы");
+  });
+
+  it("дубли sitemap против проверенных страниц не считаются дважды", () => {
+    const primary = extractRadarPageFeatures(
+      `<html><body><a href="/video/abc">Видео</a></body></html>`,
+      new URL("https://media.example/"),
+      new Date("2026-08-25T10:00:00Z"),
+    );
+    const merged = mergeRadarPageExtractions(
+      [primary],
+      null,
+      undefined,
+      [
+        {
+          pageUrl: `${primary.research.pageUrl.replace(/\/$/, "")}/video/abc`,
+          label: "/video/abc",
+          sourceUrl: "https://media.example/sitemap.xml",
+          confidence: "low",
+        },
+      ],
+    );
+    expect(merged.research.videoPages.length).toBe(1);
   });
 });

@@ -48,6 +48,8 @@ model User {
   email           String     @unique
   status          UserStatus @default(ACTIVE)
   timezone        String     @default("Europe/Moscow")
+  /// Хеш пароля для AUTH_MODE=local_password (scrypt). Null = вход по паролю запрещён.
+  passwordHash    String?    @map("password_hash")
   createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   version         Int        @default(1)
@@ -67,6 +69,7 @@ model User {
   radarCandidatesCreated RadarCandidate[]    @relation("RadarCandidateCreator")
   radarDecisionsMade     RadarDecision[]     @relation("RadarDecisionActor")
   permissions            UserPermission[]
+  senderProfile          SenderProfile?   @relation("SenderProfileOwner")
 
   @@index([teamId, status])
   @@map("user_account")
@@ -682,4 +685,19 @@ model IdempotencyRecord {
   @@unique([actorId, operation, requestKey])
   @@index([expiresAt])
   @@map("idempotency_record")
+}
+
+/// Профиль отправителя первого касания (имя/email/Telegram менеджера).
+model SenderProfile {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actorId   String   @unique @map("actor_id") @db.Uuid
+  fullName  String?  @map("full_name") @db.VarChar(120)
+  email     String?  @db.VarChar(254)
+  telegram  String?  @db.VarChar(64)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  actor User @relation("SenderProfileOwner", fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@map("sender_profile")
 }

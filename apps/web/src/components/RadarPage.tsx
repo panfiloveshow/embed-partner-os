@@ -15,6 +15,7 @@ import {
   Radar,
   RefreshCw,
   Search,
+  Send,
   ShieldCheck,
   UsersRound,
   X,
@@ -28,6 +29,7 @@ import {
   type RadarFeatureSignal,
   type RadarRejectReasonCode,
   type RadarScoreFactor,
+  type SenderProfilePayload,
 } from "@embed-os/contracts";
 import {
   ApiError,
@@ -35,8 +37,10 @@ import {
   createRadarCandidate,
   decideRadarCandidate,
   fetchRadar,
+  fetchSenderProfile,
   inspectRadarCandidate,
   importRadarCandidates,
+  saveSenderProfile,
 } from "../lib/api";
 import {
   inspectionPresentation,
@@ -70,6 +74,10 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ text: string; tone: RadarMessageTone } | null>(null);
+  const [trafficProviderConfigured, setTrafficProviderConfigured] = useState<boolean | null>(
+    null,
+  );
+  const [trafficHintDismissed, setTrafficHintDismissed] = useState(false);
   const mutationKeys = useRef(new Map<string, string>());
   const createMutation = useRef<MutationKeyState | null>(null);
   const importInput = useRef<HTMLInputElement>(null);
@@ -80,6 +88,9 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
     try {
       const payload = await fetchRadar(signal);
       setCandidates(payload.candidates);
+      setTrafficProviderConfigured(
+        payload.trafficProvider ? payload.trafficProvider.configured : null,
+      );
       setSelectedId((current) =>
         current && payload.candidates.some(({ id }) => id === current)
           ? current
@@ -189,6 +200,9 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
       createMutation.current = null;
       setFormOpen(false);
       setNotice({ text: `Кандидат «${created.name}» добавлен в очередь.`, tone: "success" });
+      // Автоматическая первая проверка сайта: без неё кандидат бесполезен
+      // до ручного клика «Проверить».
+      if (!created.inspectionPending && created.status === "new") void inspect(created);
     } catch (createError) {
       setError(messageFor(createError));
     } finally {
@@ -335,6 +349,14 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
         </div>
       </header>
 
+      {!loading && trafficProviderConfigured === false && !trafficHintDismissed ? (
+        <Message tone="warning" onClose={() => setTrafficHintDismissed(true)}>
+          Точный трафик не настроен: задайте SIMILARWEB_API_KEY (панельные
+          данные) или включите бесплатный RADAR_TRANKO_ENABLED=1 (оценка по
+          глобальному рангу Tranco). Остальные проверки Радара — контакты,
+          тематика, плееры — работают и без трафика.
+        </Message>
+      ) : null}
       {error ? (
         <Message tone="error" onClose={() => setError(null)}>
           {error}
@@ -345,6 +367,8 @@ export function RadarPage({ teamName, onOpenToday }: RadarPageProps) {
           {notice.text}
         </Message>
       ) : null}
+
+      <SenderProfileCard />
 
       <section className="radar-workspace" aria-label="Очередь кандидатов">
         <div className="radar-queue-pane">
@@ -1407,17 +1431,34 @@ function WorkBrief({
                     <Mail size={13} />
                   ) : contact.type === "phone" ? (
                     <Phone size={13} />
+                  ) : contact.type === "telegram" ? (
+                    <Send size={13} />
                   ) : (
                     <ExternalLink size={13} />
                   )}
                   <a
                     href={contact.href}
-                    target={contact.type === "contact_page" ? "_blank" : undefined}
-                    rel={contact.type === "contact_page" ? "noreferrer" : undefined}
+                    target={
+                      contact.type === "contact_page" || contact.type === "telegram"
+                        ? "_blank"
+                        : undefined
+                    }
+                    rel={
+                      contact.type === "contact_page" || contact.type === "telegram"
+                        ? "noreferrer"
+                        : undefined
+                    }
                   >
                     {contact.value}
                   </a>
-                  <small>{confidenceLabel(contact.confidence)}</small>
+                  {contact.type === "telegram" && contact.kind ? (
+                    <small>
+                      {contact.kind === "author" ? "канал автора" : "канал площадки"} ·{" "}
+                      {confidenceLabel(contact.confidence)}
+                    </small>
+                  ) : (
+                    <small>{confidenceLabel(contact.confidence)}</small>
+                  )}
                 </li>
               ))}
             </ul>
@@ -1602,6 +1643,7 @@ function outreachChannelLabel(
     phone: "Телефон",
     profile: "Профиль",
     contact_page: "Форма связи",
+    telegram: "Telegram",
     research: "Нужен поиск",
   }[value];
 }
@@ -1657,6 +1699,115 @@ function decisionNotice(candidate: RadarCandidate) {
   if (candidate.status === "rejected") return "Кандидат отклонён с сохранением причины.";
   if (candidate.status === "merged") return "Кандидат объединён с канонической записью.";
   return "Решение сохранено.";
+}
+
+/**
+ * Профиль отправителя первого касания: менеджер заполняет свои данные,
+ * и они подставляются подписью в черновики писем всех досье Радара.
+ */
+function SenderProfileCard() {
+  const [open, setOpen] = useState(false);
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [telegram, setTelegram] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    fetchSenderProfile()
+      .then((profile) => {
+        if (cancelled) return;
+        setFullName(profile.fullName ?? "");
+        setEmail(profile.email ?? "");
+        setTelegram(profile.telegram ?? "");
+      })
+      .catch(() => {
+        if (!cancelled) setError("Не удалось загрузить профиль отправителя");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await saveSenderProfile({
+        fullName: fullName.trim() || null,
+        email: email.trim() || null,
+        telegram: telegram.trim().replace(/^@/, "") || null,
+      });
+      setSaved(true);
+    } catch (cause) {
+      setError(
+        cause instanceof ApiError && cause.message
+          ? cause.message
+          : "Не удалось сохранить профиль",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="radar-sender-profile" aria-label="Подпись для писем">
+      <button type="button" className="radar-sender-toggle" onClick={() => setOpen(!open)}>
+        <UsersRound size={15} aria-hidden="true" />
+        Подпись для писем {saved ? "(сохранено)" : ""}
+        <ChevronDown size={14} style={{ transform: open ? "rotate(180deg)" : undefined }} />
+      </button>
+      {open ? (
+        <form className="radar-add-form" onSubmit={(event) => void submit(event)}>
+          <p className="radar-hint">
+            Ваши имя и контакты будут подписью в черновиках первых писем. Данные хранятся
+            в вашей учётной записи.
+          </p>
+          <label>
+            Имя и фамилия
+            <input
+              value={fullName}
+              onChange={(event) => setFullName(event.target.value)}
+              placeholder="Анна Соколова"
+              maxLength={120}
+            />
+          </label>
+          <label>
+            Email
+            <input
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="a.sokolova@rutube.ru"
+              type="email"
+              maxLength={254}
+            />
+          </label>
+          <label>
+            Telegram (без @)
+            <input
+              value={telegram}
+              onChange={(event) => setTelegram(event.target.value)}
+              placeholder="asokolova"
+              maxLength={64}
+            />
+          </label>
+          {error ? (
+            <span role="alert" className="radar-error-text">
+              {error}
+            </span>
+          ) : null}
+          <button type="submit" disabled={busy}>
+            {busy ? <LoaderCircle size={14} className="spin" /> : <Check size={14} />}
+            Сохранить подпись
+          </button>
+        </form>
+      ) : null}
+    </section>
+  );
 }
 
 function signed(value: number) {

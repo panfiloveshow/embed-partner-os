@@ -1,0 +1,239 @@
+# Embed Partner OS — полный продакшн-стек одним стеком Docker Compose.
+#
+# Запуск:
+#   cp .env.example .env          # при первом запуске
+#   docker compose -f compose.prod.yaml up -d --build
+#
+# Веб-интерфейс:  http://<хост>:8080  (порт меняется WEB_PORT в .env)
+# Health-check:   http://<хост>:8080/api/v1/health
+#
+# Разовое наполнение демо-данными (после старта):
+#   docker compose -f compose.prod.yaml --profile seed run --rm seed
+#
+# Все сервисы читают общий .env (env_file), но критичные переменные режима
+# (DATABASE_URL, PERSISTENCE_MODE, HOST, NODE_ENV) заданы здесь явно и имеют
+# приоритет над значениями из .env — файл остаётся пригодным и для локальной
+# разработки без правок.
+
+name: embed-partner-os
+
+x-api-build-runtime: &api-build-runtime
+  build:
+    context: .
+    dockerfile: Dockerfile.api
+    target: runtime
+    args:
+      WITH_PLAYWRIGHT: "${WITH_PLAYWRIGHT:-1}"
+
+x-api-build-tools: &api-build-tools
+  build:
+    context: .
+    dockerfile: Dockerfile.api
+    target: build
+    args:
+      WITH_PLAYWRIGHT: "${WITH_PLAYWRIGHT:-1}"
+
+x-db-env: &db-env
+  PERSISTENCE_MODE: postgres
+  NODE_ENV: production
+  # Пароль совпадает с POSTGRES_PASSWORD сервиса postgres выше.
+  DATABASE_URL: postgresql://embed_os:embed_os@postgres:5432/embed_os?schema=public
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: embed_os
+      POSTGRES_USER: embed_os
+      POSTGRES_PASSWORD: embed_os
+    volumes:
+      - embed-os-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U embed_os -d embed_os"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # Разовые миграции на старте стека. Prisma CLI живёт только здесь —
+  # в рантайм-образе его нет (docs/dependency-audit.md).
+  migrate:
+    <<: *api-build-tools
+    command: ["npm", "run", "db:migrate", "-w", "@embed-os/api"]
+    environment:
+      <<: *db-env
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *api-build-runtime
+    environment:
+      <<: *db-env
+      HOST: 0.0.0.0
+      PORT: 3000
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  # --- Фоновые воркеры -------------------------------------------------------
+  # Один образ с API, разные команды запуска.
+  worker-placement-monitor:
+    <<: *api-build-runtime
+    command: ["node", "apps/api/dist/workers/placement-monitor-worker.js"]
+    environment:
+      <<: *db-env
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker-weekly-report:
+    <<: *api-build-runtime
+    command: ["node", "apps/api/dist/workers/weekly-report-worker.js"]
+    environment:
+      <<: *db-env
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker-report-digest:
+    <<: *api-build-runtime
+    command: ["node", "apps/api/dist/workers/report-digest-worker.js"]
+    environment:
+      <<: *db-env
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker-opportunity-sla:
+    <<: *api-build-runtime
+    command: ["node", "apps/api/dist/workers/opportunity-sla-worker.js"]
+    environment:
+      <<: *db-env
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker-sla-notification:
+    <<: *api-build-runtime
+    command: ["node", "apps/api/dist/workers/sla-notification-worker.js"]
+    environment:
+      <<: *db-env
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker-radar-recheck:
+    <<: *api-build-runtime
+    command: ["node", "apps/api/dist/workers/radar-recheck-worker.js"]
+    environment:
+      <<: *db-env
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker-radar-sourcing:
+    <<: *api-build-runtime
+    command: ["node", "apps/api/dist/workers/radar-sourcing-worker.js"]
+    environment:
+      <<: *db-env
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # Доставка накопленных outbox-событий по HTTP (OUTBOX_PUBLISH_URL).
+  # При пустом OUTBOX_PUBLISH_URL воркер упадёт со понятной ошибкой —
+  # удалите сервис, если доставка событий не нужна.
+  worker-outbox-relay:
+    <<: *api-build-runtime
+    command: ["node", "apps/api/dist/workers/outbox-relay-worker.js"]
+    environment:
+      <<: *db-env
+    env_file:
+      - path: .env
+        required: false
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # Демо-данные: запускается вручную командой из шапки файла.
+  seed:
+    <<: *api-build-tools
+    profiles: ["seed"]
+    command: ["npm", "run", "db:seed", "-w", "@embed-os/api"]
+    environment:
+      <<: *db-env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: "no"
+
+volumes:
+  embed-os-postgres:

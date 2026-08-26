@@ -24,6 +24,10 @@ import {
   enrichRadarResearchWithChanges,
   mergeRadarFeatures,
 } from "./monitoring/radar-feature-extractor.js";
+import {
+  RADAR_TRAFFIC_STATUS,
+  type RadarTrafficStatus,
+} from "./monitoring/radar-traffic-provider.js";
 import type { RadarPort } from "./radar.port.js";
 import { TodayService } from "./today.service.js";
 
@@ -68,13 +72,21 @@ export class RadarService implements RadarPort {
     @Inject(TodayService) private readonly today: TodayService,
     @Inject(RADAR_INSPECTOR) private readonly inspector: RadarInspector,
     @Optional() private readonly clock: () => Date = () => new Date(),
+    @Optional()
+    @Inject(RADAR_TRAFFIC_STATUS)
+    private readonly trafficStatus?: RadarTrafficStatus,
   ) {}
 
   list(): RadarPayload {
     const candidates = [...this.candidates.values()]
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
       .map((candidate) => structuredClone(candidate));
-    return { generatedAt: this.clock().toISOString(), total: candidates.length, candidates };
+    return {
+      generatedAt: this.clock().toISOString(),
+      total: candidates.length,
+      trafficProvider: this.trafficStatus ?? { configured: false, provider: null },
+      candidates,
+    };
   }
 
   create(input: unknown, idempotencyKey: string): RadarCandidate {

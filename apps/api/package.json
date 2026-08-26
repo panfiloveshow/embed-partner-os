@@ -1,6 +1,6 @@
 {
   "name": "@embed-os/api",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,6 +12,7 @@
     "worker:sla-notification": "tsx src/workers/sla-notification-worker.ts",
     "worker:radar-recheck": "tsx src/workers/radar-recheck-worker.ts",
     "worker:radar-sourcing": "tsx src/workers/radar-sourcing-worker.ts",
+    "worker:outbox-relay": "tsx src/workers/outbox-relay-worker.ts",
     "build": "npm run prisma:generate && tsc -p tsconfig.json",
     "prisma:generate": "DATABASE_URL=${DATABASE_URL:-postgresql://embed_os:embed_os@127.0.0.1:5432/embed_os?schema=public} prisma generate",
     "prisma:validate": "DATABASE_URL=${DATABASE_URL:-postgresql://embed_os:embed_os@127.0.0.1:5432/embed_os?schema=public} prisma validate",
@@ -25,6 +26,7 @@
     "start:sla-notification-worker": "node dist/workers/sla-notification-worker.js",
     "start:radar-recheck-worker": "node dist/workers/radar-recheck-worker.js",
     "start:radar-sourcing-worker": "node dist/workers/radar-sourcing-worker.js",
+    "start:outbox-relay-worker": "node dist/workers/outbox-relay-worker.js",
     "radar:calibration": "tsx scripts/radar-calibration.ts",
     "test": "vitest run",
     "test:pg": "tsx scripts/run-postgres-integration-tests.ts",

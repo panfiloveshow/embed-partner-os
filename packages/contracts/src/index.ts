@@ -594,11 +594,13 @@ export interface RadarFeatureSignal {
 }
 
 export interface RadarContactLead {
-  type: "email" | "phone" | "contact_page";
+  type: "email" | "phone" | "contact_page" | "telegram";
   value: string;
   href: string;
   sourceUrl: string;
   confidence: RadarConfidence;
+  /** Только для Telegram: чей канал — «площадки» (в футере) или «автора» (в статье). */
+  kind?: "site" | "author";
 }
 
 export interface RadarDecisionMakerLead {
@@ -646,6 +648,14 @@ export interface RadarOpportunityPotential {
   confidence: RadarConfidence;
 }
 
+/** Профиль отправителя первого касания — заполняет менеджер в настройках. */
+export interface SenderProfilePayload {
+  fullName: string | null;
+  email: string | null;
+  /** Хэндл без ведущего «@». */
+  telegram: string | null;
+}
+
 export interface RadarOutreachPackage {
   targetName: string | null;
   targetRole: string;
@@ -655,6 +665,8 @@ export interface RadarOutreachPackage {
   messageDraft: string;
   discoveryQuestions: string[];
   nextTask: string;
+  /** Подпись текущего менеджера (подставляется при выдаче досье). */
+  sender?: SenderProfilePayload | null;
 }
 
 export interface RadarChangeSignal {
@@ -691,6 +703,24 @@ export interface RadarResearch {
   notes: string[];
   coverage?: RadarResearchCoverage;
   changeSignals?: RadarChangeSignal[];
+  /** ИНН, найденный в реквизитах сайта (страницы контактов/оферты/политики). */
+  legalInn?: string | null;
+  legalOgrn?: string | null;
+  /** Официальная карточка ЕГРЮЛ по найденному ИНН (обогащение ФНС). */
+  legalEntity?: RadarLegalEntityCard | null;
+  /** Регион юрлица из официального адреса ЕГРЮЛ, например «г. Москва». */
+  legalRegion?: string | null;
+}
+
+export interface RadarLegalEntityCard {
+  inn: string;
+  fullName: string | null;
+  address: string | null;
+  ogrn: string | null;
+  /** Регион из адреса регистрации, например «г. Москва» / «Свердловская область». */
+  region?: string | null;
+  source: "ЕГРЮЛ (ФНС)";
+  checkedAt: string;
 }
 
 /** How a video player was observed on the page. */
@@ -805,9 +835,18 @@ export interface RadarCandidate {
   updatedAt: string;
 }
 
+export interface RadarTrafficProviderStatus {
+  /** true, когда внешний провайдер трафика настроен через переменные окружения. */
+  configured: boolean;
+  /** Название провайдера (например, «Similarweb») или null, если не настроен. */
+  provider: string | null;
+}
+
 export interface RadarPayload {
   generatedAt: string;
   total: number;
+  /** Заполняется сервером; отсутствие поля означает старую версию API. */
+  trafficProvider?: RadarTrafficProviderStatus;
   candidates: RadarCandidate[];
 }
 

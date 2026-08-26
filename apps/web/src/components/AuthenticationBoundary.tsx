@@ -7,9 +7,14 @@ import {
 } from "../lib/api";
 import {
   bridgeTokenProvider,
+  clearLocalSessionToken,
+  readLocalSessionToken,
+  storeLocalSessionToken,
   webAuthenticationMode,
   type EmbedPartnerAuthBridge,
+  type WebAuthenticationMode,
 } from "../lib/auth-bridge";
+import { LocalLoginForm } from "./LocalLoginForm";
 
 type AuthenticationState =
   | { status: "checking" }
@@ -24,6 +29,7 @@ interface AuthenticationBoundaryProps {
 export function AuthenticationBoundary({ children }: AuthenticationBoundaryProps) {
   const [state, setState] = useState<AuthenticationState>({ status: "checking" });
   const [bridge, setBridge] = useState<EmbedPartnerAuthBridge | null>(null);
+  const [mode, setMode] = useState<WebAuthenticationMode | null>(null);
 
   const synchronize = useCallback(async (currentBridge: EmbedPartnerAuthBridge) => {
     setState({ status: "checking" });
@@ -54,6 +60,31 @@ export function AuthenticationBoundary({ children }: AuthenticationBoundaryProps
         message: error instanceof Error ? error.message : "Некорректная конфигурация входа",
       });
       return;
+    }
+
+    setMode(mode);
+
+    if (mode === "local") {
+      configureApiAccessTokenProvider(null);
+      const stored = readLocalSessionToken();
+      configureApiAccessToken(stored);
+      setState(
+        stored
+          ? { status: "ready" }
+          : { status: "required", message: "Войдите по логину и паролю" },
+      );
+      const unsubscribeExpired = subscribeApiAuthenticationRequired(() => {
+        clearLocalSessionToken();
+        configureApiAccessToken(null);
+        setState({
+          status: "required",
+          message: "Сессия истекла. Войдите заново",
+        });
+      });
+      return () => {
+        unsubscribeExpired();
+        configureApiAccessTokenProvider(null);
+      };
     }
 
     if (mode === "development") {
@@ -114,12 +145,17 @@ export function AuthenticationBoundary({ children }: AuthenticationBoundaryProps
     try {
       await bridge?.logout?.();
     } finally {
-      setState({ status: "required", message: "Вы вышли из корпоративной сессии" });
+      if (mode === "local") {
+        clearLocalSessionToken();
+        setState({ status: "required", message: "Вы вышли из сессии" });
+      } else {
+        setState({ status: "required", message: "Вы вышли из корпоративной сессии" });
+      }
     }
-  }, [bridge]);
+  }, [bridge, mode]);
 
   if (state.status === "ready") {
-    return <>{children(bridge ? { logout } : {})}</>;
+    return <>{children(bridge || mode === "local" ? { logout } : {})}</>;
   }
 
   if (state.status === "checking") {
@@ -139,9 +175,23 @@ export function AuthenticationBoundary({ children }: AuthenticationBoundaryProps
       ) : (
         <LogIn size={34} aria-hidden="true" />
       )}
-      <h1>{state.status === "misconfigured" ? "Вход не настроен" : "Нужен корпоративный вход"}</h1>
+      <h1>
+        {state.status === "misconfigured"
+          ? "Вход не настроен"
+          : mode === "local"
+            ? "Вход в систему"
+            : "Нужен корпоративный вход"}
+      </h1>
       <p>{state.message}</p>
-      {canLogin ? (
+      {state.status === "required" && mode === "local" ? (
+        <LocalLoginForm
+          onAuthenticated={(token) => {
+            storeLocalSessionToken(token);
+            configureApiAccessToken(token);
+            setState({ status: "ready" });
+          }}
+        />
+      ) : canLogin ? (
         <button className="button button-primary" type="button" onClick={() => void login()}>
           <LogIn size={17} aria-hidden="true" />
           Войти

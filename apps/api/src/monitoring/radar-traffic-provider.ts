@@ -1,4 +1,5 @@
 import type { RadarTrafficEstimate } from "@embed-os/contracts";
+import { TrancoTrafficProvider } from "./tranco-traffic-provider.js";
 import { SafeHttpClient, type SafeHttpResponse } from "./safe-http-client.js";
 
 export interface RadarTrafficProvider {
@@ -49,7 +50,35 @@ export class SimilarwebTrafficProvider implements RadarTrafficProvider {
 
 export function trafficProviderFromEnvironment(): RadarTrafficProvider | null {
   const apiKey = process.env.SIMILARWEB_API_KEY?.trim();
-  return apiKey ? new SimilarwebTrafficProvider(apiKey) : null;
+  if (apiKey) return new SimilarwebTrafficProvider(apiKey);
+  // Бесплатный резерв: глобальный ранг Tranco -> полоса визитов.
+  if ((process.env.RADAR_TRANKO_ENABLED ?? "").trim() === "1") {
+    return new TrancoTrafficProvider({
+      enabled: true,
+      countries: process.env.RADAR_TRANKO_COUNTRIES?.trim() || undefined,
+      limit: Number(process.env.RADAR_TRANKO_LIMIT) || undefined,
+      ttlDays: Number(process.env.RADAR_TRANKO_TTL_DAYS) || undefined,
+    });
+  }
+  return null;
+}
+
+/** DI-токен: сообщает клиентам, настроен ли внешний провайдер трафика. */
+export const RADAR_TRAFFIC_STATUS = Symbol("RADAR_TRAFFIC_STATUS");
+
+export interface RadarTrafficStatus {
+  configured: boolean;
+  provider: string | null;
+}
+
+/** Строит статус провайдера трафика из переменных окружения. */
+export function trafficStatusFromEnvironment(): RadarTrafficStatus {
+  const apiKey = process.env.SIMILARWEB_API_KEY?.trim();
+  if (apiKey) return { configured: true, provider: "Similarweb" };
+  if ((process.env.RADAR_TRANKO_ENABLED ?? "").trim() === "1") {
+    return { configured: true, provider: "Tranco (оценка по рангу)" };
+  }
+  return { configured: false, provider: null };
 }
 
 function parseDailyVisits(body: string) {

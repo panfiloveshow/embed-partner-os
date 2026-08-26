@@ -9,26 +9,39 @@ import {
   Inject,
   Param,
   Post,
+  Req,
   UploadedFile,
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiConsumes, ApiHeader, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import type { RadarCandidate, RadarImportResult, RadarPayload } from "@embed-os/contracts";
+import {
+  singleCandidateWithSenderProfile,
+  withSenderProfile,
+} from "@embed-os/domain";
 import { parseIdempotencyKey } from "./application/idempotency.js";
 import { RADAR_PORT, type RadarPort } from "./radar.port.js";
-import { RequirePermission } from "./auth/access-control.js";
+import { SENDER_PROFILE_PORT, type SenderProfilePort } from "./sender-profile.port.js";
+import { RequirePermission, type ActorRequest } from "./auth/access-control.js";
 
 @ApiTags("radar")
 @Controller("radar/candidates")
 export class RadarController {
-  constructor(@Inject(RADAR_PORT) private readonly radar: RadarPort) {}
+  constructor(
+    @Inject(RADAR_PORT) private readonly radar: RadarPort,
+    @Inject(SENDER_PROFILE_PORT) private readonly senderProfiles: SenderProfilePort,
+  ) {}
 
   @Get()
   @RequirePermission("radar.read")
   @ApiOperation({ summary: "Получить очередь кандидатов Радара" })
-  list(): RadarPayload | Promise<RadarPayload> {
-    return this.radar.list();
+  async list(@Req() request: ActorRequest): Promise<RadarPayload> {
+    const payload = await this.radar.list();
+    // Подпись менеджера подставляется при выдаче: обновление профиля
+    // сразу отражается во всех черновиках, без перезаписи хранения.
+    const profile = await this.senderProfiles.get(request.actor!.userId);
+    return withSenderProfile(payload, profile);
   }
 
   @Post()
@@ -70,10 +83,16 @@ export class RadarController {
     description: "Проверка поставлена в очередь; кандидат возвращён с inspectionPending: true",
   })
   inspect(
+    @Req() request: ActorRequest,
     @Param("candidateId") candidateId: string,
     @Headers("idempotency-key") rawKey: string | undefined,
   ): Promise<RadarCandidate> {
-    return this.radar.requestInspection(candidateId, parseIdempotencyKey(rawKey));
+    return this.radar
+      .requestInspection(candidateId, parseIdempotencyKey(rawKey))
+      .then(async (candidate) => {
+        const profile = await this.senderProfiles.get(request.actor!.userId);
+        return singleCandidateWithSenderProfile(candidate, profile);
+      });
   }
 
   @Post(":candidateId/decisions")

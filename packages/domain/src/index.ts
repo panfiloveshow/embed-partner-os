@@ -9,3 +9,4 @@ export * from "./opportunity-stage.js";
 export * from "./opportunity-sla.js";
 export * from "./sla-settings.js";
 export * from "./radar.js";
+export * from "./sender-profile.js";

@@ -103,7 +103,10 @@ export class AccessUserAlreadyExistsError extends Error {
   }
 }
 
-type MemoryAccessUser = Omit<AccessUserView, "currentUser">;
+type MemoryAccessUser = Omit<AccessUserView, "currentUser"> & {
+  /** Хеш пароля для режима локального входа; отсутствие = вход запрещён. */
+  passwordHash?: string;
+};
 
 @Injectable()
 export class AccessAdministrationService {
@@ -119,6 +122,43 @@ export class AccessAdministrationService {
   >();
 
   constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+
+  /**
+   * Проверка пары email/пароль по in-memory реестру (режим memory).
+   * Возвращает subject учётной записи или null при любом несовпадении.
+   */
+  verifyLocalCredentials(
+    email: string,
+    password: string,
+    verifyHash: (password: string, hash: string | undefined) => boolean,
+  ): { subject: string } | null {
+    const normalized = email.trim().toLowerCase();
+    const user = [...this.memoryUsers.values()].find(
+      (candidate) =>
+        candidate.email.toLowerCase() === normalized && candidate.status === "active",
+    );
+    if (!user?.passwordHash) return null;
+    return verifyHash(password, user.passwordHash) ? { subject: user.subject } : null;
+  }
+
+  /** Идемпотентно выдаёт/обновляет пароль администратора in-memory режима. */
+  ensureLocalAdmin(email: string, passwordHash: string): void {
+    const normalized = email.trim().toLowerCase();
+    const existing = [...this.memoryUsers.values()].find(
+      (candidate) => candidate.email.toLowerCase() === normalized,
+    );
+    if (!existing) {
+      console.warn(
+        JSON.stringify({
+          event: "local-auth.admin-not-found",
+          email: normalized,
+          hint: "Сначала создайте пользователя через seed или «Роли и доступ»",
+        }),
+      );
+      return;
+    }
+    this.memoryUsers.set(existing.id, { ...existing, passwordHash });
+  }
 
   async list(actorId: string): Promise<AccessAdministrationPayload> {
     const result =

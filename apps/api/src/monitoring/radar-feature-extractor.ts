@@ -16,6 +16,7 @@ import type {
   RadarOutreachPackage,
   RadarChangeSignal,
 } from "@embed-os/contracts";
+import { extractRequisites } from "./legal-entity-enrichment.js";
 
 export interface RadarPageFeatureExtraction {
   features: Partial<RadarCandidateFeatures>;
@@ -109,6 +110,9 @@ export function extractRadarPageFeatures(
     );
   }
 
+  // Реквизиты (ИНН/ОГРН) — вход для обогащения через ЕГРЮЛ/ФНС.
+  const requisites = extractRequisites(html);
+
   const brief = buildWorkBrief(features, contacts, decisionMakers, videoPages, pageUrl);
 
   return {
@@ -122,6 +126,8 @@ export function extractRadarPageFeatures(
       decisionMakers,
       videoPages,
       brief,
+      legalInn: requisites.inn,
+      legalOgrn: requisites.ogrn,
       notes: [
         "Собраны только признаки, доступные в переданном публичном HTML.",
         "Трафик не оценивается без подключённого внешнего провайдера.",
@@ -155,6 +161,7 @@ export function mergeRadarPageExtractions(
   extractions: RadarPageFeatureExtraction[],
   trafficEstimate?: RadarTrafficEstimate | null,
   coverage?: RadarResearchCoverage,
+  extraVideoPages: RadarVideoPageLead[] = [],
 ): RadarPageFeatureExtraction {
   const primary = extractions[0];
   if (!primary) throw new Error("At least one radar page extraction is required");
@@ -192,14 +199,23 @@ export function mergeRadarPageExtractions(
     extractions.flatMap(({ research }) => research.decisionMakers),
   );
   const videoPages = uniqueBy(
-    extractions.flatMap(({ research }) => research.videoPages),
+    [...extractions.flatMap(({ research }) => research.videoPages), ...extraVideoPages],
     ({ pageUrl }) => pageUrl,
   );
+  // Sitemap-видеостраницы расширяют верхнюю границу оценки объёма видео
+  // (нижняя граница остаётся равной числу реально проверенных страниц).
+  if (videoPages.length > (features.estimatedVideoPagesMax ?? 0))
+    features.estimatedVideoPagesMax = videoPages.length;
   const signals = uniqueBy(
     extractions.flatMap(({ research }) => research.signals),
     ({ field }) => field,
   );
   const pageUrl = new URL(primary.research.pageUrl);
+  // Реквизиты: первый непустой ИНН/ОГРН среди всех проверенных страниц.
+  const legalInn =
+    extractions.map(({ research }) => research.legalInn).find((inn) => Boolean(inn)) ?? null;
+  const legalOgrn =
+    extractions.map(({ research }) => research.legalOgrn).find((ogrn) => Boolean(ogrn)) ?? null;
   const notes = uniqueBy(
     extractions.flatMap(({ research }) => research.notes),
     (note) => note,
@@ -220,9 +236,28 @@ export function mergeRadarPageExtractions(
       decisionMakers,
       videoPages,
       brief: buildWorkBrief(features, contacts, decisionMakers, videoPages, pageUrl, coverage),
+      legalInn,
+      legalOgrn,
       notes,
       ...(coverage ? { coverage } : {}),
     },
+  };
+}
+
+/**
+ * Регион юрлица из официального адреса ЕГРЮЛ — самый надёжный источник
+ * географии. Если пользователь не указал географию вручную и Радар не нашёл
+ * её в метаданных, подставляем регион ФНС в факторы скоринга (значение вида
+ * «г. Москва, Россия» даёт полный вес фактора «Целевая география»).
+ */
+export function applyLegalRegionToGeography(
+  extraction: RadarPageFeatureExtraction,
+): RadarPageFeatureExtraction {
+  const region = extraction.research.legalRegion?.trim();
+  if (!region || extraction.features.geography) return extraction;
+  return {
+    ...extraction,
+    features: { ...extraction.features, geography: `${region}, Россия` },
   };
 }
 
@@ -472,6 +507,11 @@ function detectGeography(html: string, summary: string) {
     [/казахстан|\bkazakhstan\b/i, "Казахстан"],
     [/беларус|\bbelarus\b/i, "Беларусь"],
     [/украин|\bukraine\b/i, "Украина"],
+    // Крупные города РФ в тексте/мета — уверенный признак российской географии.
+    [
+      /\bмоскв|\bпетербург|спб\b|\bновосибирск|\bекатеринбург|\bказан[ьи]|\bнижн\w*\s*новгород|\bкраснодар|\bсамар[ае]|\bростов-на-дону|\bуф[ае]\b|\bвладивосток|\bсочи\b/,
+      "Россия",
+    ],
   ];
   const match = patterns.find(([pattern]) => pattern.test(normalized));
   return match
@@ -540,6 +580,22 @@ function detectContacts(html: string, pageUrl: URL): RadarContactLead[] {
       }
       continue;
     }
+    // Telegram-канал/аккаунт площадки: t.me/username, telegram.me/*.
+    if (link.url && /^(?:www\.)?(?:t|telegram)\.me$/i.test(link.url.hostname)) {
+      const handle = decodeURIComponent(link.url.pathname.replace(/^\//, "")).replace(/\/+$/, "");
+      const clean = (handle.split("?")[0] ?? "").trim();
+      if (/^[A-Za-z0-9_]{3,64}$/.test(clean) && !/^(share|joinchat|s)$/i.test(clean)) {
+        leads.set(`telegram:${clean.toLowerCase()}`, {
+          type: "telegram",
+          value: `@${clean}`,
+          href: `https://t.me/${clean}`,
+          sourceUrl: pageUrl.toString(),
+          confidence: "high",
+          kind: classifyTelegramLead(html, link.index, clean),
+        });
+      }
+      continue;
+    }
     if (
       link.url &&
       link.url.hostname === pageUrl.hostname &&
@@ -555,6 +611,34 @@ function detectContacts(html: string, pageUrl: URL): RadarContactLead[] {
     }
   }
   return [...leads.values()].slice(0, 12);
+}
+
+/**
+ * Чей Telegram-канал: «площадки» (site) или «автора» (author)?
+ * Эвристики по позиции в DOM:
+ *  - ссылка внутри <footer>…</footer> → канал площадки (соцсети в подвале);
+ *  - ссылка внутри открытого блока <article> → канал автора материала;
+ *  - хэндл повторяется на странице ≥ 2 раз → канал площадки;
+ *  - иначе классификация неизвестна (kind не ставится).
+ */
+export function classifyTelegramLead(
+  html: string,
+  linkIndex: number,
+  handle: string,
+): "site" | "author" | undefined {
+  const lower = html.toLocaleLowerCase("en-US");
+  const footerStart = lower.lastIndexOf("<footer");
+  if (footerStart >= 0 && footerStart < linkIndex) {
+    const footerEnd = lower.indexOf("</footer>", footerStart);
+    if (footerEnd === -1 || footerEnd > linkIndex) return "site";
+  }
+  const before = lower.slice(0, Math.max(0, linkIndex));
+  const openArticles = (before.match(/<article\b/g) ?? []).length;
+  const closeArticles = (before.match(/<\/article>/g) ?? []).length;
+  if (openArticles > closeArticles) return "author";
+  const repeats = occurrences(lower, `t.me/${handle.toLowerCase()}`);
+  if (repeats >= 2) return "site";
+  return undefined;
 }
 
 /** Hard cap on candidate HTML blocks scanned per page to bound regex work. */
@@ -689,15 +773,20 @@ function detectCms(html: string) {
   return match ? { value: match[1], source: "HTML fingerprint", confidence: match[2] } : null;
 }
 
+/** Похоже ли URL на страницу с видео (для ссылок на странице и для sitemap). */
+export function looksLikeVideoUrl(url: URL): boolean {
+  return (
+    /(?:^|\/)videos?(?:\/|$)|(?:^|\/)(?:watch|embed|translyac(?:iya|ii|iy)|live|efir)(?:\/|$)/i.test(
+      url.pathname,
+    ) || /\.mp4$/i.test(url.pathname)
+  );
+}
+
 function detectVideoPageLinks(html: string, pageUrl: URL): RadarVideoPageLead[] {
   const leads = new Map<string, RadarVideoPageLead>();
   for (const link of anchorLinks(html, pageUrl)) {
     if (!link.url || link.url.hostname !== pageUrl.hostname) continue;
-    if (
-      /(?:^|\/)videos?(?:\/|$)|(?:^|\/)(?:watch|embed|translyac(?:iya|ii|iy)|live|efir)(?:\/|$)/i.test(
-        link.url.pathname,
-      )
-    ) {
+    if (looksLikeVideoUrl(link.url)) {
       link.url.hash = "";
       leads.set(link.url.toString(), {
         pageUrl: link.url.toString(),
@@ -967,6 +1056,9 @@ function decisionMakerKey(person: RadarDecisionMakerLead) {
 
 function researchLinkScore(value: string) {
   if (/contacts?|kontakty|контакт|feedback|обратн.*связ/.test(value)) return 100;
+  // Реквизиты/оферта — главный источник ИНН/ОГРН для обогащения через ЕГРЮЛ.
+  if (/rekvizit|реквизит|inn|огрн|ogrn|oferta|офер|agreement|договор|terms|условия|правил|privacy|политик|document|docs/.test(value))
+    return 95;
   if (/team|staff|people|management|leadership|команд|руковод/.test(value)) return 90;
   if (/editorial|редакц|authors?|автор/.test(value)) return 80;
   if (/advertis|reklam|реклам|partners?|партн[её]р/.test(value)) return 70;
