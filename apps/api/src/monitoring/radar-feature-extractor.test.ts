@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import { emptyRadarFeatures } from "@embed-os/domain";
 import type { RadarVideoPageLead } from "@embed-os/contracts";
 import {
+  applyFeedPublicationFrequency,
   classifyTelegramLead,
   enrichRadarResearchWithChanges,
   extractRadarPageFeatures,
   mergeRadarFeatures,
   mergeRadarPageExtractions,
+  publicationFrequencyFromFeedDates,
 } from "./radar-feature-extractor.js";
 
 describe("Radar page feature extraction", () => {
@@ -265,6 +267,97 @@ describe("Radar page feature extraction", () => {
     expect(telegram[0]?.href).toBe("https://t.me/vcnews");
     // Служебная ссылка t.me/share не должна попасть в контакты.
     expect(telegram.some((lead) => lead.value === "@share")).toBe(false);
+  });
+
+  it("находит географию по JSON-LD адресу организации", () => {
+    const html = `
+      <html lang="ru"><head><title>Маркетплейс цифровых товаров</title></head>
+      <body>
+        <script type="application/ld+json">
+        {"@type":"Organization","address":{"@type":"PostalAddress","addressCountry":"RU","addressLocality":"Москва"}}
+        </script>
+        <main>Каталог товаров без гео-меты в title</main>
+      </body></html>`;
+    const result = extractRadarPageFeatures(
+      html,
+      new URL("https://shop.example.ru/"),
+      new Date("2026-08-26T10:00:00Z"),
+    );
+    expect(result.features.geography).toBe("Россия");
+    const geo = result.research.signals.find(({ field }) => field === "geography");
+    expect(geo?.source).toBe("JSON-LD адрес");
+    expect(geo?.confidence).toBe("high");
+  });
+
+  it("находит географию в тексте страницы, когда title/meta молчат", () => {
+    const html = `
+      <html lang="ru"><head><title>Цифровые ключи и активации</title></head>
+      <body>
+        <main>Купить ключ активации быстро и безопасно</main>
+        <footer>
+          <p>г. Москва, ул. Примерная, д. 1, офис 100</p>
+          <p>© 2026 ПримерРу. Все права защищены.</p>
+        </footer>
+      </body></html>`;
+    const result = extractRadarPageFeatures(
+      html,
+      new URL("https://keys.example.ru/"),
+      new Date("2026-08-26T10:00:00Z"),
+    );
+    expect(result.features.geography).toBe("Россия");
+    const geo = result.research.signals.find(({ field }) => field === "geography");
+    expect(geo?.source).toBe("текст страницы");
+    expect(geo?.confidence).toBe("low");
+  });
+});
+
+describe("частота публикаций из дат RSS/Atom-ленты", () => {
+  const day = (index: number) => new Date(2026, 7, 26 - index, 12, 0, 0).toISOString();
+
+  it("плотные даты ленты дают daily с высокой уверенностью", () => {
+    const dates = Array.from({ length: 10 }, (_, index) => day(index));
+    expect(publicationFrequencyFromFeedDates(dates)).toMatchObject({
+      value: "daily",
+      confidence: "high",
+    });
+  });
+
+  it("редкие даты дают weekly, совсем старые — monthly", () => {
+    const weekly = [0, 7, 14, 21, 28].map((offset) => day(offset));
+    expect(publicationFrequencyFromFeedDates(weekly)?.value).toBe("weekly");
+    const monthly = [0, 30, 60, 90, 120].map((offset) => day(offset));
+    expect(publicationFrequencyFromFeedDates(monthly)?.value).toBe("monthly");
+  });
+
+  it("меньше двух валидных дат -> null (честное «не определено»)", () => {
+    expect(publicationFrequencyFromFeedDates(["2026-08-26T12:00:00Z"])).toBeNull();
+    expect(publicationFrequencyFromFeedDates(["мусор", "тоже мусор"])).toBeNull();
+    expect(publicationFrequencyFromFeedDates([])).toBeNull();
+  });
+
+  it("applyFeedPublicationFrequency заполняет unknown и не трогает известную", () => {
+    const base = extractRadarPageFeatures(
+      "<html lang=\"ru\"><title>Ключи</title><body>Каталог</body></html>",
+      new URL("https://keys.example.ru/"),
+      new Date("2026-08-26T10:00:00Z"),
+    );
+    const dates = Array.from({ length: 8 }, (_, index) => day(index));
+
+    const filled = applyFeedPublicationFrequency(base, dates);
+    expect(filled.features.publicationFrequency).toBe("daily");
+    const signal = filled.research.signals.find(({ field }) => field === "publicationFrequency");
+    expect(signal?.source).toContain("ленте");
+
+    // Известная частота со страницы не перезаписывается.
+    const withPageFrequency = {
+      ...base,
+      features: { ...base.features, publicationFrequency: "weekly" as const },
+    };
+    expect(applyFeedPublicationFrequency(withPageFrequency, dates).features.publicationFrequency).toBe(
+      "weekly",
+    );
+    // Нет дат -> экстракция без изменений (тот же объект).
+    expect(applyFeedPublicationFrequency(base, [])).toBe(base);
   });
 });
 

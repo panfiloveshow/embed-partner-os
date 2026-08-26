@@ -6,6 +6,7 @@ import type {
   RadarVideoPageLead,
 } from "@embed-os/contracts";
 import {
+  applyFeedPublicationFrequency,
   applyLegalRegionToGeography,
   enrichRadarResearchWithDetectedPlayers,
   extractRadarPageFeatures,
@@ -162,7 +163,10 @@ export class RadarPageInspector implements RadarInspector {
           .filter((url) => robotsAllows(robotsSource, `${url.pathname}${url.search}`))
           .slice(0, 2);
         const sitemapUrls = await this.readSitemapPages(declaredSitemaps, page.url, robotsSource);
-        const feedUrls = await this.readFeedPages(declaredFeeds, page.url);
+        const { urls: feedUrls, pubDates: feedPubDates } = await this.readFeedPages(
+          declaredFeeds,
+          page.url,
+        );
         // Видеостраницы из карты сайта: дешёвое (без дополнительных запросов)
         // расширение оценки «объём страниц с видео».
         const sitemapVideoLeads = sitemapVideoPageLeads(sitemapUrls, page.url);
@@ -238,6 +242,9 @@ export class RadarPageInspector implements RadarInspector {
           coverage,
           sitemapVideoLeads,
         );
+        // Частота публикаций из дат RSS/Atom-ленты — если по страницам она
+        // не определилась (ловушка №8: присваиваем результат).
+        extraction = applyFeedPublicationFrequency(extraction, feedPubDates);
         // Обогащение по реквизитам: ЕГРЮЛ (ФНС) + руководитель (DaData).
         extraction.research = await enrichResearchWithLegalEntity(extraction.research, {
           dadataApiKey: process.env.DADATA_API_KEY ?? null,
@@ -415,18 +422,23 @@ export class RadarPageInspector implements RadarInspector {
     return uniqueSameOriginUrls(pages, pageUrl, 200);
   }
 
-  private async readFeedPages(feeds: URL[], pageUrl: URL) {
+  private async readFeedPages(feeds: URL[], pageUrl: URL): Promise<{
+    urls: string[];
+    pubDates: string[];
+  }> {
     const pages: string[] = [];
+    const pubDates: string[] = [];
     const responses = await Promise.all(feeds.map((url) => this.readXml(url, pageUrl)));
     for (const response of responses) {
       if (!response) continue;
+      pubDates.push(...xmlFeedPubDates(response.body));
       pages.push(
         ...sameOriginUrls(xmlFeedLinks(response.body), response.url, pageUrl, 100).map((url) =>
           url.toString(),
         ),
       );
     }
-    return uniqueSameOriginUrls(pages, pageUrl, 100);
+    return { urls: uniqueSameOriginUrls(pages, pageUrl, 100), pubDates };
   }
 
   private async readXml(url: URL, pageUrl: URL): Promise<{ url: URL; body: string } | null> {
@@ -576,6 +588,18 @@ function xmlFeedLinks(xml: string) {
     ...xml.matchAll(/<link\b[^>]*\bhref\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s"'=<>`]+))[^>]*>/gi),
   ].map((match) => decodeXml((match[1] ?? match[2] ?? match[3] ?? "").trim()));
   return [...textLinks, ...hrefLinks].filter(Boolean);
+}
+
+/** Даты публикаций из RSS (pubDate) и Atom (published/updated). */
+function xmlFeedPubDates(xml: string): string[] {
+  const values: string[] = [];
+  for (const match of xml.matchAll(
+    /<(?:pubDate|published|updated)\b[^>]*>([\s\S]*?)<\/(?:pubDate|published|updated)>/gi,
+  )) {
+    const value = decodeXml((match[1] ?? "").trim());
+    if (value) values.push(value);
+  }
+  return values;
 }
 
 function sameOriginUrls(values: string[], baseUrl: URL, pageUrl: URL, limit: number) {

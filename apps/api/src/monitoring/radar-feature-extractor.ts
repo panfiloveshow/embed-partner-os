@@ -495,6 +495,25 @@ function detectTopic(html: string, summary: string) {
     : null;
 }
 
+const GEO_PATTERNS: Array<[RegExp, string]> = [
+  // Внимание: \b в JS опирается на ASCII-\w и НЕ работает на кириллице —
+  // поэтому паттерны подстрочные, без \b (иначе города РФ не находятся вовсе).
+  [/российск|росси[аиуюй]|\brussia\b/i, "Россия"],
+  [/снг|\bcis\b/i, "СНГ"],
+  [/казахстан/i, "Казахстан"],
+  [/беларус/i, "Беларусь"],
+  [/украин/i, "Украина"],
+  // Крупные города РФ в тексте/мета — уверенный признак российской географии.
+  [
+    /москв|петербург|спб|новосибирск|екатеринбург|казан[ьи]|нижн\w*\s*новгород|краснодар|самар[ае]|ростов-на-дону|уф[ае]|владивосток|сочи/i,
+    "Россия",
+  ],
+];
+
+/** Адрес организации в JSON-LD: addressCountry/addressLocality с РФ-маркерами. */
+const JSON_LD_RU_ADDRESS =
+  /"addressCountry"\s*:\s*(?:"\s*(?:ru|rus|russia|рф|росси[ия])[^"]*"|\{[^{}]*"name"\s*:\s*"[^"]*(?:росси|рф|russia)[^"]*")/i;
+
 function detectGeography(html: string, summary: string) {
   const explicit = metaContent(html, "geo.placename") ?? metaContent(html, "geo.region");
   if (explicit)
@@ -503,23 +522,36 @@ function detectGeography(html: string, summary: string) {
       source: "географические метаданные",
       confidence: "high" as const,
     };
+  // JSON-LD адрес организации — самый надёжный сигнал после geo-меты.
+  if (JSON_LD_RU_ADDRESS.test(html))
+    return {
+      value: "Россия",
+      source: "JSON-LD адрес",
+      confidence: "high" as const,
+    };
   const normalized = summary.toLocaleLowerCase("ru-RU");
-  const patterns: Array<[RegExp, string]> = [
-    [/российск|\bросси[ия]\b|\brussia\b/i, "Россия"],
-    [/\bснг\b|\bcis\b/i, "СНГ"],
-    [/казахстан|\bkazakhstan\b/i, "Казахстан"],
-    [/беларус|\bbelarus\b/i, "Беларусь"],
-    [/украин|\bukraine\b/i, "Украина"],
-    // Крупные города РФ в тексте/мета — уверенный признак российской географии.
-    [
-      /\bмоскв|\bпетербург|спб\b|\bновосибирск|\bекатеринбург|\bказан[ьи]|\bнижн\w*\s*новгород|\bкраснодар|\bсамар[ае]|\bростов-на-дону|\bуф[ае]\b|\bвладивосток|\bсочи\b/,
-      "Россия",
-    ],
-  ];
-  const match = patterns.find(([pattern]) => pattern.test(normalized));
-  return match
-    ? { value: match[1], source: "title и meta description", confidence: "medium" as const }
-    : null;
+  const summaryMatch = GEO_PATTERNS.find(([pattern]) => pattern.test(normalized));
+  if (summaryMatch)
+    return {
+      value: summaryMatch[1],
+      source: "title и meta description",
+      confidence: "medium" as const,
+    };
+  // Текст страницы (футер, реквизиты, «О нас»): слабее title/meta, но часто
+  // единственный источник для сайтов без гео-метаданных.
+  const visible = html
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .toLocaleLowerCase("ru-RU")
+    .slice(0, 200_000);
+  const bodyMatch = GEO_PATTERNS.find(([pattern]) => pattern.test(visible));
+  if (bodyMatch)
+    return {
+      value: bodyMatch[1],
+      source: "текст страницы",
+      confidence: "low" as const,
+    };
+  return null;
 }
 
 function detectPublicationFrequency(html: string): {
@@ -548,6 +580,70 @@ function detectPublicationFrequency(html: string): {
   if (perDay >= 0.12 || spanDays <= 14)
     return { value: "weekly", count: dates.length, confidence: "medium" };
   return { value: "monthly", count: dates.length, confidence: "low" };
+}
+
+/**
+ * Частота публикаций по датам из RSS/Atom-ленты. Лента отражает свежий
+ * поток материалов: плотность дат за период даёт честную полосу
+ * daily/weekly/monthly без запроса дополнительных страниц.
+ */
+export function publicationFrequencyFromFeedDates(dateStrings: string[]): {
+  value: RadarCandidateFeatures["publicationFrequency"];
+  count: number;
+  confidence: RadarConfidence;
+} | null {
+  const dates = [...new Set(dateStrings)]
+    .map((value) => ({ value, time: new Date(value).getTime() }))
+    .filter(({ time }) => Number.isFinite(time))
+    .sort((left, right) => right.time - left.time);
+  if (dates.length < 2) return null;
+  const uniqueDays = new Set(dates.map(({ value }) => value.slice(0, 10))).size;
+  const spanDays = Math.max(
+    1,
+    Math.ceil(((dates[0]?.time ?? 0) - (dates.at(-1)?.time ?? 0)) / 86_400_000),
+  );
+  const perDay = dates.length / (spanDays + 1);
+  if (dates.length >= 5 && (uniqueDays <= 3 || perDay >= 0.7)) {
+    return { value: "daily", count: dates.length, confidence: "high" };
+  }
+  if (perDay >= 0.12 || spanDays <= 14)
+    return { value: "weekly", count: dates.length, confidence: "medium" };
+  return { value: "monthly", count: dates.length, confidence: "low" };
+}
+
+/**
+ * Заполняет частоту публикаций из дат ленты, только если по странице она
+ * не определилась («unknown»). Возвращает НОВЫЙ объект экстракции —
+ * результат присваивать (ловушка №8).
+ */
+export function applyFeedPublicationFrequency(
+  extraction: RadarPageFeatureExtraction,
+  feedDateStrings: string[],
+): RadarPageFeatureExtraction {
+  const known =
+    extraction.features.publicationFrequency &&
+    extraction.features.publicationFrequency !== "unknown";
+  const frequency = known ? null : publicationFrequencyFromFeedDates(feedDateStrings);
+  if (!frequency) return extraction;
+  return {
+    ...extraction,
+    features: { ...extraction.features, publicationFrequency: frequency.value },
+    research: {
+      ...extraction.research,
+      signals: [
+        ...extraction.research.signals.filter(
+          ({ field }) => field !== "publicationFrequency",
+        ),
+        {
+          field: "publicationFrequency" as const,
+          label: "Частота публикаций",
+          value: frequencyLabel(frequency.value),
+          source: `${frequency.count} дат в RSS/Atom-ленте сайта`,
+          confidence: frequency.confidence,
+        },
+      ],
+    },
+  };
 }
 
 function detectContacts(html: string, pageUrl: URL): RadarContactLead[] {
